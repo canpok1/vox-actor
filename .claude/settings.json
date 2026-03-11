@@ -1,0 +1,108 @@
+{
+  "env": {
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
+  },
+  "permissions": {
+    "allow": [
+      "Bash(cat:*)",
+      "Bash(cp:*)",
+      "Bash(done)",
+      "Bash(echo:*)",
+      "Bash(for:*)",
+      "Bash(gh api user:*)",
+      "Bash(gh issue create:*)",
+      "Bash(gh issue edit:*)",
+      "Bash(gh issue list:*)",
+      "Bash(gh issue view:*)",
+      "Bash(gh pr checks:*)",
+      "Bash(gh pr create:*)",
+      "Bash(gh pr edit:*)",
+      "Bash(gh pr list:*)",
+      "Bash(gh pr view:*)",
+      "Bash(gh run view:*)",
+      "Bash(gh repo view:*)",
+      "Bash(git add:*)",
+      "Bash(git branch:*)",
+      "Bash(git commit:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git push:*)",
+      "Bash(git rm:*)",
+      "Bash(git status:*)",
+      "Bash(go mod tidy:*)",
+      "Bash(go mod verify:*)",
+      "Bash(go test:*)",
+      "Bash(go tool:*)",
+      "Bash(golangci-lint run:*)",
+      "Bash(grep:*)",
+      "Bash(head:*)",
+      "Bash(jq:*)",
+      "Bash(ls:*)",
+      "Bash(make:*)",
+      "Bash(mkdir:*)",
+      "Bash(mv:*)",
+      "Bash(tail:*)",
+      "Bash(test:*)",
+      "Bash(touch:*)",
+      "Bash(tree:*)",
+      "Bash(while:*)",
+      "WebSearch"
+    ],
+    "deny": [
+      "Bash(git add --all)",
+      "Bash(git add .)",
+      "Bash(git push --force:*)",
+      "Bash(git push -f:*)",
+      "Bash(git rebase:*)",
+      "Bash(npm run deploy)",
+      "Bash(rm -rf:*)",
+      "Bash(sudo:*)",
+      "Read(.env)",
+      "Write(.env)"
+    ],
+    "ask": [
+      "Bash(git reset:*)"
+    ]
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "./.claude/hooks/install-gh.sh",
+            "timeout": 120
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "./.claude/hooks/notify-host.sh 'Claude Code Notify'"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "./.claude/hooks/notify-host.sh 'Claude Code Task Finished'"
+          }
+        ]
+      }
+    ]
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "./.claude/statusline.sh"
+  },
+  "enabledPlugins": {
+    "commit-commands@claude-plugins-official": true
+  },
+  "extraKnownMarketplaces": {}
+}
