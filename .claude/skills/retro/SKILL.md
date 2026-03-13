@@ -1,10 +1,6 @@
 ---
 name: retro
 description: 直前の作業内容を振り返り、改善点を分析してGitHub Issueを作成します。作業完了後に使用してください。
-context: fork
-agent: general-purpose
-allowed-tools: Read, Grep, Glob, Bash(gh issue create *), Bash(gh issue list *)
-disable-model-invocation: false
 user-invocable: true
 ---
 

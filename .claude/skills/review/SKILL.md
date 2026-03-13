@@ -1,6 +1,9 @@
 ---
 name: review
 description: コード品質レビューとドキュメント整合性チェックを統合的に実施するスキル。/simplify でコード品質をレビューし、ドキュメント検証サブエージェントでドキュメントの最新性を検証する。
+context: fork
+agent: general-purpose
+allowed-tools: Skill, Agent, Bash, Read, Grep, Glob, Write, Edit
 user-invocable: true
 ---
 
