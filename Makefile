@@ -23,4 +23,6 @@ lint:
 depcheck:
 	go vet -vettool=$$(which depcheck) ./...
 
-.PHONY: setup build clean test fmt lint depcheck
+all: build
+
+.PHONY: all setup build clean test fmt lint depcheck

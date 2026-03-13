@@ -10,6 +10,11 @@ ignorePatterns:
 
 # 依存関係ルール
 rules:
+  # domain層 → app層 への依存禁止
+  - from: '^github\.com/canpok1/vox-actor/internal/domain.*$'
+    to:
+      - '^github\.com/canpok1/vox-actor/internal/app.*$'
+
   # domain層 → infra層 への依存禁止
   - from: '^github\.com/canpok1/vox-actor/internal/domain.*$'
     to:
