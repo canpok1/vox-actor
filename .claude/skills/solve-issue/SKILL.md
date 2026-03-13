@@ -3,7 +3,7 @@ name: solve-issue
 description: ユーザーが `/solve-issue` で手動実行した場合のみ使用。GitHub Issueの対応を行うスキル。実装、自己レビュー、PR作成、マージ、振り返りまで一連の流れを一気に行う。
 context: fork
 agent: general-purpose
-allowed-tools: Skill, Bash, Read, Grep, Glob, Write, Edit
+allowed-tools: Skill, Agent, Bash, Read, Grep, Glob, Write, Edit
 disable-model-invocation: true
 user-invocable: true
 argument-hint: "[issue-number]"
