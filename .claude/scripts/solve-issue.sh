@@ -23,13 +23,17 @@ if ! [[ "${ISSUE_NUMBER}" =~ ^[0-9]+$ ]]; then
   exit 1
 fi
 
-echo "Issue #${ISSUE_NUMBER} の処理を開始します"
+echo "[solve-issue] Issue #${ISSUE_NUMBER} の処理を開始します"
 
 # mainブランチに切り替えて最新化
+echo "[solve-issue] mainブランチに切り替え中..."
 git checkout main
+
+echo "[solve-issue] 最新コードを取得中..."
 git pull origin main
 
 # Claudeでissueを解決（--worktreeで自動的にブランチとワークツリーを作成）
+echo "[solve-issue] Claude Codeでissue #${ISSUE_NUMBER} を解決します..."
 if "${USE_PRINT_MODE}"; then
   claude --worktree "issue-${ISSUE_NUMBER}" --dangerously-skip-permissions -p "/solve-issue ${ISSUE_NUMBER}"
 else
