@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 
 	"github.com/canpok1/vox-actor/internal/app"
@@ -73,8 +72,6 @@ func (r *FileReader) readDirectory(dir string) ([]entity.Script, error) {
 			names = append(names, entry.Name())
 		}
 	}
-
-	sort.Strings(names)
 
 	var scripts []entity.Script
 	for _, name := range names {
