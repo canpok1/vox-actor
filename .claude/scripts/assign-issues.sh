@@ -24,7 +24,7 @@ fi
 
 # Claudeでissueを選定・ラベル付与（コード変更不要のため--worktreeは不使用）
 if "${USE_PRINT_MODE}"; then
-  claude --permission-mode auto -p "/assign-issues"
+  claude --dangerously-skip-permissions -p "/assign-issues"
 else
-  claude --permission-mode auto "/assign-issues"
+  claude --dangerously-skip-permissions "/assign-issues"
 fi
