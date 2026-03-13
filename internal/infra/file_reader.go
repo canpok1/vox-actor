@@ -1,10 +1,14 @@
 package infra
 
 import (
+	"bytes"
 	"os"
 
 	"github.com/canpok1/vox-actor/internal/domain/entity"
 )
+
+// utf8BOM は UTF-8 のバイトオーダーマーク。
+var utf8BOM = []byte{0xEF, 0xBB, 0xBF}
 
 // FileReader はファイルシステムから台本を読み込む。
 type FileReader struct{}
@@ -21,6 +25,7 @@ func (r *FileReader) Read(path string) ([]entity.Script, error) {
 		return nil, err
 	}
 
+	data = bytes.TrimPrefix(data, utf8BOM)
 	text := string(data)
 
 	return []entity.Script{
