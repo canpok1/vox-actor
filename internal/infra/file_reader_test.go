@@ -141,6 +141,78 @@ func TestFileReader_Read_Directory(t *testing.T) {
 	}
 }
 
+func TestFileReader_Read_DirectoryFiltersTxtOnly(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "script.txt"), []byte("台本"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "image.png"), []byte("PNG data"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "config.json"), []byte("{}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	reader := infra.NewFileReader()
+	scripts, err := reader.Read(dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(scripts) != 1 {
+		t.Fatalf("expected 1 script, got %d", len(scripts))
+	}
+
+	if scripts[0].Text != "台本" {
+		t.Errorf("expected text %q, got %q", "台本", scripts[0].Text)
+	}
+}
+
+func TestFileReader_Read_DirectoryNoTxtFiles(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "readme.md"), []byte("# README"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	reader := infra.NewFileReader()
+	scripts, err := reader.Read(dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(scripts) != 0 {
+		t.Fatalf("expected 0 scripts, got %d", len(scripts))
+	}
+}
+
+func TestFileReader_Read_SingleFileNonTxtExtension(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	filePath := filepath.Join(dir, "script.md")
+	if err := os.WriteFile(filePath, []byte("マークダウン"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	reader := infra.NewFileReader()
+	scripts, err := reader.Read(filePath)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(scripts) != 1 {
+		t.Fatalf("expected 1 script, got %d", len(scripts))
+	}
+
+	if scripts[0].Text != "マークダウン" {
+		t.Errorf("expected text %q, got %q", "マークダウン", scripts[0].Text)
+	}
+}
+
 func TestFileReader_Read_NotExistPath(t *testing.T) {
 	t.Parallel()
 
