@@ -105,6 +105,42 @@ func TestFileReader_Read_EmptyFile(t *testing.T) {
 	}
 }
 
+func TestFileReader_Read_Directory(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	// 辞書順でb, a だが結果はa, bの順で返る
+	if err := os.WriteFile(filepath.Join(dir, "b.txt"), []byte("2番目"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("1番目"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	reader := infra.NewFileReader()
+	scripts, err := reader.Read(dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(scripts) != 2 {
+		t.Fatalf("expected 2 scripts, got %d", len(scripts))
+	}
+
+	if scripts[0].Text != "1番目" {
+		t.Errorf("expected first text %q, got %q", "1番目", scripts[0].Text)
+	}
+
+	if scripts[1].Text != "2番目" {
+		t.Errorf("expected second text %q, got %q", "2番目", scripts[1].Text)
+	}
+
+	expectedPath0 := filepath.Join(dir, "a.txt")
+	if scripts[0].Path != expectedPath0 {
+		t.Errorf("expected path %q, got %q", expectedPath0, scripts[0].Path)
+	}
+}
+
 func TestFileReader_Read_NotExistPath(t *testing.T) {
 	t.Parallel()
 
