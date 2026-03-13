@@ -4,10 +4,13 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var version = "dev"
+
 func makeRootCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "vox-actor",
-		Short: "AIエージェント構築フレームワークのCLIツール",
+		Use:     "vox-actor",
+		Short:   "AIエージェント構築フレームワークのCLIツール",
+		Version: version,
 	}
 	cmd.SilenceUsage = true
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
