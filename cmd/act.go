@@ -51,6 +51,9 @@ func runAct(cmd *cobra.Command, args []string, deps *ActDeps) error {
 	intonation, _ := cmd.Flags().GetFloat64("intonation")
 
 	client := deps.ClientFactory(engineURL)
+	if client == nil {
+		return fmt.Errorf("failed to create VoicevoxClient for %s", engineURL)
+	}
 	uc := app.NewActUsecase(deps.Reader, client, deps.Player)
 	params := app.ActParams{
 		Path:       args[0],

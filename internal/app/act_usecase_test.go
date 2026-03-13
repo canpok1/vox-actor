@@ -3,6 +3,7 @@ package app_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/canpok1/vox-actor/internal/app"
@@ -279,6 +280,9 @@ func TestActUsecase_Run_CreateQueryError(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
+	if !strings.Contains(err.Error(), "test.txt") {
+		t.Errorf("expected error to include script path, got: %v", err)
+	}
 }
 
 func TestActUsecase_Run_SynthesizeError(t *testing.T) {
@@ -299,6 +303,9 @@ func TestActUsecase_Run_SynthesizeError(t *testing.T) {
 	err := uc.Run(context.Background(), params)
 	if err == nil {
 		t.Fatal("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "test.txt") {
+		t.Errorf("expected error to include script path, got: %v", err)
 	}
 }
 
@@ -322,5 +329,8 @@ func TestActUsecase_Run_PlayError(t *testing.T) {
 	err := uc.Run(context.Background(), params)
 	if err == nil {
 		t.Fatal("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "test.txt") {
+		t.Errorf("expected error to include script path, got: %v", err)
 	}
 }
