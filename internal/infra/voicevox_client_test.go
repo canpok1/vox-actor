@@ -1,7 +1,5 @@
 package infra_test
 
-// TODO: HealthCheck - 異常系: エンジンが非200を返す場合エラーを返す
-// TODO: HealthCheck - 異常系: エンジンに接続できない場合エラーを返す
 // TODO: CreateQuery - 正常系: テキストとspeakerIDからAudioQueryを返す
 // TODO: CreateQuery - 正常系: レスポンスJSONの各フィールドが正しくパースされる
 // TODO: CreateQuery - 異常系: エンジンが非200を返す場合エラーを返す
@@ -34,5 +32,26 @@ func TestHealthCheck_Success(t *testing.T) {
 	err := client.HealthCheck(context.Background())
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
+	}
+}
+
+func TestHealthCheck_Non200(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer server.Close()
+
+	client := infra.NewVoicevoxClient(server.URL)
+	err := client.HealthCheck(context.Background())
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+}
+
+func TestHealthCheck_ConnectionError(t *testing.T) {
+	client := infra.NewVoicevoxClient("http://localhost:1")
+	err := client.HealthCheck(context.Background())
+	if err == nil {
+		t.Fatal("expected error, got nil")
 	}
 }
