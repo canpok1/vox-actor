@@ -2,8 +2,11 @@ package infra
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
+	"strconv"
 
 	"github.com/canpok1/vox-actor/internal/domain/entity"
 )
@@ -43,8 +46,38 @@ func (c *VoicevoxClient) HealthCheck(ctx context.Context) error {
 }
 
 // CreateQuery はテキストから音声合成用クエリを生成する。
-func (c *VoicevoxClient) CreateQuery(_ context.Context, _ string, _ int) (*entity.AudioQuery, error) {
-	return nil, nil
+func (c *VoicevoxClient) CreateQuery(ctx context.Context, text string, speakerID int) (*entity.AudioQuery, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/audio_query", nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	q := req.URL.Query()
+	q.Set("text", text)
+	q.Set("speaker", strconv.Itoa(speakerID))
+	req.URL.RawQuery = q.Encode()
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to send request: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("create query failed: status %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	var query entity.AudioQuery
+	if err := json.Unmarshal(body, &query); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
+	}
+
+	return &query, nil
 }
 
 // Synthesize は音声合成を実行し、WAV形式のバイト列を返す。
