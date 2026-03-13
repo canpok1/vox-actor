@@ -1,6 +1,7 @@
 package infra
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -81,6 +82,49 @@ func (c *VoicevoxClient) CreateQuery(ctx context.Context, text string, speakerID
 }
 
 // Synthesize は音声合成を実行し、WAV形式のバイト列を返す。
-func (c *VoicevoxClient) Synthesize(_ context.Context, _ *entity.AudioQuery, _ int, _, _, _ *float64) ([]byte, error) {
-	return nil, nil
+// speed, pitch, intonation が非nilの場合、AudioQueryの対応フィールドを上書きする。
+func (c *VoicevoxClient) Synthesize(ctx context.Context, query *entity.AudioQuery, speakerID int, speed, pitch, intonation *float64) ([]byte, error) {
+	// AudioQueryのコピーを作成し、指定されたパラメータを上書き
+	q := *query
+	if speed != nil {
+		q.SpeedScale = *speed
+	}
+	if pitch != nil {
+		q.PitchScale = *pitch
+	}
+	if intonation != nil {
+		q.IntonationScale = *intonation
+	}
+
+	jsonBody, err := json.Marshal(q)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal audio query: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/synthesis", bytes.NewReader(jsonBody))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	params := req.URL.Query()
+	params.Set("speaker", strconv.Itoa(speakerID))
+	req.URL.RawQuery = params.Encode()
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to send request: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("synthesis failed: status %d", resp.StatusCode)
+	}
+
+	wav, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	return wav, nil
 }

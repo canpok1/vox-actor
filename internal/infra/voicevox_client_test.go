@@ -1,16 +1,19 @@
 package infra_test
 
-// TODO: Synthesize - 正常系: AudioQueryとspeakerIDからWAVバイト列を返す
 // TODO: Synthesize - 正常系: speed/pitch/intonationを上書きして送信する
 // TODO: Synthesize - 異常系: エンジンが非200を返す場合エラーを返す
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
+	"github.com/canpok1/vox-actor/internal/domain/entity"
 	"github.com/canpok1/vox-actor/internal/infra"
 )
 
@@ -145,5 +148,55 @@ func TestCreateQuery_Non200(t *testing.T) {
 	}
 	if query != nil {
 		t.Fatal("expected nil query on error")
+	}
+}
+
+func TestSynthesize_Success(t *testing.T) {
+	expectedWAV := []byte("RIFF....WAVEfmt mock wav data")
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/synthesis" {
+			t.Errorf("unexpected path: %s", r.URL.Path)
+		}
+		if r.Method != http.MethodPost {
+			t.Errorf("unexpected method: %s", r.Method)
+		}
+		if got := r.URL.Query().Get("speaker"); got != "1" {
+			t.Errorf("unexpected speaker: %s", got)
+		}
+
+		// リクエストボディがAudioQueryのJSONであることを確認
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Fatalf("failed to read request body: %v", err)
+		}
+		var q entity.AudioQuery
+		if err := json.Unmarshal(body, &q); err != nil {
+			t.Fatalf("failed to unmarshal request body: %v", err)
+		}
+		if q.SpeedScale != 1.0 {
+			t.Errorf("expected speedScale 1.0, got %f", q.SpeedScale)
+		}
+
+		w.Header().Set("Content-Type", "audio/wav")
+		w.Write(expectedWAV)
+	}))
+	defer server.Close()
+
+	query := &entity.AudioQuery{
+		SpeedScale:         1.0,
+		PitchScale:         0.0,
+		IntonationScale:    1.0,
+		VolumeScale:        1.0,
+		OutputSamplingRate: 24000,
+	}
+
+	client := infra.NewVoicevoxClient(server.URL)
+	wav, err := client.Synthesize(context.Background(), query, 1, nil, nil, nil)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if !bytes.Equal(wav, expectedWAV) {
+		t.Errorf("unexpected wav data: got %v", wav)
 	}
 }
