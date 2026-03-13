@@ -9,8 +9,12 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/canpok1/vox-actor/internal/app"
 	"github.com/canpok1/vox-actor/internal/domain/entity"
 )
+
+// VoicevoxClientがapp.VoicevoxClientインターフェースを満たすことをコンパイル時に検証する。
+var _ app.VoicevoxClient = (*VoicevoxClient)(nil)
 
 // VoicevoxClient はVOICEVOXエンジンとHTTP通信を行うクライアント。
 type VoicevoxClient struct {
