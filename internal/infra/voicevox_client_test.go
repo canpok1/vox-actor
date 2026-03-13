@@ -1,6 +1,5 @@
 package infra_test
 
-// TODO: CreateQuery - 異常系: エンジンが非200を返す場合エラーを返す
 // TODO: Synthesize - 正常系: AudioQueryとspeakerIDからWAVバイト列を返す
 // TODO: Synthesize - 正常系: speed/pitch/intonationを上書きして送信する
 // TODO: Synthesize - 異常系: エンジンが非200を返す場合エラーを返す
@@ -130,5 +129,21 @@ func TestCreateQuery_Success(t *testing.T) {
 	}
 	if query.AccentPhrases[0].Moras[0].Text != "コ" {
 		t.Errorf("expected mora text コ, got %s", query.AccentPhrases[0].Moras[0].Text)
+	}
+}
+
+func TestCreateQuery_Non200(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+	}))
+	defer server.Close()
+
+	client := infra.NewVoicevoxClient(server.URL)
+	query, err := client.CreateQuery(context.Background(), "test", 1)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if query != nil {
+		t.Fatal("expected nil query on error")
 	}
 }
