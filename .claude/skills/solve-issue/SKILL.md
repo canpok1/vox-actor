@@ -49,7 +49,13 @@ GitHub Issue $ARGUMENTS を対応します。
   - コードを修正した場合はコミット・プッシュを行いレビューコメントに返信して、手順7に戻る
   - レビューコメントへの返信時は、レビュースレッド内の全レビュワーに対してメンションすること
 10. PRをマージする
-  - コマンド: `gh pr merge --repo {owner}/{repo} {PR番号} --squash`
+  - マージ前にリポジトリの許可されたマージ方式を確認する
+    - コマンド: `gh api repos/{owner}/{repo} --jq '{mergeCommit: .allow_merge_commit, squash: .allow_squash_merge, rebase: .allow_rebase_merge}'`
+  - 許可されたマージ方式に基づいて、以下の優先順位でマージオプションを選択する
+    1. `squash` が許可されている場合: `--squash`
+    2. `merge` が許可されている場合: `--merge`
+    3. `rebase` が許可されている場合: `--rebase`
+  - コマンド: `gh pr merge --repo {owner}/{repo} {PR番号} {選択したマージオプション}`
   - **`--delete-branch` オプションを使用しないこと**（worktree環境ではデフォルトブランチへの切り替えに失敗しエラーになるため）
   - リモートブランチの削除はGitHub側のブランチ自動削除設定に任せる
   - マージできない場合は、原因を確認して必要に応じてコードを修正し、手順7に戻る
