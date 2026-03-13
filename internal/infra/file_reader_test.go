@@ -10,6 +10,7 @@ package infra_test
 // DONE: 正常系: ディレクトリ内に.txtファイルがない場合、空スライスを返す
 // DONE: 異常系: 存在しないパスを指定した場合、エラーを返す
 // DONE: 異常系: ファイルが.txt拡張子でない場合でも単一ファイル指定なら読み込む
+// DONE: 異常系: 不正なUTF-8バイト列を含むファイルの場合、エラーを返す
 
 import (
 	"os"
@@ -213,11 +214,31 @@ func TestFileReader_Read_SingleFileNonTxtExtension(t *testing.T) {
 	}
 }
 
+func TestFileReader_Read_InvalidUTF8(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	filePath := filepath.Join(dir, "invalid.txt")
+	// 不正なUTF-8バイト列
+	if err := os.WriteFile(filePath, []byte{0xFF, 0xFE, 0x80}, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	reader := infra.NewFileReader()
+	_, err := reader.Read(filePath)
+	if err == nil {
+		t.Fatal("expected error for invalid UTF-8, got nil")
+	}
+}
+
 func TestFileReader_Read_NotExistPath(t *testing.T) {
 	t.Parallel()
 
+	dir := t.TempDir()
+	missingPath := filepath.Join(dir, "no-such-file.txt")
+
 	reader := infra.NewFileReader()
-	_, err := reader.Read("/no/such/path/file.txt")
+	_, err := reader.Read(missingPath)
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}

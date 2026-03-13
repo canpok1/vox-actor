@@ -2,9 +2,11 @@ package infra
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/canpok1/vox-actor/internal/app"
 	"github.com/canpok1/vox-actor/internal/domain/entity"
@@ -46,6 +48,9 @@ func (r *FileReader) readFile(path string) ([]entity.Script, error) {
 	}
 
 	data = bytes.TrimPrefix(data, utf8BOM)
+	if !utf8.Valid(data) {
+		return nil, fmt.Errorf("file is not valid UTF-8: %s", path)
+	}
 	text := string(data)
 
 	return []entity.Script{
