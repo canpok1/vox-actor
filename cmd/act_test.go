@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"errors"
 	"strings"
 	"testing"
 
@@ -65,7 +66,7 @@ func TestActCmd_DefaultOptionValues(t *testing.T) {
 	}
 }
 
-func TestActCmd_NoArgs_ReturnsError(t *testing.T) {
+func TestActCmd_NoArgs_ReturnsUsageError(t *testing.T) {
 	rootCmd := makeRootCmd()
 	buf := new(bytes.Buffer)
 	rootCmd.SetOut(buf)
@@ -75,6 +76,9 @@ func TestActCmd_NoArgs_ReturnsError(t *testing.T) {
 	err := rootCmd.Execute()
 	if err == nil {
 		t.Fatal("expected error when no args provided, got nil")
+	}
+	if !errors.Is(err, ErrUsage) {
+		t.Errorf("expected ErrUsage, got: %v", err)
 	}
 }
 

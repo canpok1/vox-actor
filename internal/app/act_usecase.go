@@ -1,6 +1,9 @@
 package app
 
-import "context"
+import (
+	"context"
+	"fmt"
+)
 
 // ActParams はactユースケースのパラメータ。
 type ActParams struct {
@@ -46,16 +49,16 @@ func (u *ActUsecase) Run(ctx context.Context, params ActParams) error {
 
 		query, err := u.client.CreateQuery(ctx, script.Text, params.SpeakerID)
 		if err != nil {
-			return err
+			return fmt.Errorf("create query for %s: %w", script.Path, err)
 		}
 
 		wavData, err := u.client.Synthesize(ctx, query, params.SpeakerID, params.Speed, params.Pitch, params.Intonation)
 		if err != nil {
-			return err
+			return fmt.Errorf("synthesize %s: %w", script.Path, err)
 		}
 
 		if err := u.player.Play(ctx, wavData); err != nil {
-			return err
+			return fmt.Errorf("play %s: %w", script.Path, err)
 		}
 	}
 

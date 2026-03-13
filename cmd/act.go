@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"fmt"
+
 	"github.com/canpok1/vox-actor/internal/app"
 	"github.com/spf13/cobra"
 )
@@ -17,7 +19,12 @@ func makeActCmd(deps *ActDeps) *cobra.Command {
 		Use:   "act [options] <path>",
 		Short: "テキストファイルを読み上げる",
 		Long:  "テキストファイルを読み込み、VOICEVOXエンジンで音声合成して再生する。",
-		Args:  cobra.ExactArgs(1),
+		Args: func(cmd *cobra.Command, args []string) error {
+			if err := cobra.ExactArgs(1)(cmd, args); err != nil {
+				return fmt.Errorf("%w: %s", ErrUsage, err)
+			}
+			return nil
+		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runAct(cmd, args, deps)
 		},
@@ -33,6 +40,10 @@ func makeActCmd(deps *ActDeps) *cobra.Command {
 }
 
 func runAct(cmd *cobra.Command, args []string, deps *ActDeps) error {
+	if deps == nil || deps.ClientFactory == nil || deps.Reader == nil || deps.Player == nil {
+		return fmt.Errorf("act command dependencies are not initialized")
+	}
+
 	engineURL, _ := cmd.Flags().GetString("engine-url")
 	speakerID, _ := cmd.Flags().GetInt("speaker")
 	speed, _ := cmd.Flags().GetFloat64("speed")

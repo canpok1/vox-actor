@@ -1,10 +1,16 @@
 package cmd
 
 import (
+	"errors"
+
 	"github.com/spf13/cobra"
 )
 
 var version = "dev"
+
+// ErrUsage はCLIの引数エラーを示すエラー。
+// 呼び出し元はこのエラーを検出して終了コード2で終了すべき。
+var ErrUsage = errors.New("usage error")
 
 func makeRootCmd(actDeps ...*ActDeps) *cobra.Command {
 	cmd := &cobra.Command{
