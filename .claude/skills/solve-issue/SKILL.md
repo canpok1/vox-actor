@@ -20,7 +20,9 @@ GitHub Issue $ARGUMENTS を対応します。
   - 修正した場合はコミットする
 5. 同一Issueに対する既存PRの重複チェックを行う
   - コマンド: `gh pr list --repo {owner}/{repo} --search "issue-{番号}" --state all`
-  - open または merged のPRが既に存在する場合は、新しいPRを作成せずユーザーに報告して指示を仰ぐ
+  - **merged状態のPRが存在する場合**: 既に対応済みのため、処理をスキップして完了する（ステップ11の振り返りのみ実施する）
+  - **open状態のPRが存在する場合**: 新しいPRを作成せず、既存PRに対してステップ7以降（CI待機・レビュー対応・マージ）を継続する
+  - 既存PRが存在しない場合: ステップ6に進む
 6. `commit-push-pr` スキルでPRを作成する
 7. CIの終了を待機する
   - コマンド: `gh pr checks --repo {owner}/{repo} {PR番号} --watch`
