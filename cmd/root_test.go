@@ -34,6 +34,36 @@ func TestHelp_ContainsCommandName(t *testing.T) {
 	}
 }
 
+func TestVersion_DefaultIsDev(t *testing.T) {
+	if version != "dev" {
+		t.Errorf("expected default version to be 'dev', got: %s", version)
+	}
+}
+
+func TestRootCmd_HasVersion(t *testing.T) {
+	rootCmd := makeRootCmd()
+	if rootCmd.Version != version {
+		t.Errorf("expected Version to be '%s', got: '%s'", version, rootCmd.Version)
+	}
+}
+
+func TestVersion_Flag(t *testing.T) {
+	rootCmd := makeRootCmd()
+	buf := new(bytes.Buffer)
+	rootCmd.SetOut(buf)
+	rootCmd.SetArgs([]string{"--version"})
+
+	err := rootCmd.Execute()
+	if err != nil {
+		t.Fatalf("Execute() with --version returned error: %v", err)
+	}
+
+	output := buf.String()
+	if !strings.Contains(output, version) {
+		t.Errorf("expected version output to contain '%s', got: %s", version, output)
+	}
+}
+
 func TestHelp_ShowsHelpOutput(t *testing.T) {
 	rootCmd := makeRootCmd()
 	buf := new(bytes.Buffer)
