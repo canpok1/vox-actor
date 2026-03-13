@@ -35,7 +35,10 @@ git pull origin main
 # Claudeでissueを解決（--worktreeで自動的にブランチとワークツリーを作成）
 echo "[solve-issue] Claude Codeでissue #${ISSUE_NUMBER} を解決します..."
 if "${USE_PRINT_MODE}"; then
-  claude --worktree "issue-${ISSUE_NUMBER}" --dangerously-skip-permissions -p "/solve-issue ${ISSUE_NUMBER}"
+  claude --worktree "issue-${ISSUE_NUMBER}" --dangerously-skip-permissions \
+    -p "/solve-issue ${ISSUE_NUMBER}" \
+    --output-format stream-json --verbose --include-partial-messages | \
+    jq -rj 'select(.type == "stream_event" and .event.delta.type? == "text_delta") | .event.delta.text'
 else
   claude --worktree "issue-${ISSUE_NUMBER}" --dangerously-skip-permissions "/solve-issue ${ISSUE_NUMBER}"
 fi

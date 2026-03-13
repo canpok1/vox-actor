@@ -24,7 +24,10 @@ fi
 
 # Claudeでissueを選定・ラベル付与（コード変更不要のため--worktreeは不使用）
 if "${USE_PRINT_MODE}"; then
-  claude --dangerously-skip-permissions -p "/assign-issues"
+  claude --dangerously-skip-permissions \
+    -p "/assign-issues" \
+    --output-format stream-json --verbose --include-partial-messages | \
+    jq -rj 'select(.type == "stream_event" and .event.delta.type? == "text_delta") | .event.delta.text'
 else
   claude --dangerously-skip-permissions "/assign-issues"
 fi
