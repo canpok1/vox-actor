@@ -14,9 +14,10 @@ PR作成前に、以下のコマンドで同一Issueに対する既存PRを確�
 gh pr list --repo {owner}/{repo} --search "issue-{番号}" --state all
 ```
 
-以下のいずれかに該当する場合、**新しいPRを作成してはならない**:
+検索結果に複数のPRが含まれる場合、以下の優先順位で判断する:
 
-- 同一Issueに対するPRが既にopen状態で存在する
-- 同一Issueに対するPRが既にmerged状態で存在する
-
-該当するPRが見つかった場合は、ユーザーに報告して指示を仰ぐこと。
+1. **merged状態のPRが存在する場合**: 既に対応済みのため、処理をスキップして完了する
+2. **open状態のPRが存在する場合**: 新しいPRを作成せず、既存PRに対してレビュー対応やマージなどの後続処理を継続する
+   - 複数のopen PRがある場合は、最新のものを対象とする
+   - PR番号の取得例: `gh pr list --repo {owner}/{repo} --search "issue-{番号}" --state open --json number --jq '.[0].number'`
+3. **closed状態（マージされずにクローズ）のPRのみ存在する場合**: 既存PRなしとして扱い、新規PR作成に進む
