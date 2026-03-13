@@ -1,8 +1,5 @@
 package infra_test
 
-// TODO: Synthesize - 正常系: speed/pitch/intonationを上書きして送信する
-// TODO: Synthesize - 異常系: エンジンが非200を返す場合エラーを返す
-
 import (
 	"bytes"
 	"context"
@@ -198,5 +195,81 @@ func TestSynthesize_Success(t *testing.T) {
 	}
 	if !bytes.Equal(wav, expectedWAV) {
 		t.Errorf("unexpected wav data: got %v", wav)
+	}
+}
+
+func TestSynthesize_OverrideParams(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Fatalf("failed to read request body: %v", err)
+		}
+		var q entity.AudioQuery
+		if err := json.Unmarshal(body, &q); err != nil {
+			t.Fatalf("failed to unmarshal request body: %v", err)
+		}
+
+		// 上書きされた値を検証
+		if q.SpeedScale != 1.5 {
+			t.Errorf("expected speedScale 1.5, got %f", q.SpeedScale)
+		}
+		if q.PitchScale != 0.5 {
+			t.Errorf("expected pitchScale 0.5, got %f", q.PitchScale)
+		}
+		if q.IntonationScale != 2.0 {
+			t.Errorf("expected intonationScale 2.0, got %f", q.IntonationScale)
+		}
+		// 上書きしていないフィールドは元の値のまま
+		if q.VolumeScale != 1.0 {
+			t.Errorf("expected volumeScale 1.0, got %f", q.VolumeScale)
+		}
+
+		w.Header().Set("Content-Type", "audio/wav")
+		w.Write([]byte("wav"))
+	}))
+	defer server.Close()
+
+	query := &entity.AudioQuery{
+		SpeedScale:         1.0,
+		PitchScale:         0.0,
+		IntonationScale:    1.0,
+		VolumeScale:        1.0,
+		OutputSamplingRate: 24000,
+	}
+
+	speed := 1.5
+	pitch := 0.5
+	intonation := 2.0
+
+	client := infra.NewVoicevoxClient(server.URL)
+	_, err := client.Synthesize(context.Background(), query, 1, &speed, &pitch, &intonation)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	// 元のqueryが変更されていないことを確認
+	if query.SpeedScale != 1.0 {
+		t.Errorf("original query should not be modified, speedScale: %f", query.SpeedScale)
+	}
+}
+
+func TestSynthesize_Non200(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer server.Close()
+
+	query := &entity.AudioQuery{
+		SpeedScale:         1.0,
+		OutputSamplingRate: 24000,
+	}
+
+	client := infra.NewVoicevoxClient(server.URL)
+	wav, err := client.Synthesize(context.Background(), query, 1, nil, nil, nil)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if wav != nil {
+		t.Fatal("expected nil wav on error")
 	}
 }
