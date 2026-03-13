@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/canpok1/vox-actor/internal/app"
 	"github.com/canpok1/vox-actor/internal/domain/entity"
 )
 
@@ -14,7 +15,10 @@ import (
 var utf8BOM = []byte{0xEF, 0xBB, 0xBF}
 
 // FileReader はファイルシステムから台本を読み込む。
+// app.ScriptReader インターフェースを実装する。
 type FileReader struct{}
+
+var _ app.ScriptReader = (*FileReader)(nil)
 
 // NewFileReader は FileReader を生成する。
 func NewFileReader() *FileReader {
