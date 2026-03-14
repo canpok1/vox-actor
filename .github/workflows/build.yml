@@ -47,22 +47,6 @@ jobs:
 
   goreleaser-check:
     needs: build
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v6
-      with:
-        fetch-depth: 0
-
-    - name: Install ALSA development library
-      run: sudo apt-get update && sudo apt-get install -y libasound2-dev
-
-    - uses: actions/setup-go@v6
-      with:
-        go-version-file: 'go.mod'
-
-    - name: Run GoReleaser build check
-      uses: goreleaser/goreleaser-action@v7
-      with:
-        distribution: goreleaser
-        version: "~> v2"
-        args: build --snapshot --clean
+    uses: ./.github/workflows/goreleaser.yml
+    with:
+      goreleaser-args: "build --snapshot --clean"
