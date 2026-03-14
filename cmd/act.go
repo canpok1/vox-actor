@@ -3,6 +3,8 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/canpok1/vox-actor/internal/app"
 	"github.com/spf13/cobra"
@@ -60,6 +62,10 @@ func runAct(cmd *cobra.Command, args []string, deps *ActDeps) error {
 		return fmt.Errorf("act command dependencies are not initialized")
 	}
 
+	// シグナルハンドリング: SIGINT/SIGTERM受信時にcontextをキャンセルする
+	ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
 	engineURL, _ := cmd.Flags().GetString("engine-url")
 	speakerID, _ := cmd.Flags().GetInt("speaker")
 	speed, _ := cmd.Flags().GetFloat64("speed")
@@ -85,9 +91,9 @@ func runAct(cmd *cobra.Command, args []string, deps *ActDeps) error {
 		}
 		watcher := deps.DirWatcherFactory()
 		uc := app.NewWatchUsecase(deps.Reader, client, deps.Player, deps.Mover, watcher)
-		return uc.Run(cmd.Context(), params)
+		return uc.Run(ctx, params)
 	}
 
 	uc := app.NewActUsecase(deps.Reader, client, deps.Player)
-	return uc.Run(cmd.Context(), params)
+	return uc.Run(ctx, params)
 }
