@@ -490,6 +490,39 @@ func TestWatchUsecase_Run_DefaultMode_MovesToDoneNotDelete(t *testing.T) {
 	}
 }
 
+func TestWatchUsecase_Run_DeleteMode_LogsFileDeleted(t *testing.T) {
+	reader := &mockScriptReader{
+		scripts: []entity.Script{
+			{Path: "a.txt", Text: "おはよう", IsEmpty: false},
+		},
+	}
+	client := &mockVoicevoxClient{
+		query:   &entity.AudioQuery{},
+		wavData: []byte("fake-wav"),
+	}
+	player := &mockAudioPlayer{}
+	mover := &mockFileMover{}
+	watcher := &mockDirWatcher{
+		files: []string{"/tmp/watch/a.txt"},
+	}
+
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelInfo}))
+
+	uc := app.NewWatchUsecase(reader, client, player, mover, watcher, app.WithDeleteMode(), app.WithWatchLogger(logger))
+	params := app.ActParams{Path: "/tmp/watch", SpeakerID: 3}
+
+	err := uc.Run(context.Background(), params)
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	output := buf.String()
+	if !strings.Contains(output, "file deleted") {
+		t.Errorf("expected log to contain 'file deleted', got: %s", output)
+	}
+}
+
 // blockingDirWatcher はテスト用のブロッキングウォッチャー。
 type blockingDirWatcher struct {
 	fileCh chan string
