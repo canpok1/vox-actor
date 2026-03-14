@@ -229,6 +229,76 @@ func TestActCmd_CLIFlagOverridesEnvSpeaker(t *testing.T) {
 	}
 }
 
+func TestActCmd_WatchDeleteFlag_DefaultFalse(t *testing.T) {
+	rootCmd := makeRootCmd()
+	actCmd := findActCmd(t, rootCmd)
+
+	watchDelete, err := actCmd.Flags().GetBool("watch-delete")
+	if err != nil {
+		t.Fatalf("expected --watch-delete flag to exist, got error: %v", err)
+	}
+	if watchDelete {
+		t.Error("expected --watch-delete default to be false")
+	}
+}
+
+func TestActCmd_WatchAndWatchDelete_ReturnsError(t *testing.T) {
+	dir := t.TempDir()
+
+	rootCmd := makeRootCmd()
+	buf := new(bytes.Buffer)
+	rootCmd.SetOut(buf)
+	rootCmd.SetErr(buf)
+	rootCmd.SetArgs([]string{"act", "--watch", "--watch-delete", dir})
+
+	err := rootCmd.Execute()
+	if err == nil {
+		t.Fatal("expected error when both --watch and --watch-delete are specified")
+	}
+	if !errors.Is(err, ErrUsage) {
+		t.Errorf("expected ErrUsage, got: %v", err)
+	}
+}
+
+func TestActCmd_WatchDeleteWithFile_ReturnsError(t *testing.T) {
+	dir := t.TempDir()
+	file := dir + "/test.txt"
+	if err := os.WriteFile(file, []byte("hello"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	rootCmd := makeRootCmd()
+	buf := new(bytes.Buffer)
+	rootCmd.SetOut(buf)
+	rootCmd.SetErr(buf)
+	rootCmd.SetArgs([]string{"act", "--watch-delete", file})
+
+	err := rootCmd.Execute()
+	if err == nil {
+		t.Fatal("expected error when --watch-delete is used with a file path")
+	}
+	if !errors.Is(err, ErrUsage) {
+		t.Errorf("expected ErrUsage, got: %v", err)
+	}
+}
+
+func TestActCmd_HelpContainsWatchDeleteFlag(t *testing.T) {
+	rootCmd := makeRootCmd()
+	buf := new(bytes.Buffer)
+	rootCmd.SetOut(buf)
+	rootCmd.SetArgs([]string{"act", "--help"})
+
+	err := rootCmd.Execute()
+	if err != nil {
+		t.Fatalf("expected no error for --help, got: %v", err)
+	}
+
+	output := buf.String()
+	if !strings.Contains(output, "--watch-delete") {
+		t.Error("expected help output to contain '--watch-delete'")
+	}
+}
+
 func TestActCmd_EnvVarVOXSpeaker_InvalidValue(t *testing.T) {
 	t.Setenv("VOX_SPEAKER", "not-a-number")
 

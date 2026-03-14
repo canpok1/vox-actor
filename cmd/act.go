@@ -53,6 +53,7 @@ func makeActCmd(deps *ActDeps) *cobra.Command {
 	cmd.Flags().Float64("pitch", 0.0, "音高")
 	cmd.Flags().Float64("intonation", 1.0, "抑揚")
 	cmd.Flags().Bool("watch", false, "ディレクトリ監視モードを有効化")
+	cmd.Flags().Bool("watch-delete", false, "ディレクトリ監視モード（処理済みファイルを削除）")
 	cmd.Flags().Bool("verbose", false, "詳細ログを出力")
 
 	return cmd
@@ -60,14 +61,24 @@ func makeActCmd(deps *ActDeps) *cobra.Command {
 
 func runAct(cmd *cobra.Command, args []string, deps *ActDeps) error {
 	watch, _ := cmd.Flags().GetBool("watch")
-	if watch {
+	watchDelete, _ := cmd.Flags().GetBool("watch-delete")
+
+	if watch && watchDelete {
+		return fmt.Errorf("%w: --watch and --watch-delete cannot be used together", ErrUsage)
+	}
+
+	if watch || watchDelete {
 		path := args[0]
 		info, err := os.Stat(path)
 		if err != nil {
 			return fmt.Errorf("%w: %v", ErrUsage, err)
 		}
+		flagName := "--watch"
+		if watchDelete {
+			flagName = "--watch-delete"
+		}
 		if !info.IsDir() {
-			return fmt.Errorf("%w: --watch requires a directory path, not a file", ErrUsage)
+			return fmt.Errorf("%w: %s requires a directory path, not a file", ErrUsage, flagName)
 		}
 	}
 
@@ -106,12 +117,16 @@ func runAct(cmd *cobra.Command, args []string, deps *ActDeps) error {
 		Intonation: &intonation,
 	}
 
-	if watch {
+	if watch || watchDelete {
 		if deps.Mover == nil || deps.DirWatcherFactory == nil {
 			return fmt.Errorf("watch mode dependencies are not initialized")
 		}
 		watcher := deps.DirWatcherFactory()
-		uc := app.NewWatchUsecase(deps.Reader, client, deps.Player, deps.Mover, watcher, app.WithWatchLogger(logger))
+		opts := []app.WatchOption{app.WithWatchLogger(logger)}
+		if watchDelete {
+			opts = append(opts, app.WithDeleteMode())
+		}
+		uc := app.NewWatchUsecase(deps.Reader, client, deps.Player, deps.Mover, watcher, opts...)
 		return uc.Run(ctx, params)
 	}
 
