@@ -415,6 +415,72 @@ func (w *blockingDirWatcher) Watch(_ context.Context, _ string) (<-chan string, 
 	return w.fileCh, w.errCh
 }
 
+func TestWatchUsecase_Run_FileMovedToDoneLoggedAtInfoLevel(t *testing.T) {
+	reader := &mockScriptReader{
+		scripts: []entity.Script{
+			{Path: "a.txt", Text: "おはよう", IsEmpty: false},
+		},
+	}
+	client := &mockVoicevoxClient{
+		query:   &entity.AudioQuery{},
+		wavData: []byte("fake-wav"),
+	}
+	player := &mockAudioPlayer{}
+	mover := &mockFileMover{}
+	watcher := &mockDirWatcher{
+		files: []string{"/tmp/watch/a.txt"},
+	}
+
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelInfo}))
+
+	uc := app.NewWatchUsecase(reader, client, player, mover, watcher, app.WithWatchLogger(logger))
+	params := app.ActParams{Path: "/tmp/watch", SpeakerID: 3}
+
+	err := uc.Run(context.Background(), params)
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	output := buf.String()
+	if !strings.Contains(output, "file moved to done") {
+		t.Errorf("expected log to contain 'file moved to done' at Info level, got: %s", output)
+	}
+}
+
+func TestWatchUsecase_Run_SynthesisCompletedLoggedAtInfoLevel(t *testing.T) {
+	reader := &mockScriptReader{
+		scripts: []entity.Script{
+			{Path: "a.txt", Text: "おはよう", IsEmpty: false},
+		},
+	}
+	client := &mockVoicevoxClient{
+		query:   &entity.AudioQuery{},
+		wavData: []byte("fake-wav"),
+	}
+	player := &mockAudioPlayer{}
+	mover := &mockFileMover{}
+	watcher := &mockDirWatcher{
+		files: []string{"/tmp/watch/a.txt"},
+	}
+
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelInfo}))
+
+	uc := app.NewWatchUsecase(reader, client, player, mover, watcher, app.WithWatchLogger(logger))
+	params := app.ActParams{Path: "/tmp/watch", SpeakerID: 3}
+
+	err := uc.Run(context.Background(), params)
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	output := buf.String()
+	if !strings.Contains(output, "synthesis completed") {
+		t.Errorf("expected log to contain 'synthesis completed' at Info level, got: %s", output)
+	}
+}
+
 func TestWatchUsecase_Run_LogsProcessingStatus(t *testing.T) {
 	reader := &mockScriptReader{
 		scripts: []entity.Script{

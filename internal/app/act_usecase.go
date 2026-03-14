@@ -70,6 +70,15 @@ func (u *ActUsecase) Run(ctx context.Context, params ActParams) error {
 	}
 	u.logger.Info("scripts loaded", "path", params.Path, "count", len(scripts))
 
+	// 非空スクリプトの総数をカウント（進捗表示用）
+	total := 0
+	for _, s := range scripts {
+		if !s.IsEmpty {
+			total++
+		}
+	}
+
+	current := 0
 	for _, script := range scripts {
 		if ctx.Err() != nil {
 			return nil
@@ -80,7 +89,8 @@ func (u *ActUsecase) Run(ctx context.Context, params ActParams) error {
 			continue
 		}
 
-		u.logger.Info("processing script", "path", script.Path)
+		current++
+		u.logger.Info(fmt.Sprintf("[%d/%d] processing script", current, total), "path", script.Path)
 
 		// セリフ単位パラメータがあればグローバルパラメータより優先する
 		speakerID := script.ResolveSpeakerID(params.SpeakerID)
@@ -104,7 +114,7 @@ func (u *ActUsecase) Run(ctx context.Context, params ActParams) error {
 			}
 			return fmt.Errorf("synthesize %s: %w", script.Path, err)
 		}
-		u.logger.Debug("synthesis completed", "path", script.Path, "wavSize", len(wavData))
+		u.logger.Info("synthesis completed", "path", script.Path, "wavSize", len(wavData))
 
 		if err := u.player.Play(ctx, wavData); err != nil {
 			if ctx.Err() != nil {
