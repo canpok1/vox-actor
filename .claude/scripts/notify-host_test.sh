@@ -77,11 +77,24 @@ test_creates_file_in_tmp_notify() {
 run_test ".tmp/notify/ディレクトリに通知ファイルが作成される" test_creates_file_in_tmp_notify
 
 # テスト2: WORKSPACE_DIR未設定時にエラー終了する
+assert_output_contains() {
+    local expected="$1"
+    local actual="$2"
+    if echo "$actual" | grep -qF "$expected"; then
+        return 0
+    else
+        echo "  FAIL: 出力に '$expected' が含まれていません"
+        echo "  実際の出力: $actual"
+        return 1
+    fi
+}
+
 test_error_when_workspace_dir_unset() {
     local exit_code=0
     local output
     output=$(WORKSPACE_DIR="" "$SCRIPT_UNDER_TEST" "テスト" 2>&1) || exit_code=$?
-    assert_exit_code 1 "$exit_code"
+    assert_exit_code 1 "$exit_code" &&
+    assert_output_contains "WORKSPACE_DIR" "$output"
 }
 run_test "WORKSPACE_DIR未設定時にエラー終了する" test_error_when_workspace_dir_unset
 

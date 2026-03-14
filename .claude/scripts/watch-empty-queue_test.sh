@@ -99,17 +99,24 @@ test_lock_file_in_tmp_locks() {
     # 既存のロックファイルを削除
     rm -f "$lock_file"
 
-    # スクリプトをバックグラウンドで短時間実行
-    "$SCRIPT_UNDER_TEST" &>/dev/null &
+    # スクリプトをバックグラウンドで短時間実行（エラー出力をキャプチャ）
+    local err_file
+    err_file=$(mktemp)
+    "$SCRIPT_UNDER_TEST" >/dev/null 2>"$err_file" &
     local pid=$!
     CLEANUP_PIDS+=("$pid")
     sleep 2
 
     # ロックファイルが存在するか確認
     if [[ -f "$lock_file" ]]; then
+        rm -f "$err_file"
         return 0
     else
         echo "  FAIL: ロックファイルが存在しません: $lock_file"
+        if [[ -s "$err_file" ]]; then
+            echo "  スクリプトエラー出力: $(cat "$err_file")"
+        fi
+        rm -f "$err_file"
         return 1
     fi
 }
