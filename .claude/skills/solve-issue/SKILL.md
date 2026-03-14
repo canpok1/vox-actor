@@ -78,7 +78,7 @@ GitHub Issue $ARGUMENTS を対応します。
 5. 同一Issueに対する既存PRの重複チェックを行う
   - コマンド: `gh pr list --repo {owner}/{repo} --search "issue-{番号}" --state all`
   - 検索結果に複数のPRが含まれる場合、以下の優先順位で判断する:
-    1. **merged状態のPRが存在する場合**: 既に対応済みのため、処理をスキップして完了する（ステップ13の振り返りのみ実施する）
+    1. **merged状態のPRが存在する場合**: 既に対応済みのため、処理をスキップして完了する（ステップ12の振り返りのみ実施する）
     2. **open状態のPRが存在する場合**: 新しいPRを作成せず、既存PRに対してステップ7以降（CI待機・レビュー対応・マージ）を継続する
        - 複数のopen PRがある場合は、最新のものを対象とする
        - PR番号の取得例: `gh pr list --repo {owner}/{repo} --search "issue-{番号}" --state open --json number --jq '.[0].number'`
@@ -142,8 +142,4 @@ GitHub Issue $ARGUMENTS を対応します。
   - **`--delete-branch` オプションを使用しないこと**（worktree環境ではデフォルトブランチへの切り替えに失敗しエラーになるため）
   - リモートブランチの削除はGitHub側のブランチ自動削除設定に任せる
   - マージできない場合は、原因を確認して必要に応じてコードを修正し、手順7に戻る
-12. マージ後にローカルブランチをクリーンアップする
-  - GitHub側で自動ブランチ削除が無効な場合は、先にリモートブランチを削除する
-    - 例: `git push origin --delete {head-branch}`
-  - `/clean_gone` スキルを実行して、リモートで削除済みのブランチとworktreeを一括削除する
-13. `/retro` スキルで振り返りを行う
+12. `/retro` スキルで振り返りを行う
