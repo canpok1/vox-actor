@@ -17,7 +17,7 @@ import (
 
 // 環境変数対応 テストリスト #59
 // DONE: VOX_ENGINE_URL環境変数が設定されている場合、--engine-urlのデフォルト値として反映される
-// TODO: VOX_SPEAKER環境変数が設定されている場合、--speakerのデフォルト値として反映される
+// DONE: VOX_SPEAKER環境変数が設定されている場合、--speakerのデフォルト値として反映される
 // TODO: CLIフラグ --engine-url 指定時はVOX_ENGINE_URLより優先される
 // TODO: CLIフラグ --speaker 指定時はVOX_SPEAKERより優先される
 // TODO: 環境変数未設定時はデフォルト値が使われる（既存テストでカバー済み）
@@ -179,5 +179,27 @@ func TestActCmd_EnvVarVOXEngineURL(t *testing.T) {
 	engineURL, _ := actCmd.Flags().GetString("engine-url")
 	if engineURL != "http://custom:9999" {
 		t.Errorf("expected engine-url to be 'http://custom:9999', got: %s", engineURL)
+	}
+}
+
+func TestActCmd_EnvVarVOXSpeaker(t *testing.T) {
+	t.Setenv("VOX_SPEAKER", "42")
+
+	rootCmd := makeRootCmd()
+
+	var actCmd *cobra.Command
+	for _, c := range rootCmd.Commands() {
+		if c.Name() == "act" {
+			actCmd = c
+			break
+		}
+	}
+	if actCmd == nil {
+		t.Fatal("act subcommand not found")
+	}
+
+	speaker, _ := actCmd.Flags().GetInt("speaker")
+	if speaker != 42 {
+		t.Errorf("expected speaker to be 42, got: %d", speaker)
 	}
 }
