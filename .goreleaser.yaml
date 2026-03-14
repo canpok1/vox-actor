@@ -4,12 +4,24 @@
 version: 2
 
 builds:
-  - env:
-      - CGO_ENABLED=0
+  - id: linux
+    env:
+      - CGO_ENABLED=1
     goos:
       - linux
-      - windows
+    goarch:
+      - amd64
+    ldflags:
+      - -s -w -X github.com/canpok1/vox-actor/cmd.version={{.Version}}
+
+  - id: darwin
+    env:
+      - CGO_ENABLED=0
+    goos:
       - darwin
+    goarch:
+      - amd64
+      - arm64
     ldflags:
       - -s -w -X github.com/canpok1/vox-actor/cmd.version={{.Version}}
 
@@ -22,9 +34,6 @@ archives:
       {{- else if eq .Arch "386" }}i386
       {{- else }}{{ .Arch }}{{ end }}
       {{- if .Arm }}v{{ .Arm }}{{ end }}
-    format_overrides:
-      - goos: windows
-        formats: [zip]
 
 changelog:
   sort: asc
