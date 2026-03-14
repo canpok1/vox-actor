@@ -10,6 +10,7 @@
 # DONE: 未解決レビューが原因でマージ失敗した場合、exit 2する
 # DONE: その他のエラーでマージ失敗した場合、exit 3する（stderrにエラー内容を出力）
 # DONE: ブランチが遅れている場合、git merge mainしてpushする
+# DONE: CHANGES_REQUESTEDが原因でマージ失敗した場合、exit 2する
 
 set -euo pipefail
 
@@ -330,6 +331,40 @@ fi
     assert_file_contains "push" "$TEST_DIR/git_calls.log"
 }
 run_test "ブランチが遅れている場合、mergeしてpushする" test_branch_behind
+
+# テスト8: CHANGES_REQUESTEDが原因でマージ失敗した場合、exit 2する
+test_changes_requested() {
+    # gitモック: ブランチ最新
+    create_git_mock '
+if [[ "$*" == *"fetch"* ]]; then
+    exit 0
+elif [[ "$*" == *"rev-parse HEAD"* ]]; then
+    echo "abc123"
+elif [[ "$*" == *"merge-base"* ]]; then
+    echo "abc123"
+elif [[ "$*" == *"rev-parse"*"main"* ]]; then
+    echo "def456"
+fi
+'
+    # ghモック: マージ失敗（CHANGES_REQUESTED）
+    create_gh_mock '
+if [[ "$*" == *"pr checks"*"--watch"* ]]; then
+    exit 0
+elif [[ "$*" == *"pr merge"* ]]; then
+    echo "CHANGES_REQUESTED" >&2
+    exit 1
+elif [[ "$*" == *"repo view"* ]]; then
+    echo "owner/repo"
+elif [[ "$*" == *"api repos"* ]]; then
+    echo "{\"mergeCommit\":true,\"squash\":true,\"rebase\":true}"
+fi
+'
+    local output
+    local exit_code=0
+    output=$(PATH="$TEST_DIR/bin:$PATH" "$SCRIPT_UNDER_TEST" 123 2>&1) || exit_code=$?
+    assert_exit_code 2 "$exit_code"
+}
+run_test "CHANGES_REQUESTEDが原因でマージ失敗した場合、exit 2する" test_changes_requested
 
 # テスト結果のサマリー
 print_summary() {

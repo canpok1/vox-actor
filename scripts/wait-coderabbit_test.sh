@@ -6,6 +6,7 @@
 # DONE: CodeRabbitコメントがrate limitなしで到着した場合、正常終了する（exit 0）
 # DONE: CodeRabbitコメントがrate limitありで到着した場合、待機後にfull reviewを投稿して正常終了する（exit 0）
 # DONE: CodeRabbitコメントがタイムアウトしても到着しない場合、エラー終了する（exit 1）
+# DONE: CodeRabbitのレビュー状態がCHANGES_REQUESTEDの場合、@coderabbitai resolveを投稿して正常終了する（exit 0）
 
 set -euo pipefail
 
@@ -194,6 +195,35 @@ fi
     assert_output_contains "タイムアウト" "$output"
 }
 run_test "タイムアウトしても到着しない場合、エラー終了する" test_timeout
+
+# テスト5: CodeRabbitのレビュー状態がCHANGES_REQUESTEDの場合、@coderabbitai resolveを投稿して正常終了する
+test_changes_requested_resolve() {
+    # ghモック: CodeRabbitレビューあり + レビュー状態がCHANGES_REQUESTED
+    create_gh_mock '
+if [[ "$*" == *"comments"*"length"* ]]; then
+    echo "1"
+elif [[ "$*" == *"reviews"*"length"* ]]; then
+    echo "1"
+elif [[ "$*" == *"comments"*".body"* ]]; then
+    echo "Some review comment"
+elif [[ "$*" == *"reviews"*".body"* ]]; then
+    echo "Some review body"
+elif [[ "$*" == *"reviews"*"state"* ]]; then
+    echo "CHANGES_REQUESTED"
+elif [[ "$*" == *"pr comment"* ]]; then
+    echo "commented"
+elif [[ "$*" == *"repo view"* ]]; then
+    echo "owner/repo"
+fi
+'
+    local output
+    local exit_code=0
+    output=$(PATH="$TEST_DIR/bin:$PATH" POLL_INTERVAL=0 MAX_POLLS=1 "$SCRIPT_UNDER_TEST" 123 2>&1) || exit_code=$?
+    assert_exit_code 0 "$exit_code" && \
+    assert_file_contains "@coderabbitai resolve" "$TEST_DIR/gh_calls.log" && \
+    assert_output_contains "CHANGES_REQUESTED" "$output"
+}
+run_test "CHANGES_REQUESTEDの場合、@coderabbitai resolveを投稿して正常終了する" test_changes_requested_resolve
 
 # テスト結果のサマリー
 print_summary() {
