@@ -30,18 +30,24 @@ func (m *mockScriptReader) Read(_ string) ([]entity.Script, error) {
 	return m.scripts, m.err
 }
 
+type createQueryCallArgs struct {
+	speakerID int
+}
+
 type mockVoicevoxClient struct {
-	healthCheckErr   error
-	query            *entity.AudioQuery
-	createQueryErr   error
-	wavData          []byte
-	synthesizeErr    error
-	createQueryCalls int
-	synthesizeCalls  int
-	synthesizeArgs   []synthesizeCallArgs
+	healthCheckErr      error
+	query               *entity.AudioQuery
+	createQueryErr      error
+	wavData             []byte
+	synthesizeErr       error
+	createQueryCalls    int
+	createQueryCallArgs []createQueryCallArgs
+	synthesizeCalls     int
+	synthesizeArgs      []synthesizeCallArgs
 }
 
 type synthesizeCallArgs struct {
+	speakerID  int
 	speed      *float64
 	pitch      *float64
 	intonation *float64
@@ -51,14 +57,15 @@ func (m *mockVoicevoxClient) HealthCheck(_ context.Context) error {
 	return m.healthCheckErr
 }
 
-func (m *mockVoicevoxClient) CreateQuery(_ context.Context, _ string, _ int) (*entity.AudioQuery, error) {
+func (m *mockVoicevoxClient) CreateQuery(_ context.Context, _ string, speakerID int) (*entity.AudioQuery, error) {
 	m.createQueryCalls++
+	m.createQueryCallArgs = append(m.createQueryCallArgs, createQueryCallArgs{speakerID: speakerID})
 	return m.query, m.createQueryErr
 }
 
-func (m *mockVoicevoxClient) Synthesize(_ context.Context, _ *entity.AudioQuery, _ int, speed, pitch, intonation *float64) ([]byte, error) {
+func (m *mockVoicevoxClient) Synthesize(_ context.Context, _ *entity.AudioQuery, speakerID int, speed, pitch, intonation *float64) ([]byte, error) {
 	m.synthesizeCalls++
-	m.synthesizeArgs = append(m.synthesizeArgs, synthesizeCallArgs{speed: speed, pitch: pitch, intonation: intonation})
+	m.synthesizeArgs = append(m.synthesizeArgs, synthesizeCallArgs{speakerID: speakerID, speed: speed, pitch: pitch, intonation: intonation})
 	return m.wavData, m.synthesizeErr
 }
 
@@ -543,5 +550,240 @@ func TestActUsecase_Run_NilLogger_NoPanic(t *testing.T) {
 	err := uc.Run(context.Background(), params)
 	if err != nil {
 		t.Fatalf("expected no error, got: %v", err)
+	}
+}
+
+// --- セリフ単位パラメータ テスト ---
+
+// テストリスト: セリフ単位パラメータ
+// DONE: スクリプトにSpeakerIDが設定されている場合、そのSpeakerIDでCreateQuery/Synthesizeが呼ばれる
+// DONE: スクリプトにSpeedScale/PitchScale/IntonationScaleが設定されている場合、Synthesizeにそれが渡される
+// DONE: スクリプトにパラメータが設定されていない場合、ActParamsのデフォルト値が使われる
+// DONE: 複数スクリプトでパラメータが異なる場合、それぞれのスクリプトに対応するパラメータが使われる
+
+func TestActUsecase_Run_ScriptSpeakerID(t *testing.T) {
+	scriptSpeaker := 7
+	reader := &mockScriptReader{
+		scripts: []entity.Script{
+			{Path: "script.json", Text: "こんにちは", IsEmpty: false, SpeakerID: &scriptSpeaker},
+		},
+	}
+	client := &mockVoicevoxClient{
+		query:   &entity.AudioQuery{},
+		wavData: []byte("fake-wav"),
+	}
+	player := &mockAudioPlayer{}
+
+	uc := app.NewActUsecase(reader, client, player)
+	params := app.ActParams{
+		Path:      "script.json",
+		SpeakerID: 3, // デフォルトは3だがスクリプトで7が指定されている
+	}
+
+	err := uc.Run(context.Background(), params)
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	// CreateQueryにスクリプトのSpeakerID(7)が渡されること
+	if len(client.createQueryCallArgs) != 1 {
+		t.Fatalf("expected 1 CreateQuery call, got %d", len(client.createQueryCallArgs))
+	}
+	if client.createQueryCallArgs[0].speakerID != 7 {
+		t.Errorf("expected CreateQuery speakerID 7, got %d", client.createQueryCallArgs[0].speakerID)
+	}
+
+	// SynthesizeにもスクリプトのSpeakerID(7)が渡されること
+	if len(client.synthesizeArgs) != 1 {
+		t.Fatalf("expected 1 Synthesize call, got %d", len(client.synthesizeArgs))
+	}
+	if client.synthesizeArgs[0].speakerID != 7 {
+		t.Errorf("expected Synthesize speakerID 7, got %d", client.synthesizeArgs[0].speakerID)
+	}
+}
+
+func TestActUsecase_Run_ScriptEmotionParams(t *testing.T) {
+	speed := 1.5
+	pitch := 0.1
+	intonation := 1.8
+	reader := &mockScriptReader{
+		scripts: []entity.Script{
+			{
+				Path:            "script.json",
+				Text:            "感情込めて",
+				IsEmpty:         false,
+				SpeedScale:      &speed,
+				PitchScale:      &pitch,
+				IntonationScale: &intonation,
+			},
+		},
+	}
+	client := &mockVoicevoxClient{
+		query:   &entity.AudioQuery{},
+		wavData: []byte("fake-wav"),
+	}
+	player := &mockAudioPlayer{}
+
+	// グローバルパラメータは未設定
+	uc := app.NewActUsecase(reader, client, player)
+	params := app.ActParams{
+		Path:      "script.json",
+		SpeakerID: 3,
+	}
+
+	err := uc.Run(context.Background(), params)
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	if len(client.synthesizeArgs) != 1 {
+		t.Fatalf("expected 1 Synthesize call, got %d", len(client.synthesizeArgs))
+	}
+	args := client.synthesizeArgs[0]
+	if args.speed == nil || *args.speed != 1.5 {
+		t.Errorf("expected speed 1.5, got %v", args.speed)
+	}
+	if args.pitch == nil || *args.pitch != 0.1 {
+		t.Errorf("expected pitch 0.1, got %v", args.pitch)
+	}
+	if args.intonation == nil || *args.intonation != 1.8 {
+		t.Errorf("expected intonation 1.8, got %v", args.intonation)
+	}
+}
+
+func TestActUsecase_Run_ScriptParamsOverrideGlobal(t *testing.T) {
+	globalSpeed := 2.0
+	scriptSpeed := 0.5
+	reader := &mockScriptReader{
+		scripts: []entity.Script{
+			{
+				Path:       "script.json",
+				Text:       "ゆっくり",
+				IsEmpty:    false,
+				SpeedScale: &scriptSpeed,
+			},
+		},
+	}
+	client := &mockVoicevoxClient{
+		query:   &entity.AudioQuery{},
+		wavData: []byte("fake-wav"),
+	}
+	player := &mockAudioPlayer{}
+
+	uc := app.NewActUsecase(reader, client, player)
+	params := app.ActParams{
+		Path:      "script.json",
+		SpeakerID: 3,
+		Speed:     &globalSpeed,
+	}
+
+	err := uc.Run(context.Background(), params)
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	if len(client.synthesizeArgs) != 1 {
+		t.Fatalf("expected 1 Synthesize call, got %d", len(client.synthesizeArgs))
+	}
+	args := client.synthesizeArgs[0]
+	// スクリプト単位のSpeedScale(0.5)がグローバル(2.0)より優先される
+	if args.speed == nil || *args.speed != 0.5 {
+		t.Errorf("expected speed 0.5 (script override), got %v", args.speed)
+	}
+}
+
+func TestActUsecase_Run_ScriptNoParams_UsesGlobal(t *testing.T) {
+	globalSpeed := 2.0
+	reader := &mockScriptReader{
+		scripts: []entity.Script{
+			{Path: "script.txt", Text: "普通", IsEmpty: false},
+		},
+	}
+	client := &mockVoicevoxClient{
+		query:   &entity.AudioQuery{},
+		wavData: []byte("fake-wav"),
+	}
+	player := &mockAudioPlayer{}
+
+	uc := app.NewActUsecase(reader, client, player)
+	params := app.ActParams{
+		Path:      "script.txt",
+		SpeakerID: 3,
+		Speed:     &globalSpeed,
+	}
+
+	err := uc.Run(context.Background(), params)
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	if len(client.synthesizeArgs) != 1 {
+		t.Fatalf("expected 1 Synthesize call, got %d", len(client.synthesizeArgs))
+	}
+	args := client.synthesizeArgs[0]
+	// スクリプトにSpeedScaleがないのでグローバル(2.0)が使われる
+	if args.speed == nil || *args.speed != 2.0 {
+		t.Errorf("expected speed 2.0 (global), got %v", args.speed)
+	}
+}
+
+func TestActUsecase_Run_MultipleScriptsWithDifferentParams(t *testing.T) {
+	speaker5 := 5
+	speed1 := 0.8
+	speed2 := 1.5
+	reader := &mockScriptReader{
+		scripts: []entity.Script{
+			{Path: "a.json", Text: "ゆっくり", IsEmpty: false, SpeakerID: &speaker5, SpeedScale: &speed1},
+			{Path: "b.txt", Text: "普通", IsEmpty: false},
+			{Path: "c.json", Text: "はやく", IsEmpty: false, SpeedScale: &speed2},
+		},
+	}
+	client := &mockVoicevoxClient{
+		query:   &entity.AudioQuery{},
+		wavData: []byte("fake-wav"),
+	}
+	player := &mockAudioPlayer{}
+
+	uc := app.NewActUsecase(reader, client, player)
+	params := app.ActParams{
+		Path:      "scripts/",
+		SpeakerID: 3,
+	}
+
+	err := uc.Run(context.Background(), params)
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	if len(client.createQueryCallArgs) != 3 {
+		t.Fatalf("expected 3 CreateQuery calls, got %d", len(client.createQueryCallArgs))
+	}
+	// a.json: speaker=5
+	if client.createQueryCallArgs[0].speakerID != 5 {
+		t.Errorf("expected first CreateQuery speakerID 5, got %d", client.createQueryCallArgs[0].speakerID)
+	}
+	// b.txt: speaker=3 (default)
+	if client.createQueryCallArgs[1].speakerID != 3 {
+		t.Errorf("expected second CreateQuery speakerID 3, got %d", client.createQueryCallArgs[1].speakerID)
+	}
+	// c.json: speaker=3 (default, not set in script)
+	if client.createQueryCallArgs[2].speakerID != 3 {
+		t.Errorf("expected third CreateQuery speakerID 3, got %d", client.createQueryCallArgs[2].speakerID)
+	}
+
+	if len(client.synthesizeArgs) != 3 {
+		t.Fatalf("expected 3 Synthesize calls, got %d", len(client.synthesizeArgs))
+	}
+	// a.json: speed=0.8
+	if client.synthesizeArgs[0].speed == nil || *client.synthesizeArgs[0].speed != 0.8 {
+		t.Errorf("expected first speed 0.8, got %v", client.synthesizeArgs[0].speed)
+	}
+	// b.txt: speed=nil (no script or global)
+	if client.synthesizeArgs[1].speed != nil {
+		t.Errorf("expected second speed nil, got %v", *client.synthesizeArgs[1].speed)
+	}
+	// c.json: speed=1.5
+	if client.synthesizeArgs[2].speed == nil || *client.synthesizeArgs[2].speed != 1.5 {
+		t.Errorf("expected third speed 1.5, got %v", client.synthesizeArgs[2].speed)
 	}
 }
