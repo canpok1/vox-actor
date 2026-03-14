@@ -41,6 +41,20 @@ vox-actor act --engine-url http://localhost:50021 --speaker 3 script.txt
 vox-actor act --speed 1.2 --pitch 0.1 --intonation 1.5 script.txt
 ```
 
+### ディレクトリ監視モード
+
+ディレクトリを監視し、ファイルが配置されると自動的に読み上げます:
+
+```bash
+vox-actor act --watch /path/to/watch-dir
+```
+
+詳細ログを出力する場合:
+
+```bash
+vox-actor act --verbose script.txt
+```
+
 ## オプション一覧
 
 ### `act` サブコマンド
@@ -52,6 +66,8 @@ vox-actor act --speed 1.2 --pitch 0.1 --intonation 1.5 script.txt
 | `--speed` | `1.0` | 話速 |
 | `--pitch` | `0.0` | 音高 |
 | `--intonation` | `1.0` | 抑揚 |
+| `--watch` | `false` | ディレクトリ監視モードを有効化 |
+| `--verbose` | `false` | 詳細ログを出力 |
 
 ## 開発
 
