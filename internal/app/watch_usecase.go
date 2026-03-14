@@ -15,14 +15,22 @@ func WithWatchLogger(logger *slog.Logger) WatchOption {
 	}
 }
 
+// WithDeleteMode は処理済みファイルを削除するモードを有効にするオプション。
+func WithDeleteMode() WatchOption {
+	return func(u *WatchUsecase) {
+		u.deleteMode = true
+	}
+}
+
 // WatchUsecase はディレクトリ監視モードのユースケース。
 type WatchUsecase struct {
-	reader  ScriptReader
-	client  VoicevoxClient
-	player  AudioPlayer
-	mover   FileMover
-	watcher DirWatcher
-	logger  *slog.Logger
+	reader     ScriptReader
+	client     VoicevoxClient
+	player     AudioPlayer
+	mover      FileMover
+	watcher    DirWatcher
+	logger     *slog.Logger
+	deleteMode bool
 }
 
 // NewWatchUsecase は新しいWatchUsecaseを生成する。
@@ -79,10 +87,18 @@ func (u *WatchUsecase) Run(ctx context.Context, params ActParams) error {
 // エラーが発生してもスキップしてdone/に移動する。
 func (u *WatchUsecase) processFile(ctx context.Context, path string, params ActParams) {
 	defer func() {
-		if moveErr := u.mover.MoveToDone(path); moveErr != nil {
-			u.logger.Error("move error", "path", path, "error", moveErr)
+		if u.deleteMode {
+			if delErr := u.mover.Delete(path); delErr != nil {
+				u.logger.Error("delete error", "path", path, "error", delErr)
+			} else {
+				u.logger.Info("file deleted", "path", path)
+			}
 		} else {
-			u.logger.Info("file moved to done", "path", path)
+			if moveErr := u.mover.MoveToDone(path); moveErr != nil {
+				u.logger.Error("move error", "path", path, "error", moveErr)
+			} else {
+				u.logger.Info("file moved to done", "path", path)
+			}
 		}
 	}()
 

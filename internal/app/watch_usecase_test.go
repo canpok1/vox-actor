@@ -18,9 +18,11 @@ import (
 // --- WatchUsecase用モック ---
 
 type mockFileMover struct {
-	mu         sync.Mutex
-	movedFiles []string
-	err        error
+	mu           sync.Mutex
+	movedFiles   []string
+	deletedFiles []string
+	err          error
+	deleteErr    error
 }
 
 func (m *mockFileMover) MoveToDone(path string) error {
@@ -28,6 +30,13 @@ func (m *mockFileMover) MoveToDone(path string) error {
 	defer m.mu.Unlock()
 	m.movedFiles = append(m.movedFiles, path)
 	return m.err
+}
+
+func (m *mockFileMover) Delete(path string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.deletedFiles = append(m.deletedFiles, path)
+	return m.deleteErr
 }
 
 type mockDirWatcher struct {
@@ -402,6 +411,82 @@ func TestWatchUsecase_Run_ScriptNoParams_UsesGlobal(t *testing.T) {
 	// SpeakerIDもデフォルト(3)が使われる
 	if args.speakerID != 3 {
 		t.Errorf("expected speakerID 3 (global), got %d", args.speakerID)
+	}
+}
+
+func TestWatchUsecase_Run_DeleteMode_DeletesFileInsteadOfMove(t *testing.T) {
+	reader := &mockScriptReader{
+		scripts: []entity.Script{
+			{Path: "a.txt", Text: "おはよう", IsEmpty: false},
+		},
+	}
+	client := &mockVoicevoxClient{
+		query:   &entity.AudioQuery{},
+		wavData: []byte("fake-wav"),
+	}
+	player := &mockAudioPlayer{}
+	mover := &mockFileMover{}
+	watcher := &mockDirWatcher{
+		files: []string{"/tmp/watch/a.txt"},
+	}
+
+	uc := app.NewWatchUsecase(reader, client, player, mover, watcher, app.WithDeleteMode())
+	params := app.ActParams{
+		Path:      "/tmp/watch",
+		SpeakerID: 3,
+	}
+
+	if err := uc.Run(context.Background(), params); err != nil {
+		t.Fatal(err)
+	}
+
+	// MoveToDoneは呼ばれない
+	if len(mover.movedFiles) != 0 {
+		t.Errorf("expected 0 files moved to done, got: %d", len(mover.movedFiles))
+	}
+	// Deleteが呼ばれる
+	if len(mover.deletedFiles) != 1 {
+		t.Fatalf("expected 1 file deleted, got: %d", len(mover.deletedFiles))
+	}
+	if mover.deletedFiles[0] != "/tmp/watch/a.txt" {
+		t.Errorf("expected deleted file '/tmp/watch/a.txt', got: %s", mover.deletedFiles[0])
+	}
+}
+
+func TestWatchUsecase_Run_DefaultMode_MovesToDoneNotDelete(t *testing.T) {
+	reader := &mockScriptReader{
+		scripts: []entity.Script{
+			{Path: "a.txt", Text: "おはよう", IsEmpty: false},
+		},
+	}
+	client := &mockVoicevoxClient{
+		query:   &entity.AudioQuery{},
+		wavData: []byte("fake-wav"),
+	}
+	player := &mockAudioPlayer{}
+	mover := &mockFileMover{}
+	watcher := &mockDirWatcher{
+		files: []string{"/tmp/watch/a.txt"},
+	}
+
+	// WithDeleteModeなしで作成
+	uc := app.NewWatchUsecase(reader, client, player, mover, watcher)
+	params := app.ActParams{
+		Path:      "/tmp/watch",
+		SpeakerID: 3,
+	}
+
+	if err := uc.Run(context.Background(), params); err != nil {
+		t.Fatal(err)
+	}
+
+	// MoveToDoneが呼ばれる
+	if len(mover.movedFiles) != 1 {
+		t.Errorf("expected 1 file moved to done, got: %d", len(mover.movedFiles))
+	}
+	// Deleteは呼ばれない
+	if len(mover.deletedFiles) != 0 {
+		t.Errorf("expected 0 files deleted, got: %d", len(mover.deletedFiles))
 	}
 }
 
