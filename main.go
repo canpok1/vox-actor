@@ -23,6 +23,10 @@ func main() {
 			return infra.NewVoicevoxClient(engineURL)
 		},
 		Player: player,
+		Mover:  infra.NewFileMover(),
+		DirWatcherFactory: func() app.DirWatcher {
+			return infra.NewPollingDirWatcher(infra.PollInterval)
+		},
 	}
 
 	if err := cmd.Execute(deps); err != nil {

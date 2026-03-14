@@ -3,6 +3,7 @@ package cmd
 import (
 	"bytes"
 	"errors"
+	"os"
 	"strings"
 	"testing"
 
@@ -97,10 +98,56 @@ func TestActCmd_HelpContainsFlags(t *testing.T) {
 	}
 
 	output := buf.String()
-	flags := []string{"--engine-url", "--speaker", "--speed", "--pitch", "--intonation"}
+	flags := []string{"--engine-url", "--speaker", "--speed", "--pitch", "--intonation", "--watch"}
 	for _, flag := range flags {
 		if !strings.Contains(output, flag) {
 			t.Errorf("expected help output to contain '%s'", flag)
 		}
+	}
+}
+
+func TestActCmd_WatchWithFile_ReturnsError(t *testing.T) {
+	// --watchフラグ付きでファイルパスを指定した場合はエラー
+	dir := t.TempDir()
+	file := dir + "/test.txt"
+	if err := os.WriteFile(file, []byte("hello"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	rootCmd := makeRootCmd()
+	buf := new(bytes.Buffer)
+	rootCmd.SetOut(buf)
+	rootCmd.SetErr(buf)
+	rootCmd.SetArgs([]string{"act", "--watch", file})
+
+	err := rootCmd.Execute()
+	if err == nil {
+		t.Fatal("expected error when --watch is used with a file path")
+	}
+	if !errors.Is(err, ErrUsage) {
+		t.Errorf("expected ErrUsage, got: %v", err)
+	}
+}
+
+func TestActCmd_WatchFlag_DefaultFalse(t *testing.T) {
+	rootCmd := makeRootCmd()
+
+	var actCmd *cobra.Command
+	for _, c := range rootCmd.Commands() {
+		if c.Name() == "act" {
+			actCmd = c
+			break
+		}
+	}
+	if actCmd == nil {
+		t.Fatal("act subcommand not found")
+	}
+
+	watch, err := actCmd.Flags().GetBool("watch")
+	if err != nil {
+		t.Fatalf("expected --watch flag to exist, got error: %v", err)
+	}
+	if watch {
+		t.Error("expected --watch default to be false")
 	}
 }
