@@ -22,6 +22,13 @@ type RetryConfig struct {
 // RetryableVoicevoxClientOption はRetryableVoicevoxClientの生成時に指定するオプション。
 type RetryableVoicevoxClientOption func(*RetryableVoicevoxClient)
 
+// WithRetryConfig はリトライ設定を上書きするオプション。
+func WithRetryConfig(config RetryConfig) RetryableVoicevoxClientOption {
+	return func(c *RetryableVoicevoxClient) {
+		c.config = config
+	}
+}
+
 // WithSleepFunc はリトライ時のスリープ関数を差し替えるオプション（テスト用）。
 func WithSleepFunc(f func(ctx context.Context, d time.Duration) error) RetryableVoicevoxClientOption {
 	return func(c *RetryableVoicevoxClient) {
