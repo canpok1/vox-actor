@@ -19,6 +19,7 @@ package infra_test
 // DONE: 正常系: ディレクトリ読み込み時に.jsonファイルも対象になる
 // DONE: 異常系: .jsonファイルが不正なJSONの場合、エラーを返す
 // DONE: 異常系: .jsonファイルにtextフィールドがない場合、エラーを返す
+// DONE: 異常系: .jsonファイルに未知フィールドがある場合、エラーを返す
 
 import (
 	"os"
@@ -400,6 +401,23 @@ func TestFileReader_Read_DirectoryIncludesJSON(t *testing.T) {
 	}
 	if scripts[1].Text != "JSON台本" {
 		t.Errorf("expected second text %q, got %q", "JSON台本", scripts[1].Text)
+	}
+}
+
+func TestFileReader_Read_JSONFile_UnknownField(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	filePath := filepath.Join(dir, "unknown.json")
+	content := `{"text": "こんにちは", "unknownField": 123}`
+	if err := os.WriteFile(filePath, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	reader := infra.NewFileReader()
+	_, err := reader.Read(filePath)
+	if err == nil {
+		t.Fatal("expected error for unknown field in JSON, got nil")
 	}
 }
 

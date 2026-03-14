@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -102,8 +103,13 @@ func (r *FileReader) readJSONFile(path string) ([]entity.Script, error) {
 	}
 
 	var js jsonScript
-	if err := json.Unmarshal(data, &js); err != nil {
+	dec := json.NewDecoder(bytes.NewReader(data))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&js); err != nil {
 		return nil, fmt.Errorf("invalid JSON in %s: %w", path, err)
+	}
+	if err := dec.Decode(&struct{}{}); err != io.EOF {
+		return nil, fmt.Errorf("invalid JSON in %s: trailing data", path)
 	}
 
 	if js.Text == nil {
