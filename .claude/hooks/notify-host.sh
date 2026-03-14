@@ -9,5 +9,4 @@ if ! command -v jq &> /dev/null; then
   exit 1
 fi
 
-jq -n --arg msg "${1:-Done}" --arg title "${2:-Dev Container}" \
-  '{message: $msg, title: $title}' > "${WORKSPACE_DIR}/.devcontainer/host-notifier.json"
+echo "$1" > "${WORKSPACE_DIR}/.notify/notify_$(($(date +%s%N)/1000000)).txt"

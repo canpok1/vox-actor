@@ -37,3 +37,6 @@ dist/
 
 # 作業メモ
 .claude/memo/
+
+# 通知用
+.notify
