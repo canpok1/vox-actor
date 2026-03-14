@@ -20,7 +20,7 @@ func main() {
 	deps := &cmd.ActDeps{
 		Reader: infra.NewFileReader(),
 		ClientFactory: func(engineURL string) app.VoicevoxClient {
-			return infra.NewVoicevoxClient(engineURL)
+			return infra.NewRetryableVoicevoxClient(infra.NewVoicevoxClient(engineURL))
 		},
 		Player: player,
 		Mover:  infra.NewFileMover(),
