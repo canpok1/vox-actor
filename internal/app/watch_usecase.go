@@ -83,8 +83,8 @@ func (u *WatchUsecase) Run(ctx context.Context, params ActParams) error {
 	}
 }
 
-// processFile は1ファイルを処理し、完了後にdone/に移動する。
-// エラーが発生してもスキップしてdone/に移動する。
+// processFile は1ファイルを処理し、完了後にdone/に移動する（deleteModeの場合は削除する）。
+// エラーが発生してもスキップして後処理を実行する。
 func (u *WatchUsecase) processFile(ctx context.Context, path string, params ActParams) {
 	defer func() {
 		if u.deleteMode {

@@ -71,6 +71,14 @@ vox-actor act script.json
 vox-actor act --watch /path/to/watch-dir
 ```
 
+処理済みファイルを `done/` に移動する代わりに削除する場合:
+
+```bash
+vox-actor act --watch-delete /path/to/watch-dir
+```
+
+`--watch` と `--watch-delete` は同時に指定できません。
+
 詳細ログを出力する場合:
 
 ```bash
@@ -89,6 +97,7 @@ vox-actor act --verbose script.txt
 | `--pitch` | — | `0.0` | 音高 |
 | `--intonation` | — | `1.0` | 抑揚 |
 | `--watch` | — | `false` | ディレクトリ監視モードを有効化 |
+| `--watch-delete` | — | `false` | ディレクトリ監視モード（処理済みファイルを削除） |
 | `--verbose` | — | `false` | 詳細ログを出力 |
 
 オプションの優先順位: **CLIフラグ > 環境変数 > デフォルト値**
