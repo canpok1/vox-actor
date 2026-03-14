@@ -39,6 +39,7 @@ if "${USE_PRINT_MODE}"; then
     -p "/solve-issue ${ISSUE_NUMBER}" \
     --output-format stream-json --verbose --include-partial-messages | \
     jq -rj 'if .type == "stream_event" and .event.delta.type? == "text_delta" then .event.delta.text elif .type == "result" then .result else empty end'
+  echo
 else
   claude --worktree "issue-${ISSUE_NUMBER}" --dangerously-skip-permissions "/solve-issue ${ISSUE_NUMBER}"
 fi
