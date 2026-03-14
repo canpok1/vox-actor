@@ -37,7 +37,16 @@ func TestFileMover_MoveToDone_Success(t *testing.T) {
 	}
 }
 
-// TODO: Delete: 存在しないファイルの場合エラーを返す
+func TestFileMover_Delete_NotExist_ReturnsError(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "nonexistent.txt")
+
+	mover := infra.NewFileMover()
+	err := mover.Delete(file)
+	if err == nil {
+		t.Fatal("expected error for nonexistent file, got nil")
+	}
+}
 
 func TestFileMover_Delete_Success(t *testing.T) {
 	dir := t.TempDir()
