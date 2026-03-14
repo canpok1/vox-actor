@@ -37,6 +37,27 @@ func TestFileMover_MoveToDone_Success(t *testing.T) {
 	}
 }
 
+// TODO: Delete: 存在しないファイルの場合エラーを返す
+
+func TestFileMover_Delete_Success(t *testing.T) {
+	dir := t.TempDir()
+
+	file := filepath.Join(dir, "test.txt")
+	if err := os.WriteFile(file, []byte("hello"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	mover := infra.NewFileMover()
+	if err := mover.Delete(file); err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	// ファイルが削除されていること
+	if _, err := os.Stat(file); !os.IsNotExist(err) {
+		t.Error("expected file to be deleted")
+	}
+}
+
 func TestFileMover_MoveToDone_CreatesDoneDir(t *testing.T) {
 	dir := t.TempDir()
 
