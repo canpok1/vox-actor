@@ -9,10 +9,16 @@ package infra
 // DONE: 異常系: backendがnilの場合、NewBeepPlayerがエラーを返す
 // DONE: 正常系: 有効なWAVデータでInit/PlayAndWaitが呼ばれること
 // DONE: 異常系: キャンセル済みcontextで即時エラーを返すこと
+//
+// PlayAndWait context対応 (#81)
+// DONE: 正常系: PlayAndWaitにcontextが渡され、正常完了時にnilが返ること
+// DONE: 異常系: PlayAndWait中にcontextがキャンセルされた場合、context.Canceledが返ること
+// DONE: 異常系: PlayAndWaitがエラーを返した場合、Play()がそのエラーを返すこと
 
 import (
 	"context"
 	"encoding/binary"
+	"fmt"
 	"testing"
 
 	"github.com/canpok1/vox-actor/internal/app"
@@ -23,6 +29,8 @@ import (
 type mockSpeakerBackend struct {
 	initCalled bool
 	playCalled bool
+	playErr    error
+	playCtx    context.Context
 }
 
 func (m *mockSpeakerBackend) Init(_ beep.SampleRate, _ int) error {
@@ -30,8 +38,10 @@ func (m *mockSpeakerBackend) Init(_ beep.SampleRate, _ int) error {
 	return nil
 }
 
-func (m *mockSpeakerBackend) PlayAndWait(_ beep.Streamer) {
+func (m *mockSpeakerBackend) PlayAndWait(ctx context.Context, _ beep.Streamer) error {
 	m.playCalled = true
+	m.playCtx = ctx
+	return m.playErr
 }
 
 func TestBeepPlayer_ImplementsAudioPlayer(t *testing.T) {
@@ -130,6 +140,63 @@ func TestBeepPlayer_Play_CancelledContext(t *testing.T) {
 	}
 	if err != context.Canceled {
 		t.Fatalf("expected context.Canceled, got: %v", err)
+	}
+}
+
+func TestBeepPlayer_Play_PlayAndWaitReceivesContext(t *testing.T) {
+	t.Parallel()
+
+	mock := &mockSpeakerBackend{}
+	player, err := NewBeepPlayer(mock)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	ctx := context.Background()
+	wavData := createMinimalWAV(t)
+	err = player.Play(ctx, wavData)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if mock.playCtx != ctx {
+		t.Error("expected PlayAndWait to receive the same context passed to Play")
+	}
+}
+
+func TestBeepPlayer_Play_PlayAndWaitCancelledDuringPlay(t *testing.T) {
+	t.Parallel()
+
+	mock := &mockSpeakerBackend{playErr: context.Canceled}
+	player, err := NewBeepPlayer(mock)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	wavData := createMinimalWAV(t)
+	err = player.Play(context.Background(), wavData)
+	if err == nil {
+		t.Fatal("expected error when PlayAndWait returns context.Canceled, got nil")
+	}
+	if err != context.Canceled {
+		t.Fatalf("expected context.Canceled, got: %v", err)
+	}
+}
+
+func TestBeepPlayer_Play_PlayAndWaitReturnsError(t *testing.T) {
+	t.Parallel()
+
+	playErr := fmt.Errorf("audio device not available")
+	mock := &mockSpeakerBackend{playErr: playErr}
+	player, err := NewBeepPlayer(mock)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	wavData := createMinimalWAV(t)
+	err = player.Play(context.Background(), wavData)
+	if err == nil {
+		t.Fatal("expected error when PlayAndWait fails, got nil")
 	}
 }
 
