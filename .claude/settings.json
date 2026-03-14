@@ -81,7 +81,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "./.claude/hooks/notify-host.sh '確認よろしく'"
+            "command": "./.claude/scripts/notify-host.sh '確認よろしく'"
           }
         ]
       }
@@ -91,7 +91,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "./.claude/hooks/notify-host.sh 'できた'"
+            "command": "./.claude/scripts/notify-host.sh 'できた'"
           }
         ]
       }
