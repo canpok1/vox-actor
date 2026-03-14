@@ -32,5 +32,4 @@ jobs:
     with:
       goreleaser-args: "release --clean"
       checkout-ref: ${{ needs.create-version-tag.outputs.tag }}
-    secrets:
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    secrets: inherit

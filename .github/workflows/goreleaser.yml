@@ -12,9 +12,6 @@ on:
         type: string
         default: ''
         description: "チェックアウトするref (空の場合はデフォルトref)"
-    secrets:
-      GITHUB_TOKEN:
-        required: false
 
 jobs:
   goreleaser:
