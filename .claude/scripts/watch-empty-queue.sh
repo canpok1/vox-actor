@@ -4,13 +4,26 @@ set -euo pipefail
 INTERVAL_SECONDS=60
 waiting=false
 
-# Ctrl-C（SIGINT）で正常終了するためのトラップ
 SCRIPT_DIR=$(dirname "$0")
+WORKSPACE_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
+# ロックファイルの準備
+LOCK_DIR="$WORKSPACE_DIR/.tmp/locks"
+mkdir -p "$LOCK_DIR"
+LOCK_FILE="$LOCK_DIR/watch-empty-queue.lock"
+
+# ロック取得（排他: 同時に1プロセスのみ）
+exec 9>"$LOCK_FILE"
+if ! flock -n 9; then
+    echo "watch-empty-queue.sh は既に起動中です。終了します。" >&2
+    exit 1
+fi
+
+# Ctrl-C（SIGINT）で正常終了するためのトラップ
 trap 'if [ "$waiting" = true ]; then echo ""; fi; echo "Stopping watch-empty-queue.sh..."; exit 0' INT
 
 # リモートURLからowner/repoを取得
-source "$(dirname "$0")/lib/detect-repo.sh"
+source "$SCRIPT_DIR/lib/detect-repo.sh"
 
 while true; do
   # assign-to-claudeラベル付きopen Issueの件数を確認

@@ -38,5 +38,5 @@ dist/
 # 作業メモ
 .claude/memo/
 
-# 通知用
-.notify/
+# 一時ファイル（通知・ロック等）
+.tmp/
