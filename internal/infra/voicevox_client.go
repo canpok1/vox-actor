@@ -8,10 +8,27 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/canpok1/vox-actor/internal/app"
 	"github.com/canpok1/vox-actor/internal/domain/entity"
 )
+
+// defaultTimeout はHTTPクライアントのデフォルトタイムアウト時間。
+const defaultTimeout = 30 * time.Second
+
+// VoicevoxClientOption はVoicevoxClientの生成時に指定するオプション。
+type VoicevoxClientOption func(*VoicevoxClient)
+
+// WithTimeout はHTTPクライアントのタイムアウト時間を指定するオプション。
+func WithTimeout(timeout time.Duration) VoicevoxClientOption {
+	return func(c *VoicevoxClient) {
+		if timeout <= 0 {
+			return
+		}
+		c.httpClient.Timeout = timeout
+	}
+}
 
 // VoicevoxClientがapp.VoicevoxClientインターフェースを満たすことをコンパイル時に検証する。
 var _ app.VoicevoxClient = (*VoicevoxClient)(nil)
@@ -23,11 +40,19 @@ type VoicevoxClient struct {
 }
 
 // NewVoicevoxClient は新しいVoicevoxClientを生成する。
-func NewVoicevoxClient(baseURL string) *VoicevoxClient {
-	return &VoicevoxClient{
+// オプションを指定しない場合、HTTPクライアントのタイムアウトはデフォルト値（30秒）が使用される。
+func NewVoicevoxClient(baseURL string, opts ...VoicevoxClientOption) *VoicevoxClient {
+	c := &VoicevoxClient{
 		baseURL:    baseURL,
-		httpClient: &http.Client{},
+		httpClient: &http.Client{Timeout: defaultTimeout},
 	}
+	for _, opt := range opts {
+		if opt == nil {
+			continue
+		}
+		opt(c)
+	}
+	return c
 }
 
 // HealthCheck はエンジンの疎通確認を行う。

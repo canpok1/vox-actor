@@ -4,11 +4,14 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/canpok1/vox-actor/internal/domain/entity"
 	"github.com/canpok1/vox-actor/internal/infra"
@@ -250,6 +253,63 @@ func TestSynthesize_OverrideParams(t *testing.T) {
 	// 元のqueryが変更されていないことを確認
 	if query.SpeedScale != 1.0 {
 		t.Errorf("original query should not be modified, speedScale: %f", query.SpeedScale)
+	}
+}
+
+func TestNewVoicevoxClient_DefaultTimeout(t *testing.T) {
+	// デフォルトのタイムアウトが30秒に設定されていることを直接検証する
+	client := infra.NewVoicevoxClient("http://localhost")
+	if got := client.ClientTimeout(); got != 30*time.Second {
+		t.Errorf("expected default timeout 30s, got %v", got)
+	}
+}
+
+func TestNewVoicevoxClient_WithTimeout(t *testing.T) {
+	// WithTimeout オプションでカスタムタイムアウトを指定できることを確認
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		time.Sleep(200 * time.Millisecond)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	// 50msのタイムアウトを設定 → 200ms待つサーバーに対してタイムアウトエラーになるはず
+	client := infra.NewVoicevoxClient(server.URL, infra.WithTimeout(50*time.Millisecond))
+	err := client.HealthCheck(context.Background())
+	if err == nil {
+		t.Fatal("expected timeout error, got nil")
+	}
+	// タイムアウトエラーであることを型で確認
+	var netErr net.Error
+	if (!errors.As(err, &netErr) || !netErr.Timeout()) &&
+		!errors.Is(err, context.DeadlineExceeded) {
+		t.Errorf("expected timeout-related error, got: %v", err)
+	}
+}
+
+func TestNewVoicevoxClient_WithTimeoutZeroIgnored(t *testing.T) {
+	// 0以下のタイムアウトは無視され、デフォルト値が維持されることを確認
+	client := infra.NewVoicevoxClient("http://localhost", infra.WithTimeout(0))
+	if got := client.ClientTimeout(); got != 30*time.Second {
+		t.Errorf("expected default timeout 30s when 0 is passed, got %v", got)
+	}
+
+	clientNeg := infra.NewVoicevoxClient("http://localhost", infra.WithTimeout(-1*time.Second))
+	if got := clientNeg.ClientTimeout(); got != 30*time.Second {
+		t.Errorf("expected default timeout 30s when negative is passed, got %v", got)
+	}
+}
+
+func TestNewVoicevoxClient_WithTimeoutSuccess(t *testing.T) {
+	// 十分なタイムアウトを設定した場合は正常に完了することを確認
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	client := infra.NewVoicevoxClient(server.URL, infra.WithTimeout(5*time.Second))
+	err := client.HealthCheck(context.Background())
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
 	}
 }
 
