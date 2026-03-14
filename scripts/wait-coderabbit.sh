@@ -30,14 +30,16 @@ get_repo() {
     gh repo view --json nameWithOwner --jq '.nameWithOwner' 2>/dev/null || echo ""
 }
 
+REPO=$(get_repo)
+
 # CodeRabbitのコメント数を取得
 get_coderabbit_comment_count() {
-    gh pr view --repo "$(get_repo)" "$PR_NUMBER" --json comments --jq '[.comments[] | select(.author.login=="coderabbitai")] | length'
+    gh pr view --repo "$REPO" "$PR_NUMBER" --json comments --jq '[.comments[] | select(.author.login=="coderabbitai")] | length'
 }
 
 # CodeRabbitのレビュー数を取得
 get_coderabbit_review_count() {
-    gh pr view --repo "$(get_repo)" "$PR_NUMBER" --json reviews --jq '[.reviews[] | select(.author.login=="coderabbitai")] | length'
+    gh pr view --repo "$REPO" "$PR_NUMBER" --json reviews --jq '[.reviews[] | select(.author.login=="coderabbitai")] | length'
 }
 
 # CodeRabbitのコメント/レビューが存在するかチェック
@@ -52,7 +54,7 @@ has_coderabbit_response() {
 # CodeRabbitのレビュー状態がCHANGES_REQUESTEDかチェック
 check_changes_requested() {
     local reviews
-    reviews=$(gh pr view --repo "$(get_repo)" "$PR_NUMBER" --json reviews --jq '[.reviews[] | select(.author.login=="coderabbitai")] | last | .state')
+    reviews=$(gh pr view --repo "$REPO" "$PR_NUMBER" --json reviews --jq '[.reviews[] | select(.author.login=="coderabbitai")] | last | .state')
     if [[ "$reviews" == "CHANGES_REQUESTED" ]]; then
         return 0  # CHANGES_REQUESTEDあり
     fi
@@ -62,12 +64,12 @@ check_changes_requested() {
 # CodeRabbitのコメントからrate limit情報をチェック
 check_rate_limit() {
     local comments
-    comments=$(gh pr view --repo "$(get_repo)" "$PR_NUMBER" --json comments --jq '.comments[] | select(.author.login=="coderabbitai") | .body')
+    comments=$(gh pr view --repo "$REPO" "$PR_NUMBER" --json comments --jq '.comments[] | select(.author.login=="coderabbitai") | .body')
     if echo "$comments" | grep -qi "rate limit"; then
         return 0  # rate limitあり
     fi
     local reviews
-    reviews=$(gh pr view --repo "$(get_repo)" "$PR_NUMBER" --json reviews --jq '.reviews[] | select(.author.login=="coderabbitai") | .body')
+    reviews=$(gh pr view --repo "$REPO" "$PR_NUMBER" --json reviews --jq '.reviews[] | select(.author.login=="coderabbitai") | .body')
     if echo "$reviews" | grep -qi "rate limit"; then
         return 0  # rate limitあり
     fi
@@ -83,7 +85,7 @@ for i in $(seq 1 "$MAX_POLLS"); do
         # CHANGES_REQUESTEDチェック
         if check_changes_requested; then
             echo "CodeRabbitのレビュー状態がCHANGES_REQUESTEDです。resolveを投稿します..."
-            gh pr comment --repo "$(get_repo)" "$PR_NUMBER" --body "@coderabbitai resolve"
+            gh pr comment --repo "$REPO" "$PR_NUMBER" --body "@coderabbitai resolve"
             echo "CHANGES_REQUESTEDの解消を要求しました。"
         fi
 
@@ -94,7 +96,7 @@ for i in $(seq 1 "$MAX_POLLS"); do
 
             # full reviewを投稿
             echo "@coderabbitai full review を投稿します..."
-            gh pr comment --repo "$(get_repo)" "$PR_NUMBER" --body "@coderabbitai full review"
+            gh pr comment --repo "$REPO" "$PR_NUMBER" --body "@coderabbitai full review"
             echo "再レビューを要求しました。"
         fi
 
