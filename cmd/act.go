@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 
 	"github.com/canpok1/vox-actor/internal/app"
@@ -36,8 +37,18 @@ func makeActCmd(deps *ActDeps) *cobra.Command {
 		},
 	}
 
-	cmd.Flags().String("engine-url", "http://localhost:50021", "VOICEVOXエンジンのURL")
-	cmd.Flags().Int("speaker", 3, "キャラクターID")
+	engineURLDefault := "http://localhost:50021"
+	if v := os.Getenv("VOX_ENGINE_URL"); v != "" {
+		engineURLDefault = v
+	}
+	cmd.Flags().String("engine-url", engineURLDefault, "VOICEVOXエンジンのURL")
+	speakerDefault := 3
+	if v := os.Getenv("VOX_SPEAKER"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			speakerDefault = n
+		}
+	}
+	cmd.Flags().Int("speaker", speakerDefault, "キャラクターID")
 	cmd.Flags().Float64("speed", 1.0, "話速")
 	cmd.Flags().Float64("pitch", 0.0, "音高")
 	cmd.Flags().Float64("intonation", 1.0, "抑揚")
