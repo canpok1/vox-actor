@@ -15,6 +15,14 @@ import (
 // グレースフルシャットダウン テストリスト
 // DONE: actコマンドのcontextにシグナルハンドリングが設定されていることを確認
 
+// 環境変数対応 テストリスト #59
+// DONE: VOX_ENGINE_URL環境変数が設定されている場合、--engine-urlのデフォルト値として反映される
+// TODO: VOX_SPEAKER環境変数が設定されている場合、--speakerのデフォルト値として反映される
+// TODO: CLIフラグ --engine-url 指定時はVOX_ENGINE_URLより優先される
+// TODO: CLIフラグ --speaker 指定時はVOX_SPEAKERより優先される
+// TODO: 環境変数未設定時はデフォルト値が使われる（既存テストでカバー済み）
+// TODO: VOX_SPEAKER に不正な値（数値でない）が設定されている場合エラーを返す
+
 func TestActCmd_RegisteredAsSubcommand(t *testing.T) {
 	rootCmd := makeRootCmd()
 
@@ -149,5 +157,27 @@ func TestActCmd_WatchFlag_DefaultFalse(t *testing.T) {
 	}
 	if watch {
 		t.Error("expected --watch default to be false")
+	}
+}
+
+func TestActCmd_EnvVarVOXEngineURL(t *testing.T) {
+	t.Setenv("VOX_ENGINE_URL", "http://custom:9999")
+
+	rootCmd := makeRootCmd()
+
+	var actCmd *cobra.Command
+	for _, c := range rootCmd.Commands() {
+		if c.Name() == "act" {
+			actCmd = c
+			break
+		}
+	}
+	if actCmd == nil {
+		t.Fatal("act subcommand not found")
+	}
+
+	engineURL, _ := actCmd.Flags().GetString("engine-url")
+	if engineURL != "http://custom:9999" {
+		t.Errorf("expected engine-url to be 'http://custom:9999', got: %s", engineURL)
 	}
 }

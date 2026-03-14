@@ -35,7 +35,11 @@ func makeActCmd(deps *ActDeps) *cobra.Command {
 		},
 	}
 
-	cmd.Flags().String("engine-url", "http://localhost:50021", "VOICEVOXエンジンのURL")
+	engineURLDefault := "http://localhost:50021"
+	if v := os.Getenv("VOX_ENGINE_URL"); v != "" {
+		engineURLDefault = v
+	}
+	cmd.Flags().String("engine-url", engineURLDefault, "VOICEVOXエンジンのURL")
 	cmd.Flags().Int("speaker", 3, "キャラクターID")
 	cmd.Flags().Float64("speed", 1.0, "話速")
 	cmd.Flags().Float64("pitch", 0.0, "音高")
