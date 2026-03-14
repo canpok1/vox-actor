@@ -12,7 +12,13 @@ var version = "dev"
 // 呼び出し元はこのエラーを検出して終了コード2で終了すべき。
 var ErrUsage = errors.New("usage error")
 
-func makeRootCmd(actDeps ...*ActDeps) *cobra.Command {
+// Deps はルートコマンドの依存を保持する。
+type Deps struct {
+	Act *ActDeps
+	Say *SayDeps
+}
+
+func makeRootCmd(deps ...*Deps) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "vox-actor",
 		Short:   "AIエージェント構築フレームワークのCLIツール",
@@ -23,16 +29,24 @@ func makeRootCmd(actDeps ...*ActDeps) *cobra.Command {
 		return cmd.Help()
 	}
 
-	var deps *ActDeps
-	if len(actDeps) > 0 {
-		deps = actDeps[0]
+	var d *Deps
+	if len(deps) > 0 {
+		d = deps[0]
 	}
-	cmd.AddCommand(makeActCmd(deps))
+
+	var actDeps *ActDeps
+	var sayDeps *SayDeps
+	if d != nil {
+		actDeps = d.Act
+		sayDeps = d.Say
+	}
+	cmd.AddCommand(makeActCmd(actDeps))
+	cmd.AddCommand(makeSayCmd(sayDeps))
 
 	return cmd
 }
 
 // Execute はルートコマンドを実行する。
-func Execute(actDeps *ActDeps) error {
-	return makeRootCmd(actDeps).Execute()
+func Execute(deps *Deps) error {
+	return makeRootCmd(deps).Execute()
 }

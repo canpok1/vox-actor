@@ -17,15 +17,23 @@ func main() {
 		os.Exit(1)
 	}
 
-	deps := &cmd.ActDeps{
-		Reader: infra.NewFileReader(),
-		ClientFactory: func(engineURL string) app.VoicevoxClient {
-			return infra.NewRetryableVoicevoxClient(infra.NewVoicevoxClient(engineURL))
+	clientFactory := func(engineURL string) app.VoicevoxClient {
+		return infra.NewRetryableVoicevoxClient(infra.NewVoicevoxClient(engineURL))
+	}
+
+	deps := &cmd.Deps{
+		Act: &cmd.ActDeps{
+			Reader:        infra.NewFileReader(),
+			ClientFactory: clientFactory,
+			Player:        player,
+			Mover:         infra.NewFileMover(),
+			DirWatcherFactory: func() app.DirWatcher {
+				return infra.NewPollingDirWatcher(infra.PollInterval)
+			},
 		},
-		Player: player,
-		Mover:  infra.NewFileMover(),
-		DirWatcherFactory: func() app.DirWatcher {
-			return infra.NewPollingDirWatcher(infra.PollInterval)
+		Say: &cmd.SayDeps{
+			ClientFactory: clientFactory,
+			Player:        player,
 		},
 	}
 
