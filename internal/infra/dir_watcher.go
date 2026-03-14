@@ -49,6 +49,17 @@ func (w *PollingDirWatcher) Watch(ctx context.Context, dir string) (<-chan strin
 				continue
 			}
 
+			// seenマップからディレクトリに存在しなくなったファイルを削除
+			currentFiles := make(map[string]bool, len(files))
+			for _, f := range files {
+				currentFiles[f] = true
+			}
+			for f := range seen {
+				if !currentFiles[f] {
+					delete(seen, f)
+				}
+			}
+
 			for _, f := range files {
 				if seen[f] {
 					continue
