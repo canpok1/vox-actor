@@ -82,7 +82,7 @@ func (u *WatchUsecase) processFile(ctx context.Context, path string, params ActP
 		if moveErr := u.mover.MoveToDone(path); moveErr != nil {
 			u.logger.Error("move error", "path", path, "error", moveErr)
 		} else {
-			u.logger.Debug("file moved to done", "path", path)
+			u.logger.Info("file moved to done", "path", path)
 		}
 	}()
 
