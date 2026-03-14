@@ -2,6 +2,9 @@ package cmd
 
 import (
 	"fmt"
+	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/canpok1/vox-actor/internal/app"
 	"github.com/spf13/cobra"
@@ -9,9 +12,11 @@ import (
 
 // ActDeps はactコマンドの依存を保持する。
 type ActDeps struct {
-	Reader        app.ScriptReader
-	ClientFactory func(engineURL string) app.VoicevoxClient
-	Player        app.AudioPlayer
+	Reader            app.ScriptReader
+	ClientFactory     func(engineURL string) app.VoicevoxClient
+	Player            app.AudioPlayer
+	Mover             app.FileMover
+	DirWatcherFactory func() app.DirWatcher
 }
 
 func makeActCmd(deps *ActDeps) *cobra.Command {
@@ -35,14 +40,31 @@ func makeActCmd(deps *ActDeps) *cobra.Command {
 	cmd.Flags().Float64("speed", 1.0, "話速")
 	cmd.Flags().Float64("pitch", 0.0, "音高")
 	cmd.Flags().Float64("intonation", 1.0, "抑揚")
+	cmd.Flags().Bool("watch", false, "ディレクトリ監視モードを有効化")
 
 	return cmd
 }
 
 func runAct(cmd *cobra.Command, args []string, deps *ActDeps) error {
+	watch, _ := cmd.Flags().GetBool("watch")
+	if watch {
+		path := args[0]
+		info, err := os.Stat(path)
+		if err != nil {
+			return fmt.Errorf("%w: %v", ErrUsage, err)
+		}
+		if !info.IsDir() {
+			return fmt.Errorf("%w: --watch requires a directory path, not a file", ErrUsage)
+		}
+	}
+
 	if deps == nil || deps.ClientFactory == nil || deps.Reader == nil || deps.Player == nil {
 		return fmt.Errorf("act command dependencies are not initialized")
 	}
+
+	// シグナルハンドリング: SIGINT/SIGTERM受信時にcontextをキャンセルする
+	ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 
 	engineURL, _ := cmd.Flags().GetString("engine-url")
 	speakerID, _ := cmd.Flags().GetInt("speaker")
@@ -54,7 +76,7 @@ func runAct(cmd *cobra.Command, args []string, deps *ActDeps) error {
 	if client == nil {
 		return fmt.Errorf("failed to create VoicevoxClient for %s", engineURL)
 	}
-	uc := app.NewActUsecase(deps.Reader, client, deps.Player)
+
 	params := app.ActParams{
 		Path:       args[0],
 		SpeakerID:  speakerID,
@@ -63,5 +85,15 @@ func runAct(cmd *cobra.Command, args []string, deps *ActDeps) error {
 		Intonation: &intonation,
 	}
 
-	return uc.Run(cmd.Context(), params)
+	if watch {
+		if deps.Mover == nil || deps.DirWatcherFactory == nil {
+			return fmt.Errorf("watch mode dependencies are not initialized")
+		}
+		watcher := deps.DirWatcherFactory()
+		uc := app.NewWatchUsecase(deps.Reader, client, deps.Player, deps.Mover, watcher)
+		return uc.Run(ctx, params)
+	}
+
+	uc := app.NewActUsecase(deps.Reader, client, deps.Player)
+	return uc.Run(ctx, params)
 }

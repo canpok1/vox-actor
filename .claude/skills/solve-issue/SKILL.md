@@ -30,6 +30,18 @@ GitHub Issue $ARGUMENTS を対応します。
 6. `commit-push-pr` スキルでPRを作成する
 7. CIの終了を待機する
   - コマンド: `gh pr checks --repo {owner}/{repo} {PR番号} --watch`
+  - CI完了後、CodeRabbit check runが存在するか確認する
+    1. 以下のコマンドでCodeRabbitのcheck runの有無を確認する
+       - `gh pr checks --repo {owner}/{repo} {PR番号} --json name,state --jq '[.[] | select(.name | test("coderabbitai"; "i"))] | length'`
+    2. check runが1件以上存在すれば、次のステップに進む
+    3. check runが0件の場合、以下の対処フローを実行する:
+       a. `@coderabbitai review` コメントをPRに投稿してレビューを再トリガーする
+          - コマンド: `gh pr comment --repo {owner}/{repo} {PR番号} --body "@coderabbitai review"`
+          - **空コミットによるトリガーは行わないこと**（不要なコミット履歴が残るため）
+       b. 60秒待機する
+       c. 再度 `gh pr checks --repo {owner}/{repo} {PR番号} --watch` でCIの終了を待機する
+       d. 再度check runの有無を確認する（上記1のコマンドを再実行）
+       e. それでもcheck runが0件の場合は、ユーザーにCodeRabbit check runが作成されない旨を通知し、手動対応を依頼して処理を中断する
 8. レビューコメントの到着をポーリングで検知する
   - CI完了後、AIレビュワー（CodeRabbit等）のレビューが到着するまでポーリングする
   - ポーリング方法:
