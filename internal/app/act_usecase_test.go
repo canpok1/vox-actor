@@ -14,7 +14,7 @@ import (
 
 // act_usecase テストリスト
 // DONE: 進捗表示: 複数スクリプト処理時にInfoログに「[1/3]」のような進捗が含まれる
-// TODO: synthesis completedがInfoレベルで出力される
+// DONE: synthesis completedがInfoレベルで出力される
 
 // グレースフルシャットダウン テストリスト
 // DONE: contextがキャンセルされた場合、次のスクリプトの合成・再生をスキップしてnilを返す
@@ -552,6 +552,36 @@ func TestActUsecase_Run_NilLogger_NoPanic(t *testing.T) {
 	err := uc.Run(context.Background(), params)
 	if err != nil {
 		t.Fatalf("expected no error, got: %v", err)
+	}
+}
+
+func TestActUsecase_Run_SynthesisCompletedLoggedAtInfoLevel(t *testing.T) {
+	reader := &mockScriptReader{
+		scripts: []entity.Script{
+			{Path: "test.txt", Text: "こんにちは", IsEmpty: false},
+		},
+	}
+	client := &mockVoicevoxClient{
+		query:   &entity.AudioQuery{},
+		wavData: []byte("fake-wav"),
+	}
+	player := &mockAudioPlayer{}
+
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelInfo}))
+
+	uc := app.NewActUsecase(reader, client, player, app.WithLogger(logger))
+	params := app.ActParams{Path: "test.txt", SpeakerID: 3}
+
+	err := uc.Run(context.Background(), params)
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	output := buf.String()
+	// synthesis completedがInfoレベルで出力されること
+	if !strings.Contains(output, "synthesis completed") {
+		t.Errorf("expected log to contain 'synthesis completed' at Info level, got: %s", output)
 	}
 }
 

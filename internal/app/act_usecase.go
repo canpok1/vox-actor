@@ -114,7 +114,7 @@ func (u *ActUsecase) Run(ctx context.Context, params ActParams) error {
 			}
 			return fmt.Errorf("synthesize %s: %w", script.Path, err)
 		}
-		u.logger.Debug("synthesis completed", "path", script.Path, "wavSize", len(wavData))
+		u.logger.Info("synthesis completed", "path", script.Path, "wavSize", len(wavData))
 
 		if err := u.player.Play(ctx, wavData); err != nil {
 			if ctx.Err() != nil {
