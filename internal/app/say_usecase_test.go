@@ -17,6 +17,7 @@ import (
 // DONE: 異常系: Synthesizeエラー時にエラーを返す
 // DONE: 異常系: Playエラー時にエラーを返す
 // DONE: 正常系: contextキャンセル時にnilを返す（グレースフルシャットダウン）
+// DONE: 正常系: WithSayLogger(nil)でpanicしない
 
 func TestSayUsecase_Run_Success(t *testing.T) {
 	client := &mockVoicevoxClient{
@@ -151,6 +152,23 @@ func TestSayUsecase_Run_PlayError(t *testing.T) {
 	err := uc.Run(context.Background(), params)
 	if err == nil {
 		t.Fatal("expected error, got nil")
+	}
+}
+
+func TestWithSayLogger_Nil_NoPanic(t *testing.T) {
+	client := &mockVoicevoxClient{
+		query:   &entity.AudioQuery{},
+		wavData: []byte("fake-wav"),
+	}
+	player := &mockAudioPlayer{}
+
+	// WithSayLogger(nil) でpanicしないことを確認
+	uc := app.NewSayUsecase(client, player, app.WithSayLogger(nil))
+	params := app.SayParams{Text: "こんにちは", SpeakerID: 3}
+
+	err := uc.Run(context.Background(), params)
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
 	}
 }
 

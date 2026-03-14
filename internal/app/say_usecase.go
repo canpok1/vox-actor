@@ -20,7 +20,9 @@ type SayOption func(*SayUsecase)
 // WithSayLogger はロガーを設定するオプション。
 func WithSayLogger(logger *slog.Logger) SayOption {
 	return func(u *SayUsecase) {
-		u.logger = logger
+		if logger != nil {
+			u.logger = logger
+		}
 	}
 }
 
