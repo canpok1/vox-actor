@@ -4,11 +4,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 	"time"
 
@@ -256,19 +257,10 @@ func TestSynthesize_OverrideParams(t *testing.T) {
 }
 
 func TestNewVoicevoxClient_DefaultTimeout(t *testing.T) {
-	// デフォルトのタイムアウトが30秒に設定されていることを確認するため、
-	// 応答が遅いサーバーに対してタイムアウトが発生することをテストする
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		time.Sleep(100 * time.Millisecond)
-		w.WriteHeader(http.StatusOK)
-	}))
-	defer server.Close()
-
-	// WithTimeout で短いタイムアウトを指定しない場合はデフォルト（30秒）が使用される
-	client := infra.NewVoicevoxClient(server.URL)
-	err := client.HealthCheck(context.Background())
-	if err != nil {
-		t.Fatalf("expected no error with default timeout, got %v", err)
+	// デフォルトのタイムアウトが30秒に設定されていることを直接検証する
+	client := infra.NewVoicevoxClient("http://localhost")
+	if got := client.ClientTimeout(); got != 30*time.Second {
+		t.Errorf("expected default timeout 30s, got %v", got)
 	}
 }
 
@@ -286,9 +278,24 @@ func TestNewVoicevoxClient_WithTimeout(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected timeout error, got nil")
 	}
-	// エラーメッセージにタイムアウト関連の文言が含まれることを確認
-	if !strings.Contains(err.Error(), "Client.Timeout") && !strings.Contains(err.Error(), "context deadline exceeded") {
+	// タイムアウトエラーであることを型で確認
+	var netErr net.Error
+	if (!errors.As(err, &netErr) || !netErr.Timeout()) &&
+		!errors.Is(err, context.DeadlineExceeded) {
 		t.Errorf("expected timeout-related error, got: %v", err)
+	}
+}
+
+func TestNewVoicevoxClient_WithTimeoutZeroIgnored(t *testing.T) {
+	// 0以下のタイムアウトは無視され、デフォルト値が維持されることを確認
+	client := infra.NewVoicevoxClient("http://localhost", infra.WithTimeout(0))
+	if got := client.ClientTimeout(); got != 30*time.Second {
+		t.Errorf("expected default timeout 30s when 0 is passed, got %v", got)
+	}
+
+	clientNeg := infra.NewVoicevoxClient("http://localhost", infra.WithTimeout(-1*time.Second))
+	if got := clientNeg.ClientTimeout(); got != 30*time.Second {
+		t.Errorf("expected default timeout 30s when negative is passed, got %v", got)
 	}
 }
 

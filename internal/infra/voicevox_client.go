@@ -23,6 +23,9 @@ type VoicevoxClientOption func(*VoicevoxClient)
 // WithTimeout はHTTPクライアントのタイムアウト時間を指定するオプション。
 func WithTimeout(timeout time.Duration) VoicevoxClientOption {
 	return func(c *VoicevoxClient) {
+		if timeout <= 0 {
+			return
+		}
 		c.httpClient.Timeout = timeout
 	}
 }
