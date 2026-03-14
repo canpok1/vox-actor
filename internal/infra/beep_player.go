@@ -19,7 +19,8 @@ type speakerBackend interface {
 	// Init はスピーカーを初期化する。
 	Init(sampleRate beep.SampleRate, bufferSize int) error
 	// PlayAndWait はStreamerを再生し、完了まで待機する。
-	PlayAndWait(s beep.Streamer)
+	// contextがキャンセルされた場合は再生を中断しエラーを返す。
+	PlayAndWait(ctx context.Context, s beep.Streamer) error
 }
 
 // BeepPlayer はgopxl/beepライブラリを使用してWAVバイト列を再生する。
@@ -77,7 +78,5 @@ func (p *BeepPlayer) Play(ctx context.Context, wavData []byte) error {
 	default:
 	}
 
-	p.backend.PlayAndWait(streamer)
-
-	return nil
+	return p.backend.PlayAndWait(ctx, streamer)
 }
