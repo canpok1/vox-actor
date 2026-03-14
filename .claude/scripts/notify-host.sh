@@ -4,9 +4,6 @@ if [ -z "$WORKSPACE_DIR" ]; then
   exit 1
 fi
 
-if ! command -v jq &> /dev/null; then
-  echo "[ERROR] jq が見つかりません。jq をインストールしてください。"
-  exit 1
-fi
-
-echo "$1" > "${WORKSPACE_DIR}/.notify/notify_$(($(date +%s%N)/1000000)).txt"
+NOTIFY_DIR="${WORKSPACE_DIR}/.tmp/notify"
+mkdir -p "$NOTIFY_DIR"
+echo "$1" > "${NOTIFY_DIR}/notify_$(($(date +%s%N)/1000000)).txt"
