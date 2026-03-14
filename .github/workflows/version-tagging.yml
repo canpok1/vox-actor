@@ -25,25 +25,12 @@ jobs:
 
   # タグ作成後にリリースを実行
   # GITHUB_TOKENでプッシュされたタグは他のワークフローをトリガーしないため
-  # version-tagging内で直接リリース処理を行う
+  # goreleaser.ymlを直接呼び出してリリース処理を行う
   release:
     needs: create-version-tag
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-          ref: ${{ needs.create-version-tag.outputs.tag }}
-
-      - uses: actions/setup-go@v6
-        with:
-          go-version-file: 'go.mod'
-
-      - name: Run GoReleaser
-        uses: goreleaser/goreleaser-action@v7
-        with:
-          distribution: goreleaser
-          version: "~> v2"
-          args: release --clean
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    uses: ./.github/workflows/goreleaser.yml
+    with:
+      goreleaser-args: "release --clean"
+      checkout-ref: ${{ needs.create-version-tag.outputs.tag }}
+    secrets:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

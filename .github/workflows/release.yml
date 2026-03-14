@@ -9,25 +9,9 @@ permissions:
   contents: write
 
 jobs:
-  goreleaser:
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v6
-      with:
-        fetch-depth: 0
-
-    - name: Install ALSA development library
-      run: sudo apt-get update && sudo apt-get install -y libasound2-dev
-
-    - uses: actions/setup-go@v6
-      with:
-        go-version-file: 'go.mod'
-
-    - name: Run GoReleaser
-      uses: goreleaser/goreleaser-action@v7
-      with:
-        distribution: goreleaser
-        version: "~> v2"
-        args: release --clean
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  release:
+    uses: ./.github/workflows/goreleaser.yml
+    with:
+      goreleaser-args: "release --clean"
+    secrets:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

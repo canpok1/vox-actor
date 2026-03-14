@@ -1,0 +1,42 @@
+name: goreleaser
+
+on:
+  workflow_call:
+    inputs:
+      goreleaser-args:
+        required: true
+        type: string
+        description: "GoReleaserに渡す引数 (例: 'release --clean', 'build --snapshot --clean')"
+      checkout-ref:
+        required: false
+        type: string
+        default: ''
+        description: "チェックアウトするref (空の場合はデフォルトref)"
+    secrets:
+      GITHUB_TOKEN:
+        required: false
+
+jobs:
+  goreleaser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.checkout-ref || github.ref }}
+
+      - name: Install ALSA development library
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: 'go.mod'
+
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v7
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: ${{ inputs.goreleaser-args }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
