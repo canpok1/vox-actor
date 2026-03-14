@@ -3,7 +3,7 @@ FROM mcr.microsoft.com/devcontainers/base:noble
 ENV CLAUDE_CONFIG_DIR=/home/vscode/.claude
 
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends tmux && \
+    apt-get install -y --no-install-recommends tmux libasound2-dev pkg-config && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
