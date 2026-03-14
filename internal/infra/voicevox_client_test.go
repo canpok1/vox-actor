@@ -8,7 +8,9 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/canpok1/vox-actor/internal/domain/entity"
 	"github.com/canpok1/vox-actor/internal/infra"
@@ -250,6 +252,57 @@ func TestSynthesize_OverrideParams(t *testing.T) {
 	// 元のqueryが変更されていないことを確認
 	if query.SpeedScale != 1.0 {
 		t.Errorf("original query should not be modified, speedScale: %f", query.SpeedScale)
+	}
+}
+
+func TestNewVoicevoxClient_DefaultTimeout(t *testing.T) {
+	// デフォルトのタイムアウトが30秒に設定されていることを確認するため、
+	// 応答が遅いサーバーに対してタイムアウトが発生することをテストする
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		time.Sleep(100 * time.Millisecond)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	// WithTimeout で短いタイムアウトを指定しない場合はデフォルト（30秒）が使用される
+	client := infra.NewVoicevoxClient(server.URL)
+	err := client.HealthCheck(context.Background())
+	if err != nil {
+		t.Fatalf("expected no error with default timeout, got %v", err)
+	}
+}
+
+func TestNewVoicevoxClient_WithTimeout(t *testing.T) {
+	// WithTimeout オプションでカスタムタイムアウトを指定できることを確認
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		time.Sleep(200 * time.Millisecond)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	// 50msのタイムアウトを設定 → 200ms待つサーバーに対してタイムアウトエラーになるはず
+	client := infra.NewVoicevoxClient(server.URL, infra.WithTimeout(50*time.Millisecond))
+	err := client.HealthCheck(context.Background())
+	if err == nil {
+		t.Fatal("expected timeout error, got nil")
+	}
+	// エラーメッセージにタイムアウト関連の文言が含まれることを確認
+	if !strings.Contains(err.Error(), "Client.Timeout") && !strings.Contains(err.Error(), "context deadline exceeded") {
+		t.Errorf("expected timeout-related error, got: %v", err)
+	}
+}
+
+func TestNewVoicevoxClient_WithTimeoutSuccess(t *testing.T) {
+	// 十分なタイムアウトを設定した場合は正常に完了することを確認
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	client := infra.NewVoicevoxClient(server.URL, infra.WithTimeout(5*time.Second))
+	err := client.HealthCheck(context.Background())
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
 	}
 }
 
