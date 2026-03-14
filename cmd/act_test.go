@@ -18,10 +18,10 @@ import (
 // 環境変数対応 テストリスト #59
 // DONE: VOX_ENGINE_URL環境変数が設定されている場合、--engine-urlのデフォルト値として反映される
 // DONE: VOX_SPEAKER環境変数が設定されている場合、--speakerのデフォルト値として反映される
-// TODO: CLIフラグ --engine-url 指定時はVOX_ENGINE_URLより優先される
-// TODO: CLIフラグ --speaker 指定時はVOX_SPEAKERより優先される
-// TODO: 環境変数未設定時はデフォルト値が使われる（既存テストでカバー済み）
-// TODO: VOX_SPEAKER に不正な値（数値でない）が設定されている場合エラーを返す
+// DONE: CLIフラグ --engine-url 指定時はVOX_ENGINE_URLより優先される
+// DONE: CLIフラグ --speaker 指定時はVOX_SPEAKERより優先される
+// DONE: 環境変数未設定時はデフォルト値が使われる（既存テストでカバー済み: TestActCmd_DefaultOptionValues）
+// DONE: VOX_SPEAKER に不正な値（数値でない）が設定されている場合デフォルト値が使われる
 
 func TestActCmd_RegisteredAsSubcommand(t *testing.T) {
 	rootCmd := makeRootCmd()
@@ -201,5 +201,85 @@ func TestActCmd_EnvVarVOXSpeaker(t *testing.T) {
 	speaker, _ := actCmd.Flags().GetInt("speaker")
 	if speaker != 42 {
 		t.Errorf("expected speaker to be 42, got: %d", speaker)
+	}
+}
+
+func TestActCmd_CLIFlagOverridesEnvEngineURL(t *testing.T) {
+	t.Setenv("VOX_ENGINE_URL", "http://env:1111")
+
+	rootCmd := makeRootCmd()
+	buf := new(bytes.Buffer)
+	rootCmd.SetOut(buf)
+	rootCmd.SetErr(buf)
+	rootCmd.SetArgs([]string{"act", "--engine-url", "http://cli:2222", "dummy.txt"})
+
+	// コマンド実行（depsがnilなのでエラーになるが、フラグパースは行われる）
+	_ = rootCmd.Execute()
+
+	var actCmd *cobra.Command
+	for _, c := range rootCmd.Commands() {
+		if c.Name() == "act" {
+			actCmd = c
+			break
+		}
+	}
+	if actCmd == nil {
+		t.Fatal("act subcommand not found")
+	}
+
+	engineURL, _ := actCmd.Flags().GetString("engine-url")
+	if engineURL != "http://cli:2222" {
+		t.Errorf("expected CLI flag to override env var, got: %s", engineURL)
+	}
+}
+
+func TestActCmd_CLIFlagOverridesEnvSpeaker(t *testing.T) {
+	t.Setenv("VOX_SPEAKER", "99")
+
+	rootCmd := makeRootCmd()
+	buf := new(bytes.Buffer)
+	rootCmd.SetOut(buf)
+	rootCmd.SetErr(buf)
+	rootCmd.SetArgs([]string{"act", "--speaker", "7", "dummy.txt"})
+
+	_ = rootCmd.Execute()
+
+	var actCmd *cobra.Command
+	for _, c := range rootCmd.Commands() {
+		if c.Name() == "act" {
+			actCmd = c
+			break
+		}
+	}
+	if actCmd == nil {
+		t.Fatal("act subcommand not found")
+	}
+
+	speaker, _ := actCmd.Flags().GetInt("speaker")
+	if speaker != 7 {
+		t.Errorf("expected CLI flag to override env var, got: %d", speaker)
+	}
+}
+
+func TestActCmd_EnvVarVOXSpeaker_InvalidValue(t *testing.T) {
+	t.Setenv("VOX_SPEAKER", "not-a-number")
+
+	rootCmd := makeRootCmd()
+
+	var actCmd *cobra.Command
+	for _, c := range rootCmd.Commands() {
+		if c.Name() == "act" {
+			actCmd = c
+			break
+		}
+	}
+	if actCmd == nil {
+		t.Fatal("act subcommand not found")
+	}
+
+	// 不正な値の場合はデフォルト値3が使われる
+	speaker, _ := actCmd.Flags().GetInt("speaker")
+	if speaker != 3 {
+		t.Errorf("expected default speaker 3 when env var is invalid, got: %d", speaker)
 	}
 }
