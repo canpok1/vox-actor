@@ -39,4 +39,4 @@ dist/
 .claude/memo/
 
 # 通知用
-.notify
+.notify/
