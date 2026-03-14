@@ -49,6 +49,16 @@ has_coderabbit_response() {
     [[ "$comment_count" -gt 0 ]] || [[ "$review_count" -gt 0 ]]
 }
 
+# CodeRabbitのレビュー状態がCHANGES_REQUESTEDかチェック
+check_changes_requested() {
+    local reviews
+    reviews=$(gh pr view --repo "$(get_repo)" "$PR_NUMBER" --json reviews --jq '[.reviews[] | select(.author.login=="coderabbitai")] | last | .state')
+    if [[ "$reviews" == "CHANGES_REQUESTED" ]]; then
+        return 0  # CHANGES_REQUESTEDあり
+    fi
+    return 1  # CHANGES_REQUESTEDなし
+}
+
 # CodeRabbitのコメントからrate limit情報をチェック
 check_rate_limit() {
     local comments
@@ -69,6 +79,13 @@ echo "CodeRabbitのレビュー到着を待機中..."
 for i in $(seq 1 "$MAX_POLLS"); do
     if has_coderabbit_response; then
         echo "CodeRabbitのレビューを検出しました。"
+
+        # CHANGES_REQUESTEDチェック
+        if check_changes_requested; then
+            echo "CodeRabbitのレビュー状態がCHANGES_REQUESTEDです。resolveを投稿します..."
+            gh pr comment --repo "$(get_repo)" "$PR_NUMBER" --body "@coderabbitai resolve"
+            echo "CHANGES_REQUESTEDの解消を要求しました。"
+        fi
 
         # rate limitチェック
         if check_rate_limit; then
