@@ -38,7 +38,7 @@ if "${USE_PRINT_MODE}"; then
   claude --worktree "issue-${ISSUE_NUMBER}" --dangerously-skip-permissions \
     -p "/solve-issue ${ISSUE_NUMBER}" \
     --output-format stream-json --verbose --include-partial-messages | \
-    jq -rj 'select(.type == "stream_event" and .event.delta.type? == "text_delta") | .event.delta.text'
+    jq -rj 'if .type == "stream_event" and .event.delta.type? == "text_delta" then .event.delta.text elif .type == "result" then .result else empty end'
 else
   claude --worktree "issue-${ISSUE_NUMBER}" --dangerously-skip-permissions "/solve-issue ${ISSUE_NUMBER}"
 fi

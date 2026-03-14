@@ -27,7 +27,7 @@ if "${USE_PRINT_MODE}"; then
   claude --dangerously-skip-permissions \
     -p "/assign-issues" \
     --output-format stream-json --verbose --include-partial-messages | \
-    jq -rj 'select(.type == "stream_event" and .event.delta.type? == "text_delta") | .event.delta.text'
+    jq -rj 'if .type == "stream_event" and .event.delta.type? == "text_delta" then .event.delta.text elif .type == "result" then .result else empty end'
 else
   claude --dangerously-skip-permissions "/assign-issues"
 fi
