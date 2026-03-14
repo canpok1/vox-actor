@@ -34,7 +34,7 @@ ROLL=$((RANDOM % 100 + 1))
 判定が通知する場合のみ、以下を実行する:
 
 ```bash
-.claude/scripts/notify-host.sh "（キャラクターの一言コメント）"
+.claude/skills/monologue/scripts/monologue.sh "（キャラクターの一言コメント）"
 ```
 
 ## キャラクター設定
