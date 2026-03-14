@@ -45,13 +45,16 @@ vox-actor act --speed 1.2 --pitch 0.1 --intonation 1.5 script.txt
 
 ### `act` サブコマンド
 
-| オプション | デフォルト値 | 説明 |
-|---|---|---|
-| `--engine-url` | `http://localhost:50021` | VOICEVOXエンジンのURL |
-| `--speaker` | `3` | キャラクターID |
-| `--speed` | `1.0` | 話速 |
-| `--pitch` | `0.0` | 音高 |
-| `--intonation` | `1.0` | 抑揚 |
+| オプション | 環境変数 | デフォルト値 | 説明 |
+|---|---|---|---|
+| `--engine-url` | `VOX_ENGINE_URL` | `http://localhost:50021` | VOICEVOXエンジンのURL |
+| `--speaker` | `VOX_SPEAKER` | `3` | キャラクターID |
+| `--speed` | — | `1.0` | 話速 |
+| `--pitch` | — | `0.0` | 音高 |
+| `--intonation` | — | `1.0` | 抑揚 |
+| `--watch` | — | `false` | ディレクトリ監視モードを有効化 |
+
+オプションの優先順位: **CLIフラグ > 環境変数 > デフォルト値**
 
 ## 開発
 
