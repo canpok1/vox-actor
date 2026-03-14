@@ -2,7 +2,6 @@ package app
 
 import (
 	"context"
-	"io"
 	"log/slog"
 )
 
@@ -37,7 +36,7 @@ func NewSayUsecase(client VoicevoxClient, player AudioPlayer, opts ...SayOption)
 	u := &SayUsecase{
 		client: client,
 		player: player,
-		logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+		logger: discardLogger(),
 	}
 	for _, opt := range opts {
 		opt(u)
