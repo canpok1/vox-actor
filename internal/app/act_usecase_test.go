@@ -14,7 +14,7 @@ import (
 
 // グレースフルシャットダウン テストリスト
 // DONE: contextがキャンセルされた場合、次のスクリプトの合成・再生をスキップしてnilを返す
-// TODO: 複数スクリプトの途中でcontextがキャンセルされた場合、再生中の音声完了後に残りをスキップする
+// DONE: 複数スクリプトの途中でcontextがキャンセルされた場合、再生中の音声完了後に残りをスキップする
 // TODO: contextがキャンセルされていない場合、全スクリプトを通常通り処理する（既存テストで担保済み）
 
 // --- モック ---
@@ -374,6 +374,66 @@ func TestActUsecase_Run_CancelledContext_SkipsRemainingScripts(t *testing.T) {
 	if player.playCalls != 1 {
 		t.Errorf("expected 1 Play call, got: %d", player.playCalls)
 	}
+}
+
+func TestActUsecase_Run_CancelDuringCreateQuery_ReturnsNil(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+
+	reader := &mockScriptReader{
+		scripts: []entity.Script{
+			{Path: "a.txt", Text: "おはよう", IsEmpty: false},
+			{Path: "b.txt", Text: "こんにちは", IsEmpty: false},
+		},
+	}
+	// CreateQueryが呼ばれた時にcontextをキャンセルしてcontext.Canceledを返すモック
+	client := &cancellingVoicevoxClient{
+		cancelAfterCreateQuery: 1,
+		cancelFunc:             cancel,
+		query:                  &entity.AudioQuery{},
+		wavData:                []byte("fake-wav"),
+	}
+	player := &mockAudioPlayer{}
+
+	uc := app.NewActUsecase(reader, client, player)
+	params := app.ActParams{Path: "scripts/", SpeakerID: 3}
+
+	err := uc.Run(ctx, params)
+
+	// グレースフルシャットダウン: context.Canceledはエラーではなくnilを返す
+	if err != nil {
+		t.Fatalf("expected nil error for graceful shutdown, got: %v", err)
+	}
+
+	// 最初のスクリプトは再生完了、2番目のCreateQueryでキャンセル
+	if player.playCalls != 1 {
+		t.Errorf("expected 1 Play call, got: %d", player.playCalls)
+	}
+}
+
+// cancellingVoicevoxClient は指定回数のCreateQuery後にcontextをキャンセルするモック。
+type cancellingVoicevoxClient struct {
+	cancelAfterCreateQuery int
+	cancelFunc             context.CancelFunc
+	query                  *entity.AudioQuery
+	wavData                []byte
+	createQueryCalls       int
+}
+
+func (m *cancellingVoicevoxClient) HealthCheck(_ context.Context) error {
+	return nil
+}
+
+func (m *cancellingVoicevoxClient) CreateQuery(_ context.Context, _ string, _ int) (*entity.AudioQuery, error) {
+	m.createQueryCalls++
+	if m.createQueryCalls > m.cancelAfterCreateQuery {
+		m.cancelFunc()
+		return nil, context.Canceled
+	}
+	return m.query, nil
+}
+
+func (m *cancellingVoicevoxClient) Synthesize(_ context.Context, _ *entity.AudioQuery, _ int, _, _, _ *float64) ([]byte, error) {
+	return m.wavData, nil
 }
 
 // cancellingAudioPlayer は指定回数再生後にcontextをキャンセルするモック。

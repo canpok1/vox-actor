@@ -53,15 +53,24 @@ func (u *ActUsecase) Run(ctx context.Context, params ActParams) error {
 
 		query, err := u.client.CreateQuery(ctx, script.Text, params.SpeakerID)
 		if err != nil {
+			if ctx.Err() != nil {
+				return nil
+			}
 			return fmt.Errorf("create query for %s: %w", script.Path, err)
 		}
 
 		wavData, err := u.client.Synthesize(ctx, query, params.SpeakerID, params.Speed, params.Pitch, params.Intonation)
 		if err != nil {
+			if ctx.Err() != nil {
+				return nil
+			}
 			return fmt.Errorf("synthesize %s: %w", script.Path, err)
 		}
 
 		if err := u.player.Play(ctx, wavData); err != nil {
+			if ctx.Err() != nil {
+				return nil
+			}
 			return fmt.Errorf("play %s: %w", script.Path, err)
 		}
 	}
