@@ -109,7 +109,7 @@ func TestActCmd_HelpContainsFlags(t *testing.T) {
 	}
 
 	output := buf.String()
-	flags := []string{"--engine-url", "--speaker", "--speed", "--pitch", "--intonation", "--watch"}
+	flags := []string{"--engine-url", "--speaker", "--speed", "--pitch", "--intonation", "--watch", "--verbose"}
 	for _, flag := range flags {
 		if !strings.Contains(output, flag) {
 			t.Errorf("expected help output to contain '%s'", flag)
@@ -150,6 +150,19 @@ func TestActCmd_WatchFlag_DefaultFalse(t *testing.T) {
 	}
 	if watch {
 		t.Error("expected --watch default to be false")
+	}
+}
+
+func TestActCmd_VerboseFlag_DefaultFalse(t *testing.T) {
+	rootCmd := makeRootCmd()
+	actCmd := findActCmd(t, rootCmd)
+
+	verbose, err := actCmd.Flags().GetBool("verbose")
+	if err != nil {
+		t.Fatalf("expected --verbose flag to exist, got error: %v", err)
+	}
+	if verbose {
+		t.Error("expected --verbose default to be false")
 	}
 }
 

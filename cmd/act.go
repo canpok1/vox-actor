@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	"os/signal"
 	"strconv"
@@ -52,6 +53,7 @@ func makeActCmd(deps *ActDeps) *cobra.Command {
 	cmd.Flags().Float64("pitch", 0.0, "音高")
 	cmd.Flags().Float64("intonation", 1.0, "抑揚")
 	cmd.Flags().Bool("watch", false, "ディレクトリ監視モードを有効化")
+	cmd.Flags().Bool("verbose", false, "詳細ログを出力")
 
 	return cmd
 }
@@ -77,11 +79,19 @@ func runAct(cmd *cobra.Command, args []string, deps *ActDeps) error {
 	ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	verbose, _ := cmd.Flags().GetBool("verbose")
 	engineURL, _ := cmd.Flags().GetString("engine-url")
 	speakerID, _ := cmd.Flags().GetInt("speaker")
 	speed, _ := cmd.Flags().GetFloat64("speed")
 	pitch, _ := cmd.Flags().GetFloat64("pitch")
 	intonation, _ := cmd.Flags().GetFloat64("intonation")
+
+	// ログレベルの設定: --verbose 指定時は Debug、通常時は Info
+	logLevel := slog.LevelInfo
+	if verbose {
+		logLevel = slog.LevelDebug
+	}
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: logLevel}))
 
 	client := deps.ClientFactory(engineURL)
 	if client == nil {
@@ -101,10 +111,10 @@ func runAct(cmd *cobra.Command, args []string, deps *ActDeps) error {
 			return fmt.Errorf("watch mode dependencies are not initialized")
 		}
 		watcher := deps.DirWatcherFactory()
-		uc := app.NewWatchUsecase(deps.Reader, client, deps.Player, deps.Mover, watcher)
+		uc := app.NewWatchUsecase(deps.Reader, client, deps.Player, deps.Mover, watcher, app.WithWatchLogger(logger))
 		return uc.Run(ctx, params)
 	}
 
-	uc := app.NewActUsecase(deps.Reader, client, deps.Player)
+	uc := app.NewActUsecase(deps.Reader, client, deps.Player, app.WithLogger(logger))
 	return uc.Run(ctx, params)
 }
