@@ -12,7 +12,9 @@ import (
 	"github.com/canpok1/vox-actor/internal/domain/entity"
 )
 
-// act_usecase テストリスト（すべて実装済み）
+// act_usecase テストリスト
+// DONE: 進捗表示: 複数スクリプト処理時にInfoログに「[1/3]」のような進捗が含まれる
+// DONE: synthesis completedがInfoレベルで出力される
 
 // グレースフルシャットダウン テストリスト
 // DONE: contextがキャンセルされた場合、次のスクリプトの合成・再生をスキップしてnilを返す
@@ -550,6 +552,75 @@ func TestActUsecase_Run_NilLogger_NoPanic(t *testing.T) {
 	err := uc.Run(context.Background(), params)
 	if err != nil {
 		t.Fatalf("expected no error, got: %v", err)
+	}
+}
+
+func TestActUsecase_Run_SynthesisCompletedLoggedAtInfoLevel(t *testing.T) {
+	reader := &mockScriptReader{
+		scripts: []entity.Script{
+			{Path: "test.txt", Text: "こんにちは", IsEmpty: false},
+		},
+	}
+	client := &mockVoicevoxClient{
+		query:   &entity.AudioQuery{},
+		wavData: []byte("fake-wav"),
+	}
+	player := &mockAudioPlayer{}
+
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelInfo}))
+
+	uc := app.NewActUsecase(reader, client, player, app.WithLogger(logger))
+	params := app.ActParams{Path: "test.txt", SpeakerID: 3}
+
+	err := uc.Run(context.Background(), params)
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	output := buf.String()
+	// synthesis completedがInfoレベルで出力されること
+	if !strings.Contains(output, "synthesis completed") {
+		t.Errorf("expected log to contain 'synthesis completed' at Info level, got: %s", output)
+	}
+}
+
+func TestActUsecase_Run_LogsProgressCounter(t *testing.T) {
+	reader := &mockScriptReader{
+		scripts: []entity.Script{
+			{Path: "a.txt", Text: "おはよう", IsEmpty: false},
+			{Path: "b.txt", Text: "", IsEmpty: true},
+			{Path: "c.txt", Text: "こんにちは", IsEmpty: false},
+			{Path: "d.txt", Text: "こんばんは", IsEmpty: false},
+		},
+	}
+	client := &mockVoicevoxClient{
+		query:   &entity.AudioQuery{},
+		wavData: []byte("fake-wav"),
+	}
+	player := &mockAudioPlayer{}
+
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelInfo}))
+
+	uc := app.NewActUsecase(reader, client, player, app.WithLogger(logger))
+	params := app.ActParams{Path: "scripts/", SpeakerID: 3}
+
+	err := uc.Run(context.Background(), params)
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	output := buf.String()
+	// 非空スクリプトのみカウントされ、[1/3], [2/3], [3/3] が出力される
+	if !strings.Contains(output, "[1/3]") {
+		t.Errorf("expected log to contain '[1/3]', got: %s", output)
+	}
+	if !strings.Contains(output, "[2/3]") {
+		t.Errorf("expected log to contain '[2/3]', got: %s", output)
+	}
+	if !strings.Contains(output, "[3/3]") {
+		t.Errorf("expected log to contain '[3/3]', got: %s", output)
 	}
 }
 

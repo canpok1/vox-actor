@@ -82,7 +82,7 @@ func (u *WatchUsecase) processFile(ctx context.Context, path string, params ActP
 		if moveErr := u.mover.MoveToDone(path); moveErr != nil {
 			u.logger.Error("move error", "path", path, "error", moveErr)
 		} else {
-			u.logger.Debug("file moved to done", "path", path)
+			u.logger.Info("file moved to done", "path", path)
 		}
 	}()
 
@@ -118,7 +118,7 @@ func (u *WatchUsecase) processFile(ctx context.Context, path string, params ActP
 			u.logger.Error("synthesize error (skipping script)", "path", script.Path, "error", err)
 			continue
 		}
-		u.logger.Debug("synthesis completed", "path", script.Path, "wavSize", len(wavData))
+		u.logger.Info("synthesis completed", "path", script.Path, "wavSize", len(wavData))
 
 		if err := u.player.Play(ctx, wavData); err != nil {
 			u.logger.Error("play error (skipping script)", "path", script.Path, "error", err)
