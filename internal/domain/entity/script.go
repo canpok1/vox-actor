@@ -26,26 +26,25 @@ func (s Script) ResolveSpeakerID(defaultID int) int {
 	return defaultID
 }
 
+// resolveFloat64 はセリフ単位の値があればそれを、なければデフォルト値を返す。
+func resolveFloat64(scriptVal, defaultVal *float64) *float64 {
+	if scriptVal != nil {
+		return scriptVal
+	}
+	return defaultVal
+}
+
 // ResolveSpeed はセリフ単位のSpeedScaleがあればそれを、なければデフォルト値を返す。
 func (s Script) ResolveSpeed(defaultSpeed *float64) *float64 {
-	if s.SpeedScale != nil {
-		return s.SpeedScale
-	}
-	return defaultSpeed
+	return resolveFloat64(s.SpeedScale, defaultSpeed)
 }
 
 // ResolvePitch はセリフ単位のPitchScaleがあればそれを、なければデフォルト値を返す。
 func (s Script) ResolvePitch(defaultPitch *float64) *float64 {
-	if s.PitchScale != nil {
-		return s.PitchScale
-	}
-	return defaultPitch
+	return resolveFloat64(s.PitchScale, defaultPitch)
 }
 
 // ResolveIntonation はセリフ単位のIntonationScaleがあればそれを、なければデフォルト値を返す。
 func (s Script) ResolveIntonation(defaultIntonation *float64) *float64 {
-	if s.IntonationScale != nil {
-		return s.IntonationScale
-	}
-	return defaultIntonation
+	return resolveFloat64(s.IntonationScale, defaultIntonation)
 }

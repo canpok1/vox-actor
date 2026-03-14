@@ -65,7 +65,8 @@ func (r *FileReader) readFile(path string) ([]entity.Script, error) {
 	return r.readTextFile(path)
 }
 
-func (r *FileReader) readTextFile(path string) ([]entity.Script, error) {
+// readFileBytes はファイルを読み込み、BOM除去とUTF-8検証を行う。
+func (r *FileReader) readFileBytes(path string) ([]byte, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
@@ -74,6 +75,14 @@ func (r *FileReader) readTextFile(path string) ([]entity.Script, error) {
 	data = bytes.TrimPrefix(data, utf8BOM)
 	if !utf8.Valid(data) {
 		return nil, fmt.Errorf("file is not valid UTF-8: %s", path)
+	}
+	return data, nil
+}
+
+func (r *FileReader) readTextFile(path string) ([]entity.Script, error) {
+	data, err := r.readFileBytes(path)
+	if err != nil {
+		return nil, err
 	}
 	text := string(data)
 
@@ -87,14 +96,9 @@ func (r *FileReader) readTextFile(path string) ([]entity.Script, error) {
 }
 
 func (r *FileReader) readJSONFile(path string) ([]entity.Script, error) {
-	data, err := os.ReadFile(path)
+	data, err := r.readFileBytes(path)
 	if err != nil {
 		return nil, err
-	}
-
-	data = bytes.TrimPrefix(data, utf8BOM)
-	if !utf8.Valid(data) {
-		return nil, fmt.Errorf("file is not valid UTF-8: %s", path)
 	}
 
 	var js jsonScript

@@ -41,6 +41,28 @@ vox-actor act --engine-url http://localhost:50021 --speaker 3 script.txt
 vox-actor act --speed 1.2 --pitch 0.1 --intonation 1.5 script.txt
 ```
 
+### JSON台本モード（感情制御パラメータ付き）
+
+`.json` ファイルを使うと、セリフごとにキャラクターや感情パラメータを指定できます:
+
+```json
+{
+  "text": "こんにちは",
+  "speaker": 3,
+  "speedScale": 1.2,
+  "pitchScale": 0.1,
+  "intonationScale": 1.5
+}
+```
+
+```bash
+vox-actor act script.json
+```
+
+`text` のみ必須で、他のパラメータは省略可能です。省略した場合はCLIオプションのデフォルト値が使われます。
+
+ディレクトリを指定した場合、`.txt` と `.json` の両方が辞書順で読み上げられます。
+
 ### ディレクトリ監視モード
 
 ディレクトリを監視し、ファイルが配置されると自動的に読み上げます:
