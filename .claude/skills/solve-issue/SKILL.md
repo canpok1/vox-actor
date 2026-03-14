@@ -71,6 +71,7 @@ GitHub Issue $ARGUMENTS を対応します。
 4. lint/formatチェックを実行する（PR作成前の最終ガード）
   - `gofmt -l .` → 出力があれば `gofmt -w .` で修正
   - `golangci-lint run` → 指摘があれば修正
+  - `shellcheck scripts/*.sh` → 指摘があれば修正
   - 修正した場合はコミットする
 5. 同一Issueに対する既存PRの重複チェックを行う
   - ブランチ名検索（第一手段）: `gh pr list --repo {owner}/{repo} --head "worktree-issue-{番号}" --state all`
