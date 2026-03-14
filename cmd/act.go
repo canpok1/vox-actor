@@ -16,7 +16,7 @@ type ActDeps struct {
 
 func makeActCmd(deps *ActDeps) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "act [options] <path>",
+		Use:   "act <path>",
 		Short: "テキストファイルを読み上げる",
 		Long:  "テキストファイルを読み込み、VOICEVOXエンジンで音声合成して再生する。",
 		Args: func(cmd *cobra.Command, args []string) error {
