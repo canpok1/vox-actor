@@ -13,6 +13,19 @@ type ScriptReader interface {
 	Read(path string) ([]entity.Script, error)
 }
 
+// FileMover はファイルを処理済みディレクトリに移動するインターフェース。
+type FileMover interface {
+	// MoveToDone はファイルを親ディレクトリのdone/サブディレクトリに移動する。
+	MoveToDone(path string) error
+}
+
+// DirWatcher はディレクトリを監視して新規ファイルを検知するインターフェース。
+type DirWatcher interface {
+	// Watch はディレクトリを監視し、新規ファイルのパスをチャネルで返す。
+	// コンテキストがキャンセルされると監視を停止してチャネルをクローズする。
+	Watch(ctx context.Context, dir string) (<-chan string, <-chan error)
+}
+
 // VoicevoxClient はVOICEVOXエンジンとの通信を抽象化するインターフェース。
 type VoicevoxClient interface {
 	// HealthCheck はエンジンの疎通確認を行う。
