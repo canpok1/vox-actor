@@ -136,6 +136,55 @@ func TestPollingDirWatcher_DoesNotDuplicateFiles(t *testing.T) {
 	}
 }
 
+func TestPollingDirWatcher_RedetectsFileAfterRemovalAndReplacement(t *testing.T) {
+	dir := t.TempDir()
+
+	watcher := infra.NewPollingDirWatcher(50 * time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	// ファイルを作成
+	filePath := filepath.Join(dir, "test.txt")
+	if err := os.WriteFile(filePath, []byte("first"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	fileCh, _ := watcher.Watch(ctx, dir)
+
+	// 1回目の検出
+	select {
+	case f := <-fileCh:
+		if filepath.Base(f) != "test.txt" {
+			t.Fatalf("expected test.txt, got %s", filepath.Base(f))
+		}
+	case <-ctx.Done():
+		t.Fatal("timeout waiting for first detection")
+	}
+
+	// ファイルを削除（done/への移動をシミュレート）
+	if err := os.Remove(filePath); err != nil {
+		t.Fatal(err)
+	}
+
+	// ポーリングが削除を検知するのを待つ
+	time.Sleep(150 * time.Millisecond)
+
+	// 同名ファイルを再配置
+	if err := os.WriteFile(filePath, []byte("second"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// 2回目の検出（再配置されたファイルが検知されるべき）
+	select {
+	case f := <-fileCh:
+		if filepath.Base(f) != "test.txt" {
+			t.Fatalf("expected test.txt on re-detection, got %s", filepath.Base(f))
+		}
+	case <-ctx.Done():
+		t.Fatal("timeout waiting for re-detection of replaced file")
+	}
+}
+
 func TestPollingDirWatcher_StopsOnContextCancel(t *testing.T) {
 	dir := t.TempDir()
 
