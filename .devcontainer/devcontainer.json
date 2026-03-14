@@ -1,9 +1,9 @@
 {
 	"name": "Ubuntu",
-	"build": {
-		"dockerfile": "Dockerfile"
-	},
-	"runArgs": ["--env-file", "${localWorkspaceFolder}/.devcontainer/.env"],
+	"dockerComposeFile": "compose.yml",
+	"service": "dev",
+	"workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
+	"runServices": ["voicevox"],
 	"features": {
 		"ghcr.io/devcontainers/features/github-cli:1": {},
 		"ghcr.io/devcontainers/features/go:1": {}
