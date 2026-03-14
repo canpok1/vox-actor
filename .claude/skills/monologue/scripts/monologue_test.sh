@@ -1,5 +1,5 @@
 #!/bin/bash
-# notify-host.sh のテスト
+# monologue.sh のテスト
 #
 # テストリスト:
 # DONE: .tmp/notify/ ディレクトリに通知ファイルが作成される
@@ -8,7 +8,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-SCRIPT_UNDER_TEST="${SCRIPT_DIR}/notify-host.sh"
+SCRIPT_UNDER_TEST="${SCRIPT_DIR}/monologue.sh"
 
 # テスト用の一時ディレクトリ
 TEST_DIR=""
@@ -60,7 +60,7 @@ run_test() {
 # テストケース
 # ====================
 
-echo "=== notify-host.sh テスト ==="
+echo "=== monologue.sh テスト ==="
 
 # テスト1: .tmp/notify/ ディレクトリに通知ファイルが作成される
 test_creates_file_in_tmp_notify() {
