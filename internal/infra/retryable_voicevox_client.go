@@ -2,7 +2,9 @@ package infra
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net"
 	"time"
 
 	"github.com/canpok1/vox-actor/internal/app"
@@ -74,7 +76,24 @@ func NewRetryableVoicevoxClient(inner app.VoicevoxClient, opts ...RetryableVoice
 			opt(c)
 		}
 	}
+	c.normalizeConfig()
 	return c
+}
+
+// normalizeConfig は不正な設定値をデフォルト値に正規化する。
+func (c *RetryableVoicevoxClient) normalizeConfig() {
+	if c.config.MaxRetries < 0 {
+		c.config.MaxRetries = 0
+	}
+	if c.config.InitialInterval <= 0 {
+		c.config.InitialInterval = 1 * time.Second
+	}
+	if c.config.MaxInterval <= 0 {
+		c.config.MaxInterval = 30 * time.Second
+	}
+	if c.config.InitialInterval > c.config.MaxInterval {
+		c.config.InitialInterval = c.config.MaxInterval
+	}
 }
 
 // RetryConfig はリトライ設定を返す（テスト用）。
@@ -82,7 +101,15 @@ func (c *RetryableVoicevoxClient) RetryConfig() RetryConfig {
 	return c.config
 }
 
+// isRetryableError は接続系エラー（net.Error）の場合にtrueを返す。
+// HTTPステータスコードエラー（4xx等）はリトライ対象外とする。
+func isRetryableError(err error) bool {
+	var netErr net.Error
+	return errors.As(err, &netErr)
+}
+
 // retryWithBackoff は指数バックオフ付きリトライを実行する汎用関数。
+// 接続系エラーのみリトライ対象とし、HTTPステータスエラー等は即座に返す。
 func (c *RetryableVoicevoxClient) retryWithBackoff(ctx context.Context, operation func() error) error {
 	var lastErr error
 	interval := c.config.InitialInterval
@@ -91,6 +118,10 @@ func (c *RetryableVoicevoxClient) retryWithBackoff(ctx context.Context, operatio
 		lastErr = operation()
 		if lastErr == nil {
 			return nil
+		}
+
+		if !isRetryableError(lastErr) {
+			return lastErr
 		}
 
 		if attempt < c.config.MaxRetries {
