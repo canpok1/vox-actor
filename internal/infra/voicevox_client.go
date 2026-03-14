@@ -47,6 +47,9 @@ func NewVoicevoxClient(baseURL string, opts ...VoicevoxClientOption) *VoicevoxCl
 		httpClient: &http.Client{Timeout: defaultTimeout},
 	}
 	for _, opt := range opts {
+		if opt == nil {
+			continue
+		}
 		opt(c)
 	}
 	return c
