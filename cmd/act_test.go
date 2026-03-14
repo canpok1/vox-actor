@@ -11,6 +11,9 @@ import (
 
 // act コマンド テストリスト（すべて実装済み）
 
+// グレースフルシャットダウン テストリスト
+// TODO: actコマンドのcontextにシグナルハンドリングが設定されていることを確認
+
 func TestActCmd_RegisteredAsSubcommand(t *testing.T) {
 	rootCmd := makeRootCmd()
 

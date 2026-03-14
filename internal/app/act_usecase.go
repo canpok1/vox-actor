@@ -43,6 +43,10 @@ func (u *ActUsecase) Run(ctx context.Context, params ActParams) error {
 	}
 
 	for _, script := range scripts {
+		if ctx.Err() != nil {
+			return nil
+		}
+
 		if script.IsEmpty {
 			continue
 		}
