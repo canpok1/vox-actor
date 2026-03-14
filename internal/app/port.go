@@ -9,7 +9,8 @@ import (
 // ScriptReader は指定パスから台本を読み込むインターフェース。
 type ScriptReader interface {
 	// Read は指定パスから台本を読み込む。
-	// パスがファイルの場合はそのファイルのみ、ディレクトリの場合は.txtファイルを辞書順で返す。
+	// パスがファイルの場合はそのファイルのみ、ディレクトリの場合は対象拡張子(.txt, .json)のファイルを辞書順で返す。
+	// .jsonファイルの場合は感情制御パラメータを含むScriptを返す。
 	Read(path string) ([]entity.Script, error)
 }
 

@@ -100,14 +100,20 @@ func (u *WatchUsecase) processFile(ctx context.Context, path string, params ActP
 
 		u.logger.Info("processing script", "path", script.Path)
 
-		query, err := u.client.CreateQuery(ctx, script.Text, params.SpeakerID)
+		// セリフ単位パラメータがあればグローバルパラメータより優先する
+		speakerID := script.ResolveSpeakerID(params.SpeakerID)
+		speed := script.ResolveSpeed(params.Speed)
+		pitch := script.ResolvePitch(params.Pitch)
+		intonation := script.ResolveIntonation(params.Intonation)
+
+		query, err := u.client.CreateQuery(ctx, script.Text, speakerID)
 		if err != nil {
 			u.logger.Error("create query error (skipping script)", "path", script.Path, "error", err)
 			continue
 		}
 		u.logger.Debug("query created", "path", script.Path)
 
-		wavData, err := u.client.Synthesize(ctx, query, params.SpeakerID, params.Speed, params.Pitch, params.Intonation)
+		wavData, err := u.client.Synthesize(ctx, query, speakerID, speed, pitch, intonation)
 		if err != nil {
 			u.logger.Error("synthesize error (skipping script)", "path", script.Path, "error", err)
 			continue
