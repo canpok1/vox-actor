@@ -20,6 +20,18 @@ package infra_test
 // DONE: 異常系: .jsonファイルが不正なJSONの場合、エラーを返す
 // DONE: 異常系: .jsonファイルにtextフィールドがない場合、エラーを返す
 // DONE: 異常系: .jsonファイルに未知フィールドがある場合、エラーを返す
+//
+// JSONL朗読劇モード:
+// DONE: 正常系: .jsonlファイルを行ごとに解析し複数のScriptを返す
+// DONE: 正常系: .jsonlファイルでtextのみ指定した場合、任意パラメータはnilのScriptを返す
+// DONE: 正常系: .jsonlファイルで全パラメータ指定した場合、全て反映されたScriptを返す
+// DONE: 正常系: .jsonlファイルの空行はスキップされる
+// DONE: 正常系: ディレクトリ読み込み時に.jsonlファイルも対象になる
+// DONE: 正常系: .jsonlファイルが1行のみでも正しく解析される
+// DONE: 異常系: 不正なJSON行はスキップされる
+// DONE: 異常系: textフィールドがない行はスキップされる
+// DONE: 異常系: 全行が不正な場合は空スライスを返す
+// DONE: 異常系: trailing dataがある行はスキップされる
 
 import (
 	"os"
@@ -690,6 +702,36 @@ func TestFileReader_Read_JSONLFile_MissingTextSkipped(t *testing.T) {
 
 	if len(scripts) != 2 {
 		t.Fatalf("expected 2 scripts (missing text skipped), got %d", len(scripts))
+	}
+
+	if scripts[0].Text != "valid" {
+		t.Errorf("expected text %q, got %q", "valid", scripts[0].Text)
+	}
+	if scripts[1].Text != "also valid" {
+		t.Errorf("expected text %q, got %q", "also valid", scripts[1].Text)
+	}
+}
+
+func TestFileReader_Read_JSONLFile_TrailingDataSkipped(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	filePath := filepath.Join(dir, "script.jsonl")
+	content := `{"text": "valid"}
+{"text": "ok"} garbage
+{"text": "also valid"}`
+	if err := os.WriteFile(filePath, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	reader := infra.NewFileReader()
+	scripts, err := reader.Read(filePath)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(scripts) != 2 {
+		t.Fatalf("expected 2 scripts (trailing data line skipped), got %d", len(scripts))
 	}
 
 	if scripts[0].Text != "valid" {

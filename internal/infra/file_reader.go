@@ -26,13 +26,27 @@ var supportedExts = map[string]bool{
 	".jsonl": true,
 }
 
-// jsonScript は .json ファイルの台本データを表す。
+// jsonScript は .json / .jsonl ファイルの台本データを表す。
 type jsonScript struct {
 	Text            *string  `json:"text"`
 	Speaker         *int     `json:"speaker"`
 	SpeedScale      *float64 `json:"speedScale"`
 	PitchScale      *float64 `json:"pitchScale"`
 	IntonationScale *float64 `json:"intonationScale"`
+}
+
+// toScript は jsonScript を entity.Script に変換する。
+func (js *jsonScript) toScript(path string) entity.Script {
+	text := *js.Text
+	return entity.Script{
+		Path:            path,
+		Text:            text,
+		IsEmpty:         len(text) == 0,
+		SpeakerID:       js.Speaker,
+		SpeedScale:      js.SpeedScale,
+		PitchScale:      js.PitchScale,
+		IntonationScale: js.IntonationScale,
+	}
 }
 
 // FileReader はファイルシステムから台本を読み込む。
@@ -123,18 +137,7 @@ func (r *FileReader) readJSONFile(path string) ([]entity.Script, error) {
 		return nil, fmt.Errorf("missing required field 'text' in %s", path)
 	}
 
-	text := *js.Text
-	return []entity.Script{
-		{
-			Path:            path,
-			Text:            text,
-			IsEmpty:         len(text) == 0,
-			SpeakerID:       js.Speaker,
-			SpeedScale:      js.SpeedScale,
-			PitchScale:      js.PitchScale,
-			IntonationScale: js.IntonationScale,
-		},
-	}, nil
+	return []entity.Script{js.toScript(path)}, nil
 }
 
 func (r *FileReader) readJSONLFile(path string) ([]entity.Script, error) {
@@ -160,22 +163,21 @@ func (r *FileReader) readJSONLFile(path string) ([]entity.Script, error) {
 			slog.Warn("invalid JSON line (skipping)", "path", path, "line", lineNum, "error", err)
 			continue
 		}
+		if err := dec.Decode(&struct{}{}); err != io.EOF {
+			slog.Warn("trailing data in JSON line (skipping)", "path", path, "line", lineNum)
+			continue
+		}
 
 		if js.Text == nil {
 			slog.Warn("missing required field 'text' (skipping)", "path", path, "line", lineNum)
 			continue
 		}
 
-		text := *js.Text
-		scripts = append(scripts, entity.Script{
-			Path:            path,
-			Text:            text,
-			IsEmpty:         len(text) == 0,
-			SpeakerID:       js.Speaker,
-			SpeedScale:      js.SpeedScale,
-			PitchScale:      js.PitchScale,
-			IntonationScale: js.IntonationScale,
-		})
+		scripts = append(scripts, js.toScript(path))
+	}
+
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("error reading %s: %w", path, err)
 	}
 
 	if scripts == nil {
