@@ -77,7 +77,7 @@ GitHub Issue $ARGUMENTS を対応します。
   - ブランチ名検索（第一手段）: `gh pr list --repo {owner}/{repo} --head "worktree-issue-{番号}" --state all`
   - テキスト検索（フォールバック）: `gh pr list --repo {owner}/{repo} --search "#{番号}" --state all`
   - 両方の結果を合わせて、以下の優先順位で判断する:
-    1. **merged状態のPRが存在する場合**: 既に対応済みのため、処理をスキップして完了する（ステップ8の振り返りのみ実施する）
+    1. **merged状態のPRが存在する場合**: 既に対応済みのため、Issueをクローズし（`gh issue close`）、対応済みPRへのリンクをコメントとして残した上で、処理をスキップして完了する（ステップ9の振り返りのみ実施する）
     2. **open状態のPRが存在する場合**: 新しいPRを作成せず、既存PRに対してステップ7（fix-pr）を継続する
        - 複数のopen PRがある場合は、最新のものを対象とする
        - PR番号の取得例: `gh pr list --repo {owner}/{repo} --head "worktree-issue-{番号}" --state open --json number --jq '.[0].number'`
