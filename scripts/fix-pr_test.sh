@@ -175,7 +175,7 @@ elif [[ "$*" == *"merge-base"* ]]; then
     echo "abc123"
 elif [[ "$*" == *"rev-parse"*"main"* ]]; then
     echo "def456"
-elif [[ "$*" == *"merge main"* ]]; then
+elif [[ "$*" == *"merge origin/main"* ]]; then
     exit 1
 elif [[ "$*" == *"merge --abort"* ]]; then
     exit 0
@@ -302,7 +302,7 @@ elif [[ "$*" == *"merge-base"* ]]; then
     echo "old000"
 elif [[ "$*" == *"rev-parse"*"main"* ]]; then
     echo "def456"
-elif [[ "$*" == *"merge main"* ]]; then
+elif [[ "$*" == *"merge origin/main"* ]]; then
     exit 0
 elif [[ "$*" == *"push"* ]]; then
     exit 0
@@ -326,7 +326,7 @@ fi
     output=$(PATH="$TEST_DIR/bin:$PATH" "$SCRIPT_UNDER_TEST" 123 2>&1) || exit_code=$?
     assert_exit_code 0 "$exit_code" && \
     assert_output_contains "マージします" "$output" && \
-    assert_file_contains "merge main" "$TEST_DIR/git_calls.log" && \
+    assert_file_contains "merge origin/main" "$TEST_DIR/git_calls.log" && \
     assert_file_contains "push" "$TEST_DIR/git_calls.log"
 }
 run_test "ブランチが遅れている場合、mergeしてpushする" test_branch_behind

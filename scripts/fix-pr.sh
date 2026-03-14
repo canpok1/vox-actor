@@ -34,13 +34,12 @@ echo "ブランチ最新化チェック中..."
 git fetch origin main 2>/dev/null || true
 
 # mainとの差分を確認
-LOCAL_HEAD=$(git rev-parse HEAD 2>/dev/null || echo "")
 MERGE_BASE=$(git merge-base HEAD origin/main 2>/dev/null || echo "")
 REMOTE_MAIN=$(git rev-parse origin/main 2>/dev/null || echo "")
 
 if [[ "$MERGE_BASE" != "$REMOTE_MAIN" ]]; then
     echo "ブランチがmainより遅れています。マージします..."
-    if ! git merge main 2>/dev/null; then
+    if ! git merge origin/main 2>/dev/null; then
         echo "コンフリクトが発生しました。マージを中断します。" >&2
         git merge --abort 2>/dev/null || true
         exit 1
