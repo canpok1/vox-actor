@@ -1,10 +1,12 @@
 package infra
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -19,17 +21,32 @@ var utf8BOM = []byte{0xEF, 0xBB, 0xBF}
 
 // supportedExts はディレクトリ読み込み時に対象とする拡張子。
 var supportedExts = map[string]bool{
-	".txt":  true,
-	".json": true,
+	".txt":   true,
+	".json":  true,
+	".jsonl": true,
 }
 
-// jsonScript は .json ファイルの台本データを表す。
+// jsonScript は .json / .jsonl ファイルの台本データを表す。
 type jsonScript struct {
 	Text            *string  `json:"text"`
 	Speaker         *int     `json:"speaker"`
 	SpeedScale      *float64 `json:"speedScale"`
 	PitchScale      *float64 `json:"pitchScale"`
 	IntonationScale *float64 `json:"intonationScale"`
+}
+
+// toScript は jsonScript を entity.Script に変換する。
+func (js *jsonScript) toScript(path string) entity.Script {
+	text := *js.Text
+	return entity.Script{
+		Path:            path,
+		Text:            text,
+		IsEmpty:         len(text) == 0,
+		SpeakerID:       js.Speaker,
+		SpeedScale:      js.SpeedScale,
+		PitchScale:      js.PitchScale,
+		IntonationScale: js.IntonationScale,
+	}
 }
 
 // FileReader はファイルシステムから台本を読み込む。
@@ -60,10 +77,14 @@ func (r *FileReader) Read(path string) ([]entity.Script, error) {
 
 func (r *FileReader) readFile(path string) ([]entity.Script, error) {
 	ext := strings.ToLower(filepath.Ext(path))
-	if ext == ".json" {
+	switch ext {
+	case ".json":
 		return r.readJSONFile(path)
+	case ".jsonl":
+		return r.readJSONLFile(path)
+	default:
+		return r.readTextFile(path)
 	}
-	return r.readTextFile(path)
 }
 
 // readFileBytes はファイルを読み込み、BOM除去とUTF-8検証を行う。
@@ -116,18 +137,54 @@ func (r *FileReader) readJSONFile(path string) ([]entity.Script, error) {
 		return nil, fmt.Errorf("missing required field 'text' in %s", path)
 	}
 
-	text := *js.Text
-	return []entity.Script{
-		{
-			Path:            path,
-			Text:            text,
-			IsEmpty:         len(text) == 0,
-			SpeakerID:       js.Speaker,
-			SpeedScale:      js.SpeedScale,
-			PitchScale:      js.PitchScale,
-			IntonationScale: js.IntonationScale,
-		},
-	}, nil
+	return []entity.Script{js.toScript(path)}, nil
+}
+
+func (r *FileReader) readJSONLFile(path string) ([]entity.Script, error) {
+	data, err := r.readFileBytes(path)
+	if err != nil {
+		return nil, err
+	}
+
+	var scripts []entity.Script
+	scanner := bufio.NewScanner(bytes.NewReader(data))
+	lineNum := 0
+	for scanner.Scan() {
+		lineNum++
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" {
+			continue
+		}
+
+		var js jsonScript
+		dec := json.NewDecoder(strings.NewReader(line))
+		dec.DisallowUnknownFields()
+		if err := dec.Decode(&js); err != nil {
+			slog.Warn("invalid JSON line (skipping)", "path", path, "line", lineNum, "error", err)
+			continue
+		}
+		if err := dec.Decode(&struct{}{}); err != io.EOF {
+			slog.Warn("trailing data in JSON line (skipping)", "path", path, "line", lineNum)
+			continue
+		}
+
+		if js.Text == nil {
+			slog.Warn("missing required field 'text' (skipping)", "path", path, "line", lineNum)
+			continue
+		}
+
+		scripts = append(scripts, js.toScript(path))
+	}
+
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("error reading %s: %w", path, err)
+	}
+
+	if scripts == nil {
+		scripts = []entity.Script{}
+	}
+
+	return scripts, nil
 }
 
 func (r *FileReader) readDirectory(dir string) ([]entity.Script, error) {
