@@ -34,3 +34,6 @@ go.work.sum
 
 # GoReleaser
 dist/
+
+# 作業メモ
+.claude/memo/
