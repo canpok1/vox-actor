@@ -39,3 +39,8 @@ func (m *FileMover) MoveToDone(path string) error {
 
 	return os.Rename(path, dest)
 }
+
+// Delete はファイルを削除する。
+func (m *FileMover) Delete(path string) error {
+	return os.Remove(path)
+}

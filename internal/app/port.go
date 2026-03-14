@@ -14,10 +14,12 @@ type ScriptReader interface {
 	Read(path string) ([]entity.Script, error)
 }
 
-// FileMover はファイルを処理済みディレクトリに移動するインターフェース。
+// FileMover はファイルを処理済みディレクトリに移動または削除するインターフェース。
 type FileMover interface {
 	// MoveToDone はファイルを親ディレクトリのdone/サブディレクトリに移動する。
 	MoveToDone(path string) error
+	// Delete はファイルを削除する。
+	Delete(path string) error
 }
 
 // DirWatcher はディレクトリを監視して新規ファイルを検知するインターフェース。
