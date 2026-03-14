@@ -12,5 +12,3 @@ RUN mkdir -p /workspaces && chown vscode:vscode /workspaces
 USER vscode
 
 RUN mkdir -p $CLAUDE_CONFIG_DIR && chmod 700 $CLAUDE_CONFIG_DIR
-
-RUN curl -fsSL https://claude.ai/install.sh | bash
