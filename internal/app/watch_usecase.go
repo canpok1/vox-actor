@@ -56,12 +56,15 @@ func (u *WatchUsecase) Run(ctx context.Context, params ActParams) error {
 // processFile は1ファイルを処理し、完了後にdone/に移動する。
 // エラーが発生してもスキップしてdone/に移動する。
 func (u *WatchUsecase) processFile(ctx context.Context, path string, params ActParams) {
-	scripts, err := u.reader.Read(path)
-	if err != nil {
-		log.Printf("read error (skipping): %s: %v", path, err)
+	defer func() {
 		if moveErr := u.mover.MoveToDone(path); moveErr != nil {
 			log.Printf("move error: %s: %v", path, moveErr)
 		}
+	}()
+
+	scripts, err := u.reader.Read(path)
+	if err != nil {
+		log.Printf("read error (skipping): %s: %v", path, err)
 		return
 	}
 
@@ -72,23 +75,19 @@ func (u *WatchUsecase) processFile(ctx context.Context, path string, params ActP
 
 		query, err := u.client.CreateQuery(ctx, script.Text, params.SpeakerID)
 		if err != nil {
-			log.Printf("create query error (skipping): %s: %v", path, err)
-			break
+			log.Printf("create query error (skipping script): %s: %v", script.Path, err)
+			continue
 		}
 
 		wavData, err := u.client.Synthesize(ctx, query, params.SpeakerID, params.Speed, params.Pitch, params.Intonation)
 		if err != nil {
-			log.Printf("synthesize error (skipping): %s: %v", path, err)
-			break
+			log.Printf("synthesize error (skipping script): %s: %v", script.Path, err)
+			continue
 		}
 
 		if err := u.player.Play(ctx, wavData); err != nil {
-			log.Printf("play error (skipping): %s: %v", path, err)
-			break
+			log.Printf("play error (skipping script): %s: %v", script.Path, err)
+			continue
 		}
-	}
-
-	if moveErr := u.mover.MoveToDone(path); moveErr != nil {
-		log.Printf("move error: %s: %v", path, moveErr)
 	}
 }

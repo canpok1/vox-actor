@@ -6,6 +6,7 @@ import (
 	"sort"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/canpok1/vox-actor/internal/app"
 	"github.com/canpok1/vox-actor/internal/domain/entity"
@@ -287,9 +288,13 @@ func TestWatchUsecase_Run_ContextCancelled_StopsProcessing(t *testing.T) {
 	fileCh <- "/tmp/watch/a.txt"
 	cancel()
 
-	err := <-done
-	if err != nil {
-		t.Fatalf("expected no error on context cancellation, got: %v", err)
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("expected no error on context cancellation, got: %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for Run to stop after context cancellation")
 	}
 }
 

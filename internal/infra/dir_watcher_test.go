@@ -146,10 +146,21 @@ func TestPollingDirWatcher_StopsOnContextCancel(t *testing.T) {
 
 	cancel()
 
-	// チャネルが閉じられること（最終的にクローズされればOK）
+	// チャネルがクローズされることを確認
 	select {
-	case <-fileCh:
-		// ファイルが来るか、チャネルがクローズされる
+	case _, ok := <-fileCh:
+		if ok {
+			// ファイルが来た場合は、次のreceiveでクローズを確認
+			select {
+			case _, ok := <-fileCh:
+				if ok {
+					t.Error("expected channel to be closed")
+				}
+			case <-time.After(1 * time.Second):
+				t.Fatal("timeout: channel should be closed after context cancel")
+			}
+		}
+		// ok == false: チャネルがクローズされた
 	case <-time.After(1 * time.Second):
 		t.Fatal("timeout: channel should be closed after context cancel")
 	}
