@@ -1,8 +1,10 @@
 package app_test
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"log/slog"
 	"strings"
 	"testing"
 
@@ -449,4 +451,97 @@ func (m *cancellingAudioPlayer) Play(_ context.Context, _ []byte) error {
 		m.cancelFunc()
 	}
 	return nil
+}
+
+func TestActUsecase_Run_LogsProcessingStatus(t *testing.T) {
+	reader := &mockScriptReader{
+		scripts: []entity.Script{
+			{Path: "test.txt", Text: "こんにちは", IsEmpty: false},
+		},
+	}
+	client := &mockVoicevoxClient{
+		query:   &entity.AudioQuery{},
+		wavData: []byte("fake-wav"),
+	}
+	player := &mockAudioPlayer{}
+
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelInfo}))
+
+	uc := app.NewActUsecase(reader, client, player, app.WithLogger(logger))
+	params := app.ActParams{
+		Path:      "test.txt",
+		SpeakerID: 3,
+	}
+
+	err := uc.Run(context.Background(), params)
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	output := buf.String()
+	// 処理状況のInfoログが出力されること
+	if !strings.Contains(output, "test.txt") {
+		t.Errorf("expected log output to contain file path 'test.txt', got: %s", output)
+	}
+}
+
+func TestActUsecase_Run_VerboseLogsDebugInfo(t *testing.T) {
+	reader := &mockScriptReader{
+		scripts: []entity.Script{
+			{Path: "test.txt", Text: "こんにちは", IsEmpty: false},
+		},
+	}
+	client := &mockVoicevoxClient{
+		query:   &entity.AudioQuery{},
+		wavData: []byte("fake-wav"),
+	}
+	player := &mockAudioPlayer{}
+
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
+
+	speed := 1.5
+	uc := app.NewActUsecase(reader, client, player, app.WithLogger(logger))
+	params := app.ActParams{
+		Path:      "test.txt",
+		SpeakerID: 3,
+		Speed:     &speed,
+	}
+
+	err := uc.Run(context.Background(), params)
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	output := buf.String()
+	// Debug レベルでパラメータ情報が出力されること
+	if !strings.Contains(output, "speakerID") {
+		t.Errorf("expected verbose log to contain 'speakerID', got: %s", output)
+	}
+}
+
+func TestActUsecase_Run_NilLogger_NoPanic(t *testing.T) {
+	reader := &mockScriptReader{
+		scripts: []entity.Script{
+			{Path: "test.txt", Text: "こんにちは", IsEmpty: false},
+		},
+	}
+	client := &mockVoicevoxClient{
+		query:   &entity.AudioQuery{},
+		wavData: []byte("fake-wav"),
+	}
+	player := &mockAudioPlayer{}
+
+	// Loggerなしで生成してもパニックしないこと
+	uc := app.NewActUsecase(reader, client, player)
+	params := app.ActParams{
+		Path:      "test.txt",
+		SpeakerID: 3,
+	}
+
+	err := uc.Run(context.Background(), params)
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
 }

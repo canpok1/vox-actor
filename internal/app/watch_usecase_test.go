@@ -1,9 +1,12 @@
 package app_test
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"log/slog"
 	"sort"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -306,4 +309,104 @@ type blockingDirWatcher struct {
 
 func (w *blockingDirWatcher) Watch(_ context.Context, _ string) (<-chan string, <-chan error) {
 	return w.fileCh, w.errCh
+}
+
+func TestWatchUsecase_Run_LogsProcessingStatus(t *testing.T) {
+	reader := &mockScriptReader{
+		scripts: []entity.Script{
+			{Path: "a.txt", Text: "おはよう", IsEmpty: false},
+		},
+	}
+	client := &mockVoicevoxClient{
+		query:   &entity.AudioQuery{},
+		wavData: []byte("fake-wav"),
+	}
+	player := &mockAudioPlayer{}
+	mover := &mockFileMover{}
+	watcher := &mockDirWatcher{
+		files: []string{"/tmp/watch/a.txt"},
+	}
+
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelInfo}))
+
+	uc := app.NewWatchUsecase(reader, client, player, mover, watcher, app.WithWatchLogger(logger))
+	params := app.ActParams{
+		Path:      "/tmp/watch",
+		SpeakerID: 3,
+	}
+
+	err := uc.Run(context.Background(), params)
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	output := buf.String()
+	// ファイル検知のログが出力されること
+	if !strings.Contains(output, "a.txt") {
+		t.Errorf("expected log output to contain file path 'a.txt', got: %s", output)
+	}
+}
+
+func TestWatchUsecase_Run_WatcherError_LoggedViaLogger(t *testing.T) {
+	reader := &mockScriptReader{
+		scripts: []entity.Script{
+			{Path: "a.txt", Text: "おはよう", IsEmpty: false},
+		},
+	}
+	client := &mockVoicevoxClient{
+		query:   &entity.AudioQuery{},
+		wavData: []byte("fake-wav"),
+	}
+	player := &mockAudioPlayer{}
+	mover := &mockFileMover{}
+
+	// エラーを先に送信し、その後ファイルを送信してからチャネルをクローズするカスタムウォッチャー
+	customWatcher := &errorThenFileWatcher{
+		errToSend:  errors.New("watcher test error"),
+		fileToSend: "/tmp/watch/a.txt",
+	}
+
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelInfo}))
+
+	uc := app.NewWatchUsecase(reader, client, player, mover, customWatcher, app.WithWatchLogger(logger))
+	params := app.ActParams{
+		Path:      "/tmp/watch",
+		SpeakerID: 3,
+	}
+
+	err := uc.Run(context.Background(), params)
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	output := buf.String()
+	if !strings.Contains(output, "watcher test error") {
+		t.Errorf("expected log output to contain watcher error, got: %s", output)
+	}
+}
+
+// errorThenFileWatcher はエラーを先に送信し、処理後にファイルを送信するウォッチャー。
+type errorThenFileWatcher struct {
+	errToSend  error
+	fileToSend string
+}
+
+func (w *errorThenFileWatcher) Watch(_ context.Context, _ string) (<-chan string, <-chan error) {
+	fileCh := make(chan string, 1)
+	errCh := make(chan error, 1)
+
+	// エラーを先に送信
+	errCh <- w.errToSend
+	close(errCh)
+
+	// 少し遅延してファイルを送信（エラーが先に処理されることを保証）
+	go func() {
+		time.Sleep(10 * time.Millisecond)
+		fileCh <- w.fileToSend
+		close(fileCh)
+	}()
+
+	return fileCh, errCh
 }

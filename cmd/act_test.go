@@ -151,3 +151,43 @@ func TestActCmd_WatchFlag_DefaultFalse(t *testing.T) {
 		t.Error("expected --watch default to be false")
 	}
 }
+
+func TestActCmd_VerboseFlag_DefaultFalse(t *testing.T) {
+	rootCmd := makeRootCmd()
+
+	var actCmd *cobra.Command
+	for _, c := range rootCmd.Commands() {
+		if c.Name() == "act" {
+			actCmd = c
+			break
+		}
+	}
+	if actCmd == nil {
+		t.Fatal("act subcommand not found")
+	}
+
+	verbose, err := actCmd.Flags().GetBool("verbose")
+	if err != nil {
+		t.Fatalf("expected --verbose flag to exist, got error: %v", err)
+	}
+	if verbose {
+		t.Error("expected --verbose default to be false")
+	}
+}
+
+func TestActCmd_HelpContainsVerboseFlag(t *testing.T) {
+	rootCmd := makeRootCmd()
+	buf := new(bytes.Buffer)
+	rootCmd.SetOut(buf)
+	rootCmd.SetArgs([]string{"act", "--help"})
+
+	err := rootCmd.Execute()
+	if err != nil {
+		t.Fatalf("expected no error for --help, got: %v", err)
+	}
+
+	output := buf.String()
+	if !strings.Contains(output, "--verbose") {
+		t.Error("expected help output to contain '--verbose'")
+	}
+}
