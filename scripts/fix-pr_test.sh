@@ -11,6 +11,8 @@
 # DONE: その他のエラーでマージ失敗した場合、exit 3する（stderrにエラー内容を出力）
 # DONE: ブランチが遅れている場合、git merge mainしてpushする
 # DONE: CHANGES_REQUESTEDが原因でマージ失敗した場合、exit 2する
+# DONE: ブランチ保護ルールのrequired approving reviewエラーでマージ失敗した場合、exit 2する
+# DONE: ブランチ保護ルールのreview approval requiredエラーでマージ失敗した場合、exit 2する
 
 set -euo pipefail
 
@@ -365,6 +367,70 @@ fi
     assert_exit_code 2 "$exit_code"
 }
 run_test "CHANGES_REQUESTEDが原因でマージ失敗した場合、exit 2する" test_changes_requested
+
+# テスト9: ブランチ保護ルールのrequired approving reviewエラーでexit 2する
+test_required_approving_review() {
+    create_git_mock '
+if [[ "$*" == *"fetch"* ]]; then
+    exit 0
+elif [[ "$*" == *"rev-parse HEAD"* ]]; then
+    echo "abc123"
+elif [[ "$*" == *"merge-base"* ]]; then
+    echo "abc123"
+elif [[ "$*" == *"rev-parse"*"main"* ]]; then
+    echo "def456"
+fi
+'
+    create_gh_mock '
+if [[ "$*" == *"pr checks"*"--watch"* ]]; then
+    exit 0
+elif [[ "$*" == *"pr merge"* ]]; then
+    echo "At least 1 required approving review is needed" >&2
+    exit 1
+elif [[ "$*" == *"repo view"* ]]; then
+    echo "owner/repo"
+elif [[ "$*" == *"api repos"* ]]; then
+    echo "{\"mergeCommit\":true,\"squash\":true,\"rebase\":true}"
+fi
+'
+    local output
+    local exit_code=0
+    output=$(PATH="$TEST_DIR/bin:$PATH" "$SCRIPT_UNDER_TEST" 123 2>&1) || exit_code=$?
+    assert_exit_code 2 "$exit_code"
+}
+run_test "ブランチ保護ルールのrequired approving reviewエラーでexit 2する" test_required_approving_review
+
+# テスト10: ブランチ保護ルールのreview approval requiredエラーでexit 2する
+test_review_approval_required() {
+    create_git_mock '
+if [[ "$*" == *"fetch"* ]]; then
+    exit 0
+elif [[ "$*" == *"rev-parse HEAD"* ]]; then
+    echo "abc123"
+elif [[ "$*" == *"merge-base"* ]]; then
+    echo "abc123"
+elif [[ "$*" == *"rev-parse"*"main"* ]]; then
+    echo "def456"
+fi
+'
+    create_gh_mock '
+if [[ "$*" == *"pr checks"*"--watch"* ]]; then
+    exit 0
+elif [[ "$*" == *"pr merge"* ]]; then
+    echo "review approval required" >&2
+    exit 1
+elif [[ "$*" == *"repo view"* ]]; then
+    echo "owner/repo"
+elif [[ "$*" == *"api repos"* ]]; then
+    echo "{\"mergeCommit\":true,\"squash\":true,\"rebase\":true}"
+fi
+'
+    local output
+    local exit_code=0
+    output=$(PATH="$TEST_DIR/bin:$PATH" "$SCRIPT_UNDER_TEST" 123 2>&1) || exit_code=$?
+    assert_exit_code 2 "$exit_code"
+}
+run_test "ブランチ保護ルールのreview approval requiredエラーでexit 2する" test_review_approval_required
 
 # テスト結果のサマリー
 print_summary() {
