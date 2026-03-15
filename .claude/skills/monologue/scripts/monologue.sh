@@ -8,6 +8,11 @@ PROBABILITY="$1"
 TEXT="$2"
 SPEAKER="${3:-3}"
 
+if [ -z "$TEXT" ]; then
+  echo "[ERROR] セリフ（第2引数）は必須です"
+  exit 1
+fi
+
 if ! [[ "$PROBABILITY" =~ ^[0-9]+$ ]] || [ "$PROBABILITY" -lt 1 ] || [ "$PROBABILITY" -gt 100 ]; then
   echo "[ERROR] 通知確率は1〜100の整数で指定してください: '$PROBABILITY'"
   exit 1
