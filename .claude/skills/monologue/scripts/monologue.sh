@@ -4,12 +4,24 @@ if [ -z "$WORKSPACE_DIR" ]; then
   exit 1
 fi
 
-TEXT="$1"
-SPEAKER="${2:-3}"
+PROBABILITY="$1"
+TEXT="$2"
+SPEAKER="${3:-3}"
+
+if ! [[ "$PROBABILITY" =~ ^[0-9]+$ ]] || [ "$PROBABILITY" -lt 1 ] || [ "$PROBABILITY" -gt 100 ]; then
+  echo "[ERROR] 通知確率は1〜100の整数で指定してください: '$PROBABILITY'"
+  exit 1
+fi
 
 if ! [[ "$SPEAKER" =~ ^[0-9]+$ ]]; then
   echo "[ERROR] スピーカーIDは正の整数で指定してください: '$SPEAKER'"
   exit 1
+fi
+
+# 乱数判定: ROLL <= PROBABILITY なら通知する
+ROLL=$((RANDOM % 100 + 1))
+if [ "$ROLL" -gt "$PROBABILITY" ]; then
+  exit 0
 fi
 
 NOTIFY_DIR="${WORKSPACE_DIR}/.tmp/notify"
