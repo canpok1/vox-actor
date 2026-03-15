@@ -17,7 +17,7 @@ jobs:
           fetch-depth: 0
 
       - name: Create and push version tag
-        run: ./scripts/create-version-tag.sh
+        run: ./.github/scripts/create-version-tag.sh
 
       - name: Get created tag
         id: create-tag

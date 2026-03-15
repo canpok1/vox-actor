@@ -2,7 +2,7 @@
 # CodeRabbitのレビュー到着を待機し、rate limitがあれば解消後にfull reviewを投稿するスクリプト
 #
 # 使用方法:
-#   ./scripts/wait-coderabbit.sh <PR番号>
+#   ./.claude/skills/fix-pr/scripts/wait-coderabbit.sh <PR番号>
 #
 # 環境変数（テスト用にオーバーライド可能）:
 #   POLL_INTERVAL: ポーリング間隔（秒）デフォルト30

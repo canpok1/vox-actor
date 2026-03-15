@@ -18,7 +18,7 @@ PR $ARGUMENTS に対して、CI待機・レビュー対応・マージを行い�
 ### ステップ1: wait-coderabbit.sh を実行
 
 ```bash
-./scripts/wait-coderabbit.sh <PR番号>
+./.claude/skills/fix-pr/scripts/wait-coderabbit.sh <PR番号>
 ```
 
 | 終了コード | アクション |
@@ -29,7 +29,7 @@ PR $ARGUMENTS に対して、CI待機・レビュー対応・マージを行い�
 ### ステップ2: fix-pr.sh を実行
 
 ```bash
-./scripts/fix-pr.sh <PR番号>
+./.claude/skills/fix-pr/scripts/fix-pr.sh <PR番号>
 ```
 
 ### ステップ3: 終了コードに基づいて対応

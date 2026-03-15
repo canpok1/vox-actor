@@ -3,8 +3,8 @@
 # 最新のリリースバージョンのパッチバージョンを1つ進めたタグを作成する
 #
 # 使用方法:
-#   ./scripts/create-version-tag.sh           # 実際にタグを作成してプッシュ
-#   ./scripts/create-version-tag.sh --dry-run # ドライランモード（タグ作成・プッシュをスキップ）
+#   ./.github/scripts/create-version-tag.sh           # 実際にタグを作成してプッシュ
+#   ./.github/scripts/create-version-tag.sh --dry-run # ドライランモード（タグ作成・プッシュをスキップ）
 
 set -euo pipefail
 
