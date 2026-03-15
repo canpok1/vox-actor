@@ -2,10 +2,37 @@
 
 テキストファイルやテキストをVOICEVOXエンジンで音声合成し、読み上げるCLIツールです。
 
+## クイックスタート
+
+1. **VOICEVOXエンジンを起動する**
+
+   - インストーラー版: [公式サイト](https://voicevox.hiroshiba.jp/)からダウンロードしてインストール後、アプリを起動する
+   - Docker版: `docker run --rm -p 50021:50021 voicevox/voicevox_engine:latest`
+
+2. **vox-actorをインストールする**
+
+   ```bash
+   go install github.com/canpok1/vox-actor@latest
+   ```
+
+3. **テキストを読み上げる**
+
+   ```bash
+   vox-actor say "こんにちは"
+   ```
+
+4. **ディレクトリを監視して自動読み上げする**
+
+   ```bash
+   vox-actor act --watch /path/to/watch-dir
+   ```
+
 ## 前提条件
 
 - Go 1.26.1 以上
 - [VOICEVOX エンジン](https://voicevox.hiroshiba.jp/)が起動していること（デフォルト: `http://localhost:50021`）
+  - インストーラー版: [公式サイト](https://voicevox.hiroshiba.jp/)からダウンロードしてインストール後、アプリを起動する
+  - Docker版: `docker run --rm -p 50021:50021 voicevox/voicevox_engine:latest`
 
 ## インストール
 
@@ -83,7 +110,7 @@ vox-actor act script.json
 
 ### ディレクトリ監視モード
 
-ディレクトリを監視し、ファイルが配置されると自動的に読み上げます:
+ディレクトリを監視し、ファイルが配置されると自動的に読み上げます。処理済みファイルは監視ディレクトリ内の `done/` サブディレクトリに移動されます。
 
 ```bash
 vox-actor act --watch /path/to/watch-dir
