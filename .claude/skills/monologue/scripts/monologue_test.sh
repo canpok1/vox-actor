@@ -105,6 +105,10 @@ test_speaker_id_in_json() {
     WORKSPACE_DIR="$TEST_DIR" "$SCRIPT_UNDER_TEST" "テストメッセージ" 7
     local file
     file=$(find "$TEST_DIR/.tmp/notify" -name "notify_*.json" 2>/dev/null | head -1)
+    if [[ -z "$file" || ! -f "$file" ]]; then
+        echo "  FAIL: 通知ファイルが見つかりません"
+        return 1
+    fi
     local content
     content=$(cat "$file")
     if echo "$content" | grep -qF '"speaker":7'; then
@@ -122,6 +126,10 @@ test_default_speaker_id() {
     WORKSPACE_DIR="$TEST_DIR" "$SCRIPT_UNDER_TEST" "テストメッセージ"
     local file
     file=$(find "$TEST_DIR/.tmp/notify" -name "notify_*.json" 2>/dev/null | head -1)
+    if [[ -z "$file" || ! -f "$file" ]]; then
+        echo "  FAIL: 通知ファイルが見つかりません"
+        return 1
+    fi
     local content
     content=$(cat "$file")
     if echo "$content" | grep -qF '"speaker":3'; then
