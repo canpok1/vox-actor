@@ -624,6 +624,31 @@ func TestActUsecase_Run_LogsProgressCounter(t *testing.T) {
 	}
 }
 
+func TestActUsecase_Run_WithNilLogger_NoPanic(t *testing.T) {
+	reader := &mockScriptReader{
+		scripts: []entity.Script{
+			{Path: "test.txt", Text: "こんにちは", IsEmpty: false},
+		},
+	}
+	client := &mockVoicevoxClient{
+		query:   &entity.AudioQuery{},
+		wavData: []byte("fake-wav"),
+	}
+	player := &mockAudioPlayer{}
+
+	// WithLogger(nil)を明示的に渡してもpanicしないこと
+	uc := app.NewActUsecase(reader, client, player, app.WithLogger(nil))
+	params := app.ActParams{
+		Path:      "test.txt",
+		SpeakerID: 3,
+	}
+
+	err := uc.Run(context.Background(), params)
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+}
+
 // --- セリフ単位パラメータ テスト ---
 
 // テストリスト: セリフ単位パラメータ
