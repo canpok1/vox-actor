@@ -15,12 +15,17 @@
 
    ```bash
    # Linux (x86_64) の場合
-   curl -Lo vox-actor.tar.gz https://github.com/canpok1/vox-actor/releases/latest/download/vox-actor_Linux_x86_64.tar.gz
+   curl -fLo vox-actor.tar.gz https://github.com/canpok1/vox-actor/releases/latest/download/vox-actor_Linux_x86_64.tar.gz
    tar xzf vox-actor.tar.gz
    sudo mv vox-actor /usr/local/bin/
 
    # macOS (Apple Silicon) の場合
-   curl -Lo vox-actor.tar.gz https://github.com/canpok1/vox-actor/releases/latest/download/vox-actor_Darwin_arm64.tar.gz
+   curl -fLo vox-actor.tar.gz https://github.com/canpok1/vox-actor/releases/latest/download/vox-actor_Darwin_arm64.tar.gz
+   tar xzf vox-actor.tar.gz
+   sudo mv vox-actor /usr/local/bin/
+
+   # macOS (Intel) の場合
+   curl -fLo vox-actor.tar.gz https://github.com/canpok1/vox-actor/releases/latest/download/vox-actor_Darwin_x86_64.tar.gz
    tar xzf vox-actor.tar.gz
    sudo mv vox-actor /usr/local/bin/
    ```
