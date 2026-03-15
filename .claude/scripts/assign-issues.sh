@@ -22,10 +22,11 @@ echo "Issue自動選定を開始します"
 # リモートURLからowner/repoを取得
 source "$(dirname "$0")/lib/detect-repo.sh"
 
-# readyラベル付きのIssue数を確認し、0件ならスキップ
-READY_COUNT=$(gh issue list --repo "$REPO" --state open --label "ready" --json number --jq 'length')
-if [ "$READY_COUNT" -eq 0 ]; then
-  echo "readyラベル付きのIssueがないため、スキップします"
+# readyラベル付きかつ割り当て済みラベルなしのIssue数を確認し、0件ならスキップ
+ASSIGNABLE_COUNT=$(gh issue list --repo "$REPO" --state open --label "ready" --json number,labels \
+  --jq '[.[] | select(.labels | map(.name) | all(. != "assign-to-claude" and . != "in-progress-by-claude"))] | length')
+if [ "$ASSIGNABLE_COUNT" -eq 0 ]; then
+  echo "割り当て可能なIssueがないため、スキップします"
   exit 0
 fi
 
