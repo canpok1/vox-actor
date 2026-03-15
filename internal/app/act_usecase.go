@@ -20,9 +20,12 @@ type ActParams struct {
 type ActOption func(*ActUsecase)
 
 // WithLogger はロガーを設定するオプション。
+// nilが渡された場合はデフォルトのdiscardロガーを維持する。
 func WithLogger(logger *slog.Logger) ActOption {
 	return func(u *ActUsecase) {
-		u.logger = logger
+		if logger != nil {
+			u.logger = logger
+		}
 	}
 }
 
