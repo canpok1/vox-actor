@@ -43,6 +43,8 @@ func TestRegisterCommonFlags_EnvVarSpeaker_InvalidValue(t *testing.T) {
 }
 
 func TestRegisterCommonFlags_Speaker(t *testing.T) {
+	t.Setenv("VOX_SPEAKER", "")
+
 	cmd := &cobra.Command{Use: "test"}
 	registerCommonFlags(cmd)
 
@@ -108,6 +110,8 @@ func TestRegisterCommonFlags_Verbose(t *testing.T) {
 }
 
 func TestRegisterCommonFlags_EngineURL(t *testing.T) {
+	t.Setenv("VOX_ENGINE_URL", "")
+
 	cmd := &cobra.Command{Use: "test"}
 	registerCommonFlags(cmd)
 
