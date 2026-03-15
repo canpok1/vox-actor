@@ -4,6 +4,10 @@ if [ -z "$WORKSPACE_DIR" ]; then
   exit 1
 fi
 
+TEXT="$1"
+SPEAKER="${2:-3}"
+
 NOTIFY_DIR="${WORKSPACE_DIR}/.tmp/notify"
 mkdir -p "$NOTIFY_DIR"
-echo "$1" > "${NOTIFY_DIR}/notify_$(($(date +%s%N)/1000000)).txt"
+jq -cn --argjson speaker "$SPEAKER" --arg text "$TEXT" \
+  '{speaker: $speaker, text: $text}' > "${NOTIFY_DIR}/notify_$(($(date +%s%N)/1000000)).json"
