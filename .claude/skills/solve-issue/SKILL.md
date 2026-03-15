@@ -64,16 +64,16 @@ GitHub Issue $ARGUMENTS を対応します。
 | 8. クリーンアップ | なし | 定型作業のため省略 |
 | 9. 振り返り | 追記 | 作成したIssue番号（あれば） |
 
-1. Issue の内容を理解する
+1. `/monologue` を実行してから、Issue の内容を理解する
   - メモファイルを作成する（既存ファイルがあれば追記）
-2. `/tdd` スキルで実装する
-3. `/review` スキルで自己レビュー（コード品質 + ドキュメント整合性チェック）を行う
-4. lint/formatチェックを実行する（PR作成前の最終ガード）
+2. `/monologue` を実行してから、`/tdd` スキルで実装する
+3. `/monologue` を実行してから、`/review` スキルで自己レビュー（コード品質 + ドキュメント整合性チェック）を行う
+4. `/monologue` を実行してから、lint/formatチェックを実行する（PR作成前の最終ガード）
   - `gofmt -l .` → 出力があれば `gofmt -w .` で修正
   - `golangci-lint run` → 指摘があれば修正
   - `shellcheck scripts/*.sh` → 指摘があれば修正
   - 修正した場合はコミットする
-5. 同一Issueに対する既存PRの重複チェックを行う
+5. `/monologue` を実行してから、同一Issueに対する既存PRの重複チェックを行う
   - ブランチ名検索（第一手段）: `gh pr list --repo {owner}/{repo} --head "worktree-issue-{番号}" --state all`
   - テキスト検索（フォールバック）: `gh pr list --repo {owner}/{repo} --search "#{番号}" --state all`
   - 両方の結果を合わせて、以下の優先順位で判断する:
@@ -85,7 +85,7 @@ GitHub Issue $ARGUMENTS を対応します。
        - PR番号の取得例: `gh pr list --repo {owner}/{repo} --head "worktree-issue-{番号}" --state open --json number --jq '.[0].number'`
     3. **closed状態（マージされずにクローズ）のPRのみ存在する場合**: 既存PRなしとして扱い、ステップ6に進む
   - 上記いずれにも該当しない場合（既存PRが存在しない場合）: ステップ6に進む
-6. `commit-push-pr` スキルでPRを作成する
-7. `/fix-pr` スキルでCI待機・レビュー対応・マージを行う
+6. `/monologue` を実行してから、`commit-push-pr` スキルでPRを作成する
+7. `/monologue` を実行してから、`/fix-pr` スキルでCI待機・レビュー対応・マージを行う
   - 引数にPR番号を渡す
-8. `/retro` スキルで振り返りを行う
+8. `/monologue` を実行してから、`/retro` スキルで振り返りを行う
