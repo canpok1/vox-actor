@@ -1,5 +1,5 @@
 #!/bin/bash
-# CodeRabbitのレビュー到着を待機し、rate limitがあれば解消後にfull reviewを投稿するスクリプト
+# CodeRabbitのレビュー到着を待機し、rate limitがあれば解消後にreviewを投稿するスクリプト
 #
 # 使用方法:
 #   ./.claude/skills/fix-pr/scripts/wait-coderabbit.sh <PR番号>
@@ -94,9 +94,9 @@ for i in $(seq 1 "$MAX_POLLS"); do
             echo "rate limitが検出されました。${RATE_LIMIT_WAIT}秒待機します..."
             sleep "$RATE_LIMIT_WAIT"
 
-            # full reviewを投稿
-            echo "@coderabbitai full review を投稿します..."
-            gh pr comment --repo "$REPO" "$PR_NUMBER" --body "@coderabbitai full review"
+            # reviewを投稿
+            echo "@coderabbitai review を投稿します..."
+            gh pr comment --repo "$REPO" "$PR_NUMBER" --body "@coderabbitai review"
             echo "再レビューを要求しました。"
         fi
 
