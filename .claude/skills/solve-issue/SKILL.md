@@ -64,6 +64,10 @@ GitHub Issue $ARGUMENTS を対応します。
 | 8. クリーンアップ | なし | 定型作業のため省略 |
 | 9. 振り返り | 追記 | 作成したIssue番号（あれば） |
 
+0. Issue の状態を確認する
+  - `gh issue view $ARGUMENTS --json state --jq .state` で対象IssueのOPEN/CLOSED状態を確認する
+  - `CLOSED` の場合: 「Issue #$ARGUMENTS は既にクローズ済みです」と報告して処理を終了する
+  - `OPEN` の場合: 次のステップに進む
 1. `/monologue` を実行してから、Issue の内容を理解する
   - メモファイルを作成する（既存ファイルがあれば追記）
 2. `/monologue` を実行してから、実装する
