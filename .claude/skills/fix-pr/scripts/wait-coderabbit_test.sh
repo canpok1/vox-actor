@@ -4,7 +4,7 @@
 # テストリスト:
 # DONE: PR番号が指定されていない場合、エラー終了する（exit 1）
 # DONE: CodeRabbitコメントがrate limitなしで到着した場合、正常終了する（exit 0）
-# DONE: CodeRabbitコメントがrate limitありで到着した場合、待機後にfull reviewを投稿して正常終了する（exit 0）
+# DONE: CodeRabbitコメントがrate limitありで到着した場合、待機後にreviewを投稿して正常終了する（exit 0）
 # DONE: CodeRabbitコメントがタイムアウトしても到着しない場合、エラー終了する（exit 1）
 # DONE: CodeRabbitのレビュー状態がCHANGES_REQUESTEDの場合、@coderabbitai resolveを投稿して正常終了する（exit 0）
 
@@ -148,7 +148,7 @@ fi
 }
 run_test "CodeRabbitコメントがrate limitなしで到着した場合、正常終了する" test_no_rate_limit
 
-# テスト3: CodeRabbitコメントがrate limitありで到着した場合、待機後にfull reviewを投稿して正常終了する
+# テスト3: CodeRabbitコメントがrate limitありで到着した場合、待機後にreviewを投稿して正常終了する
 test_with_rate_limit() {
     # ghモック: コメント取得でrate limit文言を含むレスポンスを返す
     create_gh_mock '
@@ -172,9 +172,9 @@ fi
     assert_exit_code 0 "$exit_code" && \
     assert_output_contains "rate limit" "$output" && \
     assert_file_contains "pr comment" "$TEST_DIR/gh_calls.log" && \
-    assert_file_contains "@coderabbitai full review" "$TEST_DIR/gh_calls.log"
+    assert_file_contains "@coderabbitai review" "$TEST_DIR/gh_calls.log"
 }
-run_test "rate limitありで待機後にfull reviewを投稿して正常終了する" test_with_rate_limit
+run_test "rate limitありで待機後にreviewを投稿して正常終了する" test_with_rate_limit
 
 # テスト4: CodeRabbitコメントがタイムアウトしても到着しない場合、エラー終了する
 test_timeout() {
