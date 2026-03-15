@@ -2,7 +2,7 @@
 # ブランチ最新化・CI待機・PRマージを行う汎用スクリプト
 #
 # 使用方法:
-#   ./scripts/fix-pr.sh <PR番号>
+#   ./.claude/skills/fix-pr/scripts/fix-pr.sh <PR番号>
 #
 # 終了コード:
 #   0: マージ完了
