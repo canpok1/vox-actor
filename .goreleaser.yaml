@@ -25,8 +25,22 @@ builds:
     ldflags:
       - -s -w -X github.com/canpok1/vox-actor/cmd.version={{.Version}}
 
+  - id: windows
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w -X github.com/canpok1/vox-actor/cmd.version={{.Version}}
+
 archives:
   - formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
     name_template: >-
       {{ .ProjectName }}_
       {{- title .Os }}_
