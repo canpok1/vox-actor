@@ -11,8 +11,18 @@
 
 2. **vox-actorをインストールする**
 
+   [GitHub Releases](https://github.com/canpok1/vox-actor/releases)からビルド済みバイナリをダウンロードして配置します。
+
    ```bash
-   go install github.com/canpok1/vox-actor@latest
+   # Linux (x86_64) の場合
+   curl -Lo vox-actor.tar.gz https://github.com/canpok1/vox-actor/releases/latest/download/vox-actor_Linux_x86_64.tar.gz
+   tar xzf vox-actor.tar.gz
+   sudo mv vox-actor /usr/local/bin/
+
+   # macOS (Apple Silicon) の場合
+   curl -Lo vox-actor.tar.gz https://github.com/canpok1/vox-actor/releases/latest/download/vox-actor_Darwin_arm64.tar.gz
+   tar xzf vox-actor.tar.gz
+   sudo mv vox-actor /usr/local/bin/
    ```
 
 3. **テキストを読み上げる**
@@ -25,6 +35,12 @@
 
    ```bash
    vox-actor act --watch /path/to/watch-dir
+   ```
+
+   別のターミナルからテキストファイルを配置すると、自動的に読み上げられます。
+
+   ```bash
+   echo "こんばんは" > /path/to/watch-dir/sample.txt
    ```
 
 ## 前提条件
