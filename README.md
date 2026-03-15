@@ -1,6 +1,6 @@
 # vox-actor
 
-テキストファイルをVOICEVOXエンジンで音声合成し、読み上げるCLIツールです。
+テキストファイルやテキストをVOICEVOXエンジンで音声合成し、読み上げるCLIツールです。
 
 ## 前提条件
 
@@ -21,7 +21,25 @@ cd vox-actor
 make build
 ```
 
+## バージョン確認
+
+```bash
+vox-actor --version
+```
+
 ## 使い方
+
+### テキストの直接読み上げ
+
+```bash
+vox-actor say "こんにちは"
+```
+
+キャラクターや音声パラメータを指定する場合:
+
+```bash
+vox-actor say --speaker 3 --speed 1.2 "こんにちは"
+```
 
 ### テキストファイルの読み上げ
 
@@ -100,6 +118,17 @@ vox-actor act --verbose script.txt
 | `--watch-delete` | — | `false` | ディレクトリ監視モード（処理済みファイルを削除） |
 | `--verbose` | — | `false` | 詳細ログを出力 |
 
+### `say` サブコマンド
+
+| オプション | デフォルト値 | 説明 |
+|---|---|---|
+| `--engine-url` | `http://localhost:50021` | VOICEVOXエンジンのURL |
+| `--speaker` | `3` | キャラクターID |
+| `--speed` | `1.0` | 話速 |
+| `--pitch` | `0.0` | 音高 |
+| `--intonation` | `1.0` | 抑揚 |
+| `--verbose` | `false` | 詳細ログを出力 |
+
 オプションの優先順位: **CLIフラグ > 環境変数 > デフォルト値**
 
 ## 開発
@@ -114,11 +143,20 @@ make build
 # テスト
 make test
 
+# E2Eテスト
+make test-e2e
+
 # フォーマット
 make fmt
 
 # Lint
 make lint
+
+# 依存チェック
+make depcheck
+
+# ビルド成果物の削除
+make clean
 ```
 
 ## ライセンス
