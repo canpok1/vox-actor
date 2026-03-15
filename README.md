@@ -120,14 +120,14 @@ vox-actor act --verbose script.txt
 
 ### `say` サブコマンド
 
-| オプション | デフォルト値 | 説明 |
-|---|---|---|
-| `--engine-url` | `http://localhost:50021` | VOICEVOXエンジンのURL |
-| `--speaker` | `3` | キャラクターID |
-| `--speed` | `1.0` | 話速 |
-| `--pitch` | `0.0` | 音高 |
-| `--intonation` | `1.0` | 抑揚 |
-| `--verbose` | `false` | 詳細ログを出力 |
+| オプション | 環境変数 | デフォルト値 | 説明 |
+|---|---|---|---|
+| `--engine-url` | `VOX_ENGINE_URL` | `http://localhost:50021` | VOICEVOXエンジンのURL |
+| `--speaker` | `VOX_SPEAKER` | `3` | キャラクターID |
+| `--speed` | — | `1.0` | 話速 |
+| `--pitch` | — | `0.0` | 音高 |
+| `--intonation` | — | `1.0` | 抑揚 |
+| `--verbose` | — | `false` | 詳細ログを出力 |
 
 オプションの優先順位: **CLIフラグ > 環境変数 > デフォルト値**
 
