@@ -65,11 +65,15 @@ trap 'if [ "$waiting" = true ]; then echo ""; fi; echo "Stopping watch-empty-que
 # リモートURLからowner/repoを取得
 source "$SCRIPT_DIR/lib/detect-repo.sh"
 
+# 現在のGitHubユーザーを取得
+source "$SCRIPT_DIR/lib/current-user.sh"
+
 while true; do
   # assign-to-claudeラベル付きopen Issueの件数を確認
   queue_count=$(gh issue list \
     --repo "$REPO" \
     --label "assign-to-claude" \
+    --author "$CURRENT_USER" \
     --state open \
     --json number \
     --jq 'length')
