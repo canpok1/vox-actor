@@ -17,11 +17,15 @@ trap 'if [ "$waiting" = true ]; then echo ""; fi; echo "Stopping watch-queued-is
 # リモートURLからowner/repoを取得
 source "$SCRIPT_DIR/lib/detect-repo.sh"
 
+# 現在のGitHubユーザーを取得
+source "$SCRIPT_DIR/lib/current-user.sh"
+
 while true; do
   # assign-to-claudeラベル付き、かつin-progress-by-claudeラベルが付いていないissueを1件取得（古い順）
   issue_number=$(gh issue list \
     --repo "$REPO" \
     --label "assign-to-claude" \
+    --author "$CURRENT_USER" \
     --search "sort:created-asc" \
     --json number,labels \
     --jq '.[] | select(.labels | map(.name) | contains(["in-progress-by-claude"]) | not) | .number' \

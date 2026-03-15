@@ -22,8 +22,11 @@ echo "Issue自動選定を開始します"
 # リモートURLからowner/repoを取得
 source "$(dirname "$0")/lib/detect-repo.sh"
 
+# 現在のGitHubユーザーを取得
+source "$(dirname "$0")/lib/current-user.sh"
+
 # readyラベル付きかつ割り当て済みラベルなしのIssue数を確認し、0件ならスキップ
-ASSIGNABLE_COUNT=$(gh issue list --repo "$REPO" --state open --label "ready" --json number,labels \
+ASSIGNABLE_COUNT=$(gh issue list --repo "$REPO" --state open --label "ready" --author "$CURRENT_USER" --json number,labels \
   --jq '[.[] | select(.labels | map(.name) | all(. != "assign-to-claude" and . != "in-progress-by-claude"))] | length')
 if [ "$ASSIGNABLE_COUNT" -eq 0 ]; then
   echo "割り当て可能なIssueがないため、スキップします"
