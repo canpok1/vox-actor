@@ -4,6 +4,38 @@ set -euo pipefail
 INTERVAL_SECONDS=60
 waiting=false
 
+# デフォルト値
+ASSIGN_COUNT=2
+MIN_QUEUE=0
+
+# 引数解析
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --assign-count)
+      ASSIGN_COUNT="$2"
+      shift 2
+      ;;
+    --min-queue)
+      MIN_QUEUE="$2"
+      shift 2
+      ;;
+    *)
+      echo "Usage: $0 [--assign-count N] [--min-queue N]" >&2
+      exit 1
+      ;;
+  esac
+done
+
+if ! [[ "${ASSIGN_COUNT}" =~ ^[0-9]+$ ]]; then
+  echo "Error: assign-count must be numeric" >&2
+  exit 1
+fi
+
+if ! [[ "${MIN_QUEUE}" =~ ^[0-9]+$ ]]; then
+  echo "Error: min-queue must be numeric" >&2
+  exit 1
+fi
+
 SCRIPT_DIR=$(dirname "$0")
 WORKSPACE_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
@@ -34,7 +66,7 @@ while true; do
     --json number \
     --jq 'length')
 
-  if [ "$queue_count" -eq 0 ]; then
+  if [ "$queue_count" -le "$MIN_QUEUE" ]; then
     # キュー空の場合: 待機状態をリセットして自動選定を実行
     if [ "$waiting" = true ]; then
       echo ""
@@ -45,7 +77,7 @@ while true; do
     echo "Queue is empty. Running assign-issues..."
     echo "----------------------------------------"
 
-    "${SCRIPT_DIR}/assign-issues.sh" -p || true
+    "${SCRIPT_DIR}/assign-issues.sh" -p -c "$ASSIGN_COUNT" || true
   else
     # キューにIssueがある場合
     if [ "$waiting" = false ]; then
