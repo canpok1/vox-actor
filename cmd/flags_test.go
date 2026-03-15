@@ -16,8 +16,8 @@ import (
 // DONE: VOX_ENGINE_URL環境変数がengine-urlのデフォルト値に反映される
 // DONE: VOX_SPEAKER環境変数がspeakerのデフォルト値に反映される
 // DONE: VOX_SPEAKERに不正な値が設定されている場合デフォルト値3が使われる
-// TODO: actコマンドがRegisterCommonFlagsを使用してもフラグ挙動が変わらない
-// TODO: sayコマンドがRegisterCommonFlagsを使用してもフラグ挙動が変わらない
+// DONE: actコマンドがRegisterCommonFlagsを使用してもフラグ挙動が変わらない
+// DONE: sayコマンドがRegisterCommonFlagsを使用してもフラグ挙動が変わらない
 
 func TestRegisterCommonFlags_EnvVarEngineURL(t *testing.T) {
 	t.Setenv("VOX_ENGINE_URL", "http://custom:8888")
