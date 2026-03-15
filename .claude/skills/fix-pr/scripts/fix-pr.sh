@@ -95,7 +95,7 @@ if [[ "$MERGE_EXIT" -eq 0 ]]; then
 fi
 
 # マージ失敗の原因を判定
-if echo "$MERGE_OUTPUT" | grep -qi "unresolved review\|review.*required\|review.*not.*resolved\|CHANGES_REQUESTED"; then
+if echo "$MERGE_OUTPUT" | grep -qi "unresolved review\|review.*required\|required.*approv.*review\|review.*not.*resolved\|CHANGES_REQUESTED"; then
     echo "未解決レビューが原因でマージできません。" >&2
     echo "$MERGE_OUTPUT" >&2
     exit 2
