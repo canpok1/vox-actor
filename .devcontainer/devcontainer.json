@@ -13,7 +13,8 @@
 		"source=${devcontainerId}-claude-code-config,target=/home/vscode/.claude,type=volume"
 	],
 	"remoteEnv": {
-		"WORKSPACE_DIR": "${containerWorkspaceFolder}"
+		"WORKSPACE_DIR": "${containerWorkspaceFolder}",
+		"VOX_ACTOR_WORKSPACE": "${containerWorkspaceFolder}/.tmp/notify"
 	},
 	"customizations": {
 		"vscode": {

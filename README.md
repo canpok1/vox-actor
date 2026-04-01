@@ -50,24 +50,27 @@
 
 ## 前提条件
 
-- Go 1.26.1 以上
+- Go 1.26.1 以上（ソースからビルドする場合）
 - [VOICEVOX エンジン](https://voicevox.hiroshiba.jp/)が起動していること（デフォルト: `http://localhost:50021`）
   - インストーラー版: [公式サイト](https://voicevox.hiroshiba.jp/)からダウンロードしてインストール後、アプリを起動する
   - Docker版: `docker run --rm -p 50021:50021 voicevox/voicevox_engine:latest`
 
 ## インストール
 
-```bash
-go install github.com/canpok1/vox-actor@latest
-```
+- バイナリをダウンロードする場合
+   - [GitHub Releases](https://github.com/canpok1/vox-actor/releases)からビルド済みバイナリをダウンロードして配置してください。
 
-または、ソースからビルドする場合:
+- Goの`install`コマンドを使う場合
+   ```bash
+   go install github.com/canpok1/vox-actor@latest
+   ```
 
-```bash
-git clone https://github.com/canpok1/vox-actor.git
-cd vox-actor
-make build
-```
+- ソースからビルドする場合
+   ```bash
+   git clone https://github.com/canpok1/vox-actor.git
+   cd vox-actor
+   make build
+   ```
 
 ## バージョン確認
 
@@ -178,6 +181,39 @@ vox-actor act --verbose script.txt
 | `--verbose` | — | `false` | 詳細ログを出力 |
 
 オプションの優先順位: **CLIフラグ > 環境変数 > デフォルト値**
+
+## 活用方法
+
+### claude codeなどのLLMの作業状況を音声で通知する
+
+LLMの作業状況を指定ディレクトリにテキストファイルとして出力し、vox-actorの監視モードで読み上げることで、作業の進捗を音声で把握できます。
+
+claude code向けプラグインを同梱しているので、claude codeでは簡単に導入できます。
+
+1. 環境変数を設定する。
+   ```
+   # テキストファイルの出力先ディレクトリを指定
+   export VOX_ACTOR_WORKSPACE=/path/to/dirctory
+   ```
+
+2. vox-actorを監視モードで起動する。
+   ```
+   vox-actor act --watch $VOX_ACTOR_WORKSPACE
+   ```
+
+3. claude codeにプラグインを導入する。
+   ```
+   # claude code上で実行
+   /plugin marketplace add canpok1/vox-actor 
+   /plugin install vox-actor-plugin@monologue
+   ```
+
+4. 独り言スキル（monologue）を実行する。
+   ```
+   # claude code上で実行
+   /monologue
+   ```
+
 
 ## 開発
 
