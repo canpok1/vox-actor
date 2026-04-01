@@ -1,6 +1,6 @@
 #!/bin/bash
-if [ -z "$VOX_ACTOR_DIR" ]; then
-  echo "[ERROR] 環境変数 'VOX_ACTOR_DIR' が設定されていません。"
+if [ -z "$VOX_ACTOR_WORKSPACE" ]; then
+  echo "[ERROR] 環境変数 'VOX_ACTOR_WORKSPACE' が設定されていません。"
   exit 1
 fi
 
@@ -50,6 +50,6 @@ if [ "$ROLL" -gt "$PROBABILITY" ]; then
   exit 0
 fi
 
-mkdir -p "$VOX_ACTOR_DIR"
+mkdir -p "$VOX_ACTOR_WORKSPACE"
 jq -cn --argjson speaker "$SPEAKER" --arg text "$TEXT" --argjson speedScale "$SPEED_SCALE" \
-  '{speaker: $speaker, text: $text, speedScale: $speedScale}' > "${VOX_ACTOR_DIR}/notify_$(($(date +%s%N)/1000000)).json"
+  '{speaker: $speaker, text: $text, speedScale: $speedScale}' > "${VOX_ACTOR_WORKSPACE}/notify_$(($(date +%s%N)/1000000)).json"

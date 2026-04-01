@@ -14,7 +14,7 @@
 	],
 	"remoteEnv": {
 		"WORKSPACE_DIR": "${containerWorkspaceFolder}",
-		"VOX_ACTOR_DIR": "${containerWorkspaceFolder}/.tmp/notify"
+		"VOX_ACTOR_WORKSPACE": "${containerWorkspaceFolder}/.tmp/notify"
 	},
 	"customizations": {
 		"vscode": {
