@@ -1,0 +1,13 @@
+{
+  "name": "vox-actor-marketplace",
+  "owner": {
+    "name": "canpok1"
+  },
+  "plugins": [
+    {
+      "name": "vox-actor-plugin",
+      "source": "./plugins/vox-actor-plugin",
+      "description": "vox-actorを利用するためのプラグイン"
+    }
+  ]
+}

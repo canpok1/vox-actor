@@ -1,0 +1,8 @@
+{
+  "name": "vox-actor-plugin",
+  "description": "vox-actorを利用するためのプラグイン",
+  "version": "0.0.1",
+  "author": {
+    "name": "canpok1"
+  }
+}
