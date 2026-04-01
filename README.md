@@ -193,7 +193,7 @@ claude code向けプラグインを同梱しているので、claude codeでは�
 1. 環境変数を設定する。
    ```
    # テキストファイルの出力先ディレクトリを指定
-   export VOX_ACTOR_WORKSPACE=/path/to/dirctory
+   export VOX_ACTOR_WORKSPACE=/path/to/directory
    ```
 
 2. vox-actorを監視モードで起動する。

@@ -68,9 +68,9 @@ ${CLAUDE_PLUGIN_ROOT}/skills/monologue/scripts/monologue.sh 通知確率 "（キ
 
 通知の実行に使用する `${CLAUDE_PLUGIN_ROOT}/skills/monologue/scripts/monologue.sh` は以下の前提条件を必要とする:
 
-- **環境変数 `WORKSPACE_DIR`**: 必須。通知ファイルの出力先ルートディレクトリを指定する。未設定の場合、スクリプトはエラー終了する
-- **通知ディレクトリ**: `${WORKSPACE_DIR}/.tmp/notify/` に通知ファイルを書き出す。ディレクトリが存在しない場合はスクリプトが自動作成する
-- **通知ファイル形式**: `notify_{タイムスタンプ}.json` として作成される。JSON形式（`{"speaker": スピーカーID, "text": "セリフ", "speedScale": 話速}`）で出力される。外部の通知監視プロセスがこのファイルを検知してユーザーに通知する
+- **環境変数 `VOX_ACTOR_WORKSPACE`**: 必須。通知ファイルの出力先ディレクトリを指定する。未設定の場合、スクリプトはエラー終了する
+- **通知ディレクトリ**: `${VOX_ACTOR_WORKSPACE}/` に通知ファイルを書き出す。ディレクトリが存在しない場合はスクリプトが自動作成する
+- **通知ファイル形式**: `notify_{ミリ秒タイムスタンプ}.json` として作成される。JSON形式（`{"speaker": スピーカーID, "text": "セリフ", "speedScale": 話速}`）で出力される。外部の通知監視プロセスがこのファイルを検知してユーザーに通知する
 
 ## キャラクター設定ファイルについて
 
