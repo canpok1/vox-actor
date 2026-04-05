@@ -67,7 +67,7 @@ homebrew_casks:
   - repository:
       owner: canpok1
       name: homebrew-tap
-      token: {{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
     hooks:
       post:
         install: |
