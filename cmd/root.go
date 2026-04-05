@@ -21,7 +21,7 @@ type Deps struct {
 func makeRootCmd(deps ...*Deps) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "vox-actor",
-		Short:   "AIエージェント構築フレームワークのCLIツール",
+		Short:   "テキストをVOICEVOXエンジンで音声合成し読み上げるCLIツール",
 		Version: version,
 	}
 	cmd.SilenceUsage = true

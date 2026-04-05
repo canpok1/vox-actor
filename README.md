@@ -60,6 +60,12 @@
 - バイナリをダウンロードする場合
    - [GitHub Releases](https://github.com/canpok1/vox-actor/releases)からビルド済みバイナリをダウンロードして配置してください。
 
+- Homebrewを使う場合（macOS/Linux）:
+   ```bash
+   brew tap canpok1/tap
+   brew install --cask vox-actor
+   ```
+
 - Goの`install`コマンドを使う場合
    ```bash
    go install github.com/canpok1/vox-actor@latest
