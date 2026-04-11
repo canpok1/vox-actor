@@ -6,13 +6,6 @@ import (
 	"github.com/canpok1/vox-actor/internal/domain/entity"
 )
 
-// AudioQuery.WithOverrides テストリスト
-// DONE: 正常系: 全パラメータnilの場合、元のAudioQueryと同じ値を返す
-// DONE: 正常系: speedのみ指定した場合、SpeedScaleだけ上書きされる
-// DONE: 正常系: pitchのみ指定した場合、PitchScaleだけ上書きされる
-// DONE: 正常系: intonationのみ指定した場合、IntonationScaleだけ上書きされる
-// DONE: 正常系: 全パラメータ指定した場合、全て上書きされる
-// DONE: 正常系: 元のAudioQueryが変更されない（値レシーバによるコピー）
 
 func TestAudioQuery_WithOverrides_AllNil(t *testing.T) {
 	q := entity.AudioQuery{
