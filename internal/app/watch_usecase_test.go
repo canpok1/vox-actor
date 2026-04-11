@@ -13,6 +13,7 @@ import (
 
 	"github.com/canpok1/vox-actor/internal/app"
 	"github.com/canpok1/vox-actor/internal/domain/entity"
+	"github.com/canpok1/vox-actor/internal/infra/logging"
 )
 
 // --- WatchUsecase用モック ---
@@ -507,7 +508,7 @@ func TestWatchUsecase_Run_DeleteMode_LogsFileDeleted(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelInfo}))
+	logger := slog.New(logging.NewHumanHandler(&buf, &logging.HumanHandlerOptions{Level: slog.LevelInfo, NoColor: true}))
 
 	uc := app.NewWatchUsecase(reader, client, player, mover, watcher, app.WithDeleteMode(), app.WithWatchLogger(logger))
 	params := app.ActParams{Path: "/tmp/watch", SpeakerID: 3}
@@ -550,7 +551,7 @@ func TestWatchUsecase_Run_FileMovedToDoneLoggedAtInfoLevel(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelInfo}))
+	logger := slog.New(logging.NewHumanHandler(&buf, &logging.HumanHandlerOptions{Level: slog.LevelInfo, NoColor: true}))
 
 	uc := app.NewWatchUsecase(reader, client, player, mover, watcher, app.WithWatchLogger(logger))
 	params := app.ActParams{Path: "/tmp/watch", SpeakerID: 3}
@@ -583,7 +584,7 @@ func TestWatchUsecase_Run_SynthesisCompletedLoggedAtInfoLevel(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelInfo}))
+	logger := slog.New(logging.NewHumanHandler(&buf, &logging.HumanHandlerOptions{Level: slog.LevelInfo, NoColor: true}))
 
 	uc := app.NewWatchUsecase(reader, client, player, mover, watcher, app.WithWatchLogger(logger))
 	params := app.ActParams{Path: "/tmp/watch", SpeakerID: 3}
@@ -616,7 +617,7 @@ func TestWatchUsecase_Run_LogsProcessingStatus(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelInfo}))
+	logger := slog.New(logging.NewHumanHandler(&buf, &logging.HumanHandlerOptions{Level: slog.LevelInfo, NoColor: true}))
 
 	uc := app.NewWatchUsecase(reader, client, player, mover, watcher, app.WithWatchLogger(logger))
 	params := app.ActParams{
@@ -656,7 +657,7 @@ func TestWatchUsecase_Run_WatcherError_LoggedViaLogger(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelInfo}))
+	logger := slog.New(logging.NewHumanHandler(&buf, &logging.HumanHandlerOptions{Level: slog.LevelInfo, NoColor: true}))
 
 	uc := app.NewWatchUsecase(reader, client, player, mover, customWatcher, app.WithWatchLogger(logger))
 	params := app.ActParams{
