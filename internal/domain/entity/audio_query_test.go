@@ -6,7 +6,6 @@ import (
 	"github.com/canpok1/vox-actor/internal/domain/entity"
 )
 
-
 func TestAudioQuery_WithOverrides_AllNil(t *testing.T) {
 	q := entity.AudioQuery{
 		SpeedScale:      1.0,
