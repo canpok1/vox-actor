@@ -8,7 +8,9 @@ import (
 	"syscall"
 
 	"github.com/canpok1/vox-actor/internal/app"
+	"github.com/canpok1/vox-actor/internal/infra/logging"
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 )
 
 // SayDeps はsayコマンドの依存を保持する。
@@ -58,7 +60,11 @@ func runSay(cmd *cobra.Command, args []string, deps *SayDeps) error {
 	if verbose {
 		logLevel = slog.LevelDebug
 	}
-	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: logLevel}))
+	noColor := !term.IsTerminal(int(os.Stderr.Fd())) || os.Getenv("NO_COLOR") != ""
+	logger := slog.New(logging.NewHumanHandler(os.Stderr, &logging.HumanHandlerOptions{
+		Level:   logLevel,
+		NoColor: noColor,
+	}))
 
 	client := deps.ClientFactory(engineURL)
 	if client == nil {

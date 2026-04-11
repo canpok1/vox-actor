@@ -10,6 +10,7 @@ import (
 
 	"github.com/canpok1/vox-actor/internal/app"
 	"github.com/canpok1/vox-actor/internal/domain/entity"
+	"github.com/canpok1/vox-actor/internal/infra/logging"
 )
 
 // act_usecase テストリスト
@@ -474,7 +475,7 @@ func TestActUsecase_Run_LogsProcessingStatus(t *testing.T) {
 	player := &mockAudioPlayer{}
 
 	var buf bytes.Buffer
-	logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelInfo}))
+	logger := slog.New(logging.NewHumanHandler(&buf, &logging.HumanHandlerOptions{Level: slog.LevelInfo, NoColor: true}))
 
 	uc := app.NewActUsecase(reader, client, player, app.WithLogger(logger))
 	params := app.ActParams{
@@ -507,7 +508,7 @@ func TestActUsecase_Run_VerboseLogsDebugInfo(t *testing.T) {
 	player := &mockAudioPlayer{}
 
 	var buf bytes.Buffer
-	logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	logger := slog.New(logging.NewHumanHandler(&buf, &logging.HumanHandlerOptions{Level: slog.LevelDebug, NoColor: true}))
 
 	speed := 1.5
 	uc := app.NewActUsecase(reader, client, player, app.WithLogger(logger))
@@ -567,7 +568,7 @@ func TestActUsecase_Run_SynthesisCompletedLoggedAtInfoLevel(t *testing.T) {
 	player := &mockAudioPlayer{}
 
 	var buf bytes.Buffer
-	logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelInfo}))
+	logger := slog.New(logging.NewHumanHandler(&buf, &logging.HumanHandlerOptions{Level: slog.LevelInfo, NoColor: true}))
 
 	uc := app.NewActUsecase(reader, client, player, app.WithLogger(logger))
 	params := app.ActParams{Path: "test.txt", SpeakerID: 3}
@@ -600,7 +601,7 @@ func TestActUsecase_Run_LogsProgressCounter(t *testing.T) {
 	player := &mockAudioPlayer{}
 
 	var buf bytes.Buffer
-	logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelInfo}))
+	logger := slog.New(logging.NewHumanHandler(&buf, &logging.HumanHandlerOptions{Level: slog.LevelInfo, NoColor: true}))
 
 	uc := app.NewActUsecase(reader, client, player, app.WithLogger(logger))
 	params := app.ActParams{Path: "scripts/", SpeakerID: 3}
