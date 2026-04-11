@@ -103,13 +103,21 @@
   },
   "enabledPlugins": {
     "commit-commands@claude-plugins-official": true,
-    "vox-actor-plugin@vox-actor-marketplace": true
+    "vox-actor-plugin@vox-actor-marketplace": true,
+    "base-tools@canpok1-plugins": true
   },
   "extraKnownMarketplaces": {
     "vox-actor-marketplace": {
       "source": {
         "source": "directory",
         "path": "./"
+      },
+      "autoUpdate": true
+    },
+    "canpok1-plugins": {
+      "source": {
+        "source": "github",
+        "repo": "canpok1/claude-code-plugins"
       },
       "autoUpdate": true
     }
