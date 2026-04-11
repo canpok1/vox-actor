@@ -10,90 +10,18 @@ argument-hint: "[issue-number]"
 
 GitHub Issue $ARGUMENTS を対応します。
 
-## 作業メモ
-
-各ステップの実施時に、作業メモをMarkdownファイルへ記録する。
-
-### メモファイルの仕様
-
-- **配置先**: `.claude/memo/`（存在しなければ `mkdir -p` で作成）
-- **ファイル名**: 現在のブランチ名をサニタイズ + `.md`
-  - サニタイズ: `/:*?"<>|\` をハイフン `-` に変換
-  - 取得: `BRANCH=$(git rev-parse --abbrev-ref HEAD); MEMO_FILE=".claude/memo/$(echo "$BRANCH" | tr '/:*?"<>|\\' '-').md"`
-- **既存ファイル**: 上書きせず、Readで読み取って追記（既存内容を保持）
-- **書き込み方法**: Readツールで現在の内容を読み取り、Writeツールで更新
-
-### メモファイルのテンプレート
-
-```markdown
-# Issue #{番号}: {Issueタイトル}
-
-## 目的
-
-{Issueの内容から要約した目的}
-
-## 作業内容
-
-- [ ] {タスク1}
-- [ ] {タスク2}
-
-## 作業ログ
-
-### ステップ1: Issue理解 (YYYY-MM-DD HH:MM)
-- {内容}
-```
-
-### 書き込みルール
-
-- ステップ1でメモファイルを新規作成（目的・作業内容チェックリストを設定）。既存ファイルがある場合は上書きせず追記する
-- 各ステップ完了時に作業ログセクションへ追記
-- 作業内容チェックリストは完了時にチェックを付ける
-- 目的は理解が深まった場合に更新可
-
-### 各ステップの記録粒度
-
-| ステップ | メモ操作 | 記録内容 |
-|---|---|---|
-| 0. Issue状態確認 | なし | CLOSEDなら即終了のため省略 |
-| 1. Issue理解 | **新規作成** | 目的の設定、作業内容チェックリストの初期作成（既存ファイルがあれば追記） |
-| 2. 実装 | 追記 | 実装内容、作成/変更ファイル、遭遇した問題 |
-| 3. 自己レビュー | 追記 | 指摘事項と修正内容 |
-| 4. lint/format | 追記 | 指摘の有無と修正内容 |
-| 5. 重複チェック | 条件付き | 既存PRが見つかった場合のみ記録 |
-| 6. PR作成 | 追記 | PR番号とURL |
-| 7. fix-pr | 追記 | CI待機・レビュー対応・マージの結果 |
-| 8. クリーンアップ | なし | 定型作業のため省略 |
-| 9. 振り返り | 追記 | 作成したIssue番号（あれば） |
-
-0. Issue の状態を確認する
-  - `gh issue view $ARGUMENTS --json state --jq .state` で対象IssueのOPEN/CLOSED状態を確認する
-  - `CLOSED` の場合: 「Issue #$ARGUMENTS は既にクローズ済みです」と報告して処理を終了する
-  - `OPEN` の場合: 次のステップに進む
-1. `/monologue` を実行してから、Issue の内容を理解する
-  - メモファイルを作成する（既存ファイルがあれば追記）
-2. `/monologue` を実行してから、実装する
-  - Issueの内容からGoコードの変更が必要かどうかを判断する
-    - Goコードの変更を含む場合: `/tdd` スキルで実装する
-    - Goコードの変更を含まない場合（例: `.md` ファイルのみの変更）: `/tdd` をスキップし、直接実装する
-3. `/monologue` を実行してから、`/review` スキルで自己レビュー（コード品質 + ドキュメント整合性チェック）を行う
-4. `/monologue` を実行してから、lint/formatチェックを実行する（PR作成前の最終ガード）
-  - `gofmt -l .` → 出力があれば `gofmt -w .` で修正
-  - `golangci-lint run` → 指摘があれば修正
-  - `shellcheck scripts/*.sh` → 指摘があれば修正
-  - 修正した場合はコミットする
-5. `/monologue` を実行してから、同一Issueに対する既存PRの重複チェックを行う
-  - ブランチ名検索（第一手段）: `gh pr list --repo {owner}/{repo} --head "worktree-issue-{番号}" --state all`
-  - テキスト検索（フォールバック）: `gh pr list --repo {owner}/{repo} --search "#{番号}" --state all`
-  - 両方の結果を合わせて、以下の優先順位で判断する:
-    1. **merged状態のPRが存在する場合**: 既に対応済みのため、以下の手順でIssueをクローズし、処理をスキップして完了する（ステップ9の振り返りのみ実施する）
-       - merged PRの情報を取得: `gh pr list --repo {owner}/{repo} --search "#{番号}" --state merged --json number,url --jq '.[0]'`
-       - Issueをコメント付きでクローズ: `gh issue close {番号} --repo {owner}/{repo} --comment "対応済みPR #{PR番号} が既にマージされているためクローズします。\n\nPR: {PR URL}"`
-    2. **open状態のPRが存在する場合**: 新しいPRを作成せず、既存PRに対してステップ7（fix-pr）を継続する
-       - 複数のopen PRがある場合は、最新のものを対象とする
-       - PR番号の取得例: `gh pr list --repo {owner}/{repo} --head "worktree-issue-{番号}" --state open --json number --jq '.[0].number'`
-    3. **closed状態（マージされずにクローズ）のPRのみ存在する場合**: 既存PRなしとして扱い、ステップ6に進む
-  - 上記いずれにも該当しない場合（既存PRが存在しない場合）: ステップ6に進む
-6. `/monologue` を実行してから、`commit-push-pr` スキルでPRを作成する
-7. `/monologue` を実行してから、`/fix-pr` スキルでCI待機・レビュー対応・マージを行う
+1. `check-issue-status` スキルでIssueの対応状況を確認する
+  - `CLOSED`: 「Issue #$ARGUMENTS は既にクローズ済みです」と報告して処理を終了する
+  - `ALREADY_DONE`: 以下の手順でIssueをクローズし、ステップ8（振り返り）のみ実施して完了する
+    - `gh issue close $ARGUMENTS --repo {owner}/{repo} --comment "対応済みPR #{PR番号} が既にマージされているためクローズします。\n\nPR: {PR URL}"`
+  - `IN_PROGRESS`: 新しい実装・PR作成はスキップし、既存PR番号を使ってステップ7（fix-pr）から再開する
+  - `PREVIOUSLY_ABANDONED` / `NOT_STARTED`: 次のステップに進む
+2. Issue の内容を把握する
+3. 実装する
+4. `simplify` スキルで変更コードの再利用性・品質・効率の観点からレビュー・改善を行う
+5. 実装内容をレビューする
+  - 指摘があれば内容を精査して必要に応じて修正する
+6. `commit-push-pr` スキルでPRを作成する
+7. `fix-pr` スキルでCI待機・レビュー対応・マージを行う
   - 引数にPR番号を渡す
-8. `/monologue` を実行してから、`/retro` スキルで振り返りを行う
+8. `retro` スキルで振り返りを行う

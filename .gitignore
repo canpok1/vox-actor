@@ -35,8 +35,5 @@ go.work.sum
 # GoReleaser
 dist/
 
-# 作業メモ
-.claude/memo/
-
-# 一時ファイル（通知・ロック等）
+# 一時ファイル（作業メモ・通知・ロック等）
 .tmp/
