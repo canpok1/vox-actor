@@ -13,7 +13,6 @@ user-invocable: true
 - **コミット・プッシュを行わないこと**
 - **ブランチの作成・切り替えを行わないこと**
 - **GitHub Issueを作成しないこと**（振り返り結果は作業メモへの記録に留める。Issue化は `memo-to-issue` スキルの責務）
-- 改善案は直接実装しないこと
 - 振り返り後に「続けて実装しましょう」等と提案しないこと
 
 ## ワークフロー
@@ -43,24 +42,15 @@ user-invocable: true
 
 4. 作業メモを完了ディレクトリへ移動する
   - 改善案の有無にかかわらず、このステップを必ず実施する
-  - 移動先: `${WORKSPACE_DIR}/.tmp/memo/done/`
-  - ディレクトリが存在しなければ作成する
-  - 同名ファイルが既に存在する場合はタイムスタンプ付きでリネームして衝突を回避する
-  - Bash コマンド例：
+  - `work-memo` スキルの移動ヘルパーを使用する：
     ```bash
-    SRC="<現在の作業メモの絶対パス>"
-    DEST_DIR="${WORKSPACE_DIR}/.tmp/memo/done"
-    mkdir -p "$DEST_DIR"
-    BASE=$(basename "$SRC" .md)
-    TARGET="$DEST_DIR/$BASE.md"
-    if [[ -e "$TARGET" ]]; then
-        TS=$(date +%Y%m%d%H%M%S)
-        TARGET="$DEST_DIR/$BASE.$TS.md"
-    fi
-    mv "$SRC" "$TARGET"
+    .claude/skills/work-memo/scripts/move-memo.sh "<現在の作業メモの絶対パス>" done
     ```
+  - スクリプトが `${WORKSPACE_DIR}/.tmp/memo/done/` を自動作成し、同名衝突時はタイムスタンプ付き（`<basename>.YYYYMMDDHHMMSS.md`）でリネームする
+  - 標準出力に移動先の絶対パスが出力される
 
 5. 振り返りの内容と移動先パスをユーザーに報告する
+  - 併せて「後日 `memo-to-issue` スキルを実行すると、`done/` 内の改善案をGitHub Issueとして作成できます」と案内する
 
 ## 完了条件
 

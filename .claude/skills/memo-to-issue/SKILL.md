@@ -33,33 +33,38 @@ user-invocable: true
 `memo/done/` 直下の `.md` ファイルを列挙する：
 
 ```bash
-find "${WORKSPACE_DIR}/.tmp/memo/done" -maxdepth 1 -type f -name '*.md' 2>/dev/null | sort
+DONE_DIR="${WORKSPACE_DIR}/.tmp/memo/done"
+if [[ -d "$DONE_DIR" ]]; then
+    find "$DONE_DIR" -maxdepth 1 -type f -name '*.md' | sort
+fi
 ```
 
 - ディレクトリが存在しない、または該当ファイルがない場合は「処理対象の完了メモはありません」と報告して終了する
 
-### 2. 各メモの読み込みと改善案の抽出
+### 2. 既存Issue一覧の取得（重複チェック用・1回のみ）
 
-取得したメモファイルを Read で読み込み、振り返り結果（スムーズだった点・問題点・改善案）を抽出する。
-
-- 改善案が記録されていないメモはIssue化をスキップする（ただしステップ5で `issued/` へ移動は行う）
-- 改善案には、ルール（`.claude/rules/`）やスキル定義（`.claude/skills/`）への反映対象ファイルパスが含まれていることが望ましい
-
-### 3. 既存Issueとの重複チェック
-
-改善案ごとに既存Issueを検索し、重複を排除する：
+ステップ4でのN+1呼び出しを避けるため、ここで一度だけ既存Issueを取得してローカルに保持する：
 
 ```bash
-gh issue list --repo {owner}/{repo} --state all --search "<キーワード>" --limit 20
+gh issue list --state all --limit 200 --json number,title,body,labels
 ```
 
-- 類似Issueが既に存在する場合は新規作成しない
-- 判断に迷う場合は作成せず、報告時にその旨を記載する
+- 取得結果は以降のステップで各改善案と照合する
+- リポジトリは gh のカレントリポジトリ自動判定に任せる（`--repo` 指定不要）
+
+### 3. 各メモの読み込みと改善案の抽出
+
+ステップ1で取得したメモファイルを Read で読み込み、振り返り結果（スムーズだった点・問題点・改善案）を抽出する。
+
+- 改善案が記録されていないメモはIssue化をスキップする（ただしステップ5で `issued/` へ移動は行う）
+- 改善案には、ルール（`.claude/rules/`）やスキル定義（`.claude/skills/`）への反映対象ファイルパスを含めること
 
 ### 4. GitHub Issueの作成
 
-重複していない改善案をIssue化する。
+ステップ2で取得した既存Issue一覧と照合し、重複していない改善案をIssue化する。
 
+- 類似タイトル・類似本文のIssueが既存一覧にある場合は新規作成しない
+- 判断に迷う場合は作成せず、報告時にその旨を記載する
 - 粒度は **1改善案あたり1Issue**
 - Issue本文には対象となるルール・スキル定義ファイルのパスを明記する
 - Issue本文の末尾に以下のフッターを必ず付与する：
@@ -69,7 +74,7 @@ gh issue list --repo {owner}/{repo} --state all --search "<キーワード>" --l
   ```
 - Issue作成例：
   ```bash
-  gh issue create --repo {owner}/{repo} \
+  gh issue create \
     --title "タイトル" \
     --body "$(cat <<'EOF'
   ## 概要
@@ -91,22 +96,14 @@ gh issue list --repo {owner}/{repo} --state all --search "<キーワード>" --l
 
 ### 5. 処理済みメモを issued/ へ移動
 
-改善案の有無・Issue作成の有無にかかわらず、ステップ1で列挙した全メモを `memo/issued/` へ移動する。
+改善案の有無・Issue作成の有無にかかわらず、ステップ1で列挙した全メモを `memo/issued/` へ移動する。`work-memo` スキルの移動ヘルパーを使用する：
 
 ```bash
-SRC="<対象メモの絶対パス>"
-DEST_DIR="${WORKSPACE_DIR}/.tmp/memo/issued"
-mkdir -p "$DEST_DIR"
-BASE=$(basename "$SRC" .md)
-TARGET="$DEST_DIR/$BASE.md"
-if [[ -e "$TARGET" ]]; then
-    TS=$(date +%Y%m%d%H%M%S)
-    TARGET="$DEST_DIR/$BASE.$TS.md"
-fi
-mv "$SRC" "$TARGET"
+.claude/skills/work-memo/scripts/move-memo.sh "<対象メモの絶対パス>" issued
 ```
 
-- 同名ファイルが衝突した場合はタイムスタンプ付きでリネームする
+- スクリプトが `${WORKSPACE_DIR}/.tmp/memo/issued/` を自動作成し、同名衝突時はタイムスタンプ付き（`<basename>.YYYYMMDDHHMMSS.md`）でリネームする
+- 標準出力に移動先の絶対パスが出力される
 
 ### 6. 結果の報告
 
