@@ -13,8 +13,8 @@ import (
 func TestHumanHandler_Handle_InfoMessageOnly(t *testing.T) {
 	var buf bytes.Buffer
 	h := logging.NewHumanHandler(&buf, &logging.HumanHandlerOptions{
-		Level:    slog.LevelInfo,
-		NoColor:  true,
+		Level:   slog.LevelInfo,
+		NoColor: true,
 	})
 	logger := slog.New(h)
 

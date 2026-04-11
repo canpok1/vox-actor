@@ -16,11 +16,11 @@ type HumanHandlerOptions struct {
 
 // HumanHandler は人間が読みやすい形式でログを出力する slog.Handler 実装。
 type HumanHandler struct {
-	w       io.Writer
-	opts    HumanHandlerOptions
-	attrs   []slog.Attr
-	groups  []string
-	mu      *sync.Mutex
+	w      io.Writer
+	opts   HumanHandlerOptions
+	attrs  []slog.Attr
+	groups []string
+	mu     *sync.Mutex
 }
 
 // NewHumanHandler は新しい HumanHandler を生成する。
