@@ -69,7 +69,8 @@ func (u *SayUsecase) Run(ctx context.Context, params SayParams) error {
 	}
 	u.logger.Debug("query created")
 
-	wavData, err := u.client.Synthesize(ctx, query, params.SpeakerID, params.Speed, params.Pitch, params.Intonation)
+	q := query.WithOverrides(params.Speed, params.Pitch, params.Intonation)
+	wavData, err := u.client.Synthesize(ctx, &q, params.SpeakerID)
 	if err != nil {
 		if ctx.Err() != nil {
 			return nil

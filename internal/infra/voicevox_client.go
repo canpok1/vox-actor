@@ -111,21 +111,8 @@ func (c *VoicevoxClient) CreateQuery(ctx context.Context, text string, speakerID
 }
 
 // Synthesize は音声合成を実行し、WAV形式のバイト列を返す。
-// speed, pitch, intonation が非nilの場合、AudioQueryの対応フィールドを上書きする。
-func (c *VoicevoxClient) Synthesize(ctx context.Context, query *entity.AudioQuery, speakerID int, speed, pitch, intonation *float64) ([]byte, error) {
-	// AudioQueryのコピーを作成し、指定されたパラメータを上書き
-	q := *query
-	if speed != nil {
-		q.SpeedScale = *speed
-	}
-	if pitch != nil {
-		q.PitchScale = *pitch
-	}
-	if intonation != nil {
-		q.IntonationScale = *intonation
-	}
-
-	jsonBody, err := json.Marshal(q)
+func (c *VoicevoxClient) Synthesize(ctx context.Context, query *entity.AudioQuery, speakerID int) ([]byte, error) {
+	jsonBody, err := json.Marshal(query)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal audio query: %w", err)
 	}

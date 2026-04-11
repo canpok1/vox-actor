@@ -129,7 +129,8 @@ func (u *WatchUsecase) processFile(ctx context.Context, path string, params ActP
 		}
 		u.logger.Debug("query created", "path", script.Path)
 
-		wavData, err := u.client.Synthesize(ctx, query, speakerID, speed, pitch, intonation)
+		q := query.WithOverrides(speed, pitch, intonation)
+		wavData, err := u.client.Synthesize(ctx, &q, speakerID)
 		if err != nil {
 			u.logger.Error("synthesize error (skipping script)", "path", script.Path, "error", err)
 			continue
