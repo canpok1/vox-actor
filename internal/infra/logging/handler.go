@@ -45,13 +45,9 @@ func (h *HumanHandler) Enabled(_ context.Context, level slog.Level) bool {
 
 // Handle はログレコードをフォーマットして出力する。
 func (h *HumanHandler) Handle(_ context.Context, r slog.Record) error {
-	// 記号
 	prefix := levelPrefix(r.Level)
-
-	// 日時
 	timeStr := r.Time.Format("2006-01-02 15:04:05")
 
-	// 属性の収集
 	var attrs []slog.Attr
 	attrs = append(attrs, h.attrs...)
 	r.Attrs(func(a slog.Attr) bool {
@@ -59,7 +55,6 @@ func (h *HumanHandler) Handle(_ context.Context, r slog.Record) error {
 		return true
 	})
 
-	// 属性文字列の構築
 	attrStr := ""
 	if len(attrs) > 0 {
 		attrStr = " ("
@@ -74,7 +69,6 @@ func (h *HumanHandler) Handle(_ context.Context, r slog.Record) error {
 
 	line := fmt.Sprintf("%s[%s] %s%s\n", prefix, timeStr, r.Message, attrStr)
 
-	// 色付け
 	if !h.opts.NoColor {
 		line = colorize(r.Level, line)
 	}
