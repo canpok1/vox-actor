@@ -81,7 +81,7 @@ gh issue list --state all --limit 200 --json number,title,body,labels
   ...
 
   ## 背景
-  （元となった作業メモ: .tmp/memo/done/<branch>.md）
+  `retro` スキルによる振り返りで抽出された改善案。
 
   ## 対象ファイル
   - `.claude/skills/xxx/SKILL.md`
