@@ -192,7 +192,7 @@ func TestSynthesize_Success(t *testing.T) {
 	}
 
 	client := infra.NewVoicevoxClient(server.URL)
-	wav, err := client.Synthesize(context.Background(), query, 1, nil, nil, nil)
+	wav, err := client.Synthesize(context.Background(), query, 1)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -201,7 +201,7 @@ func TestSynthesize_Success(t *testing.T) {
 	}
 }
 
-func TestSynthesize_OverrideParams(t *testing.T) {
+func TestSynthesize_PassesThroughQueryDirectly(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
@@ -212,7 +212,7 @@ func TestSynthesize_OverrideParams(t *testing.T) {
 			t.Fatalf("failed to unmarshal request body: %v", err)
 		}
 
-		// 上書きされた値を検証
+		// queryがそのまま渡されることを検証（パラメータ上書きはドメイン層の責務）
 		if q.SpeedScale != 1.5 {
 			t.Errorf("expected speedScale 1.5, got %f", q.SpeedScale)
 		}
@@ -222,37 +222,25 @@ func TestSynthesize_OverrideParams(t *testing.T) {
 		if q.IntonationScale != 2.0 {
 			t.Errorf("expected intonationScale 2.0, got %f", q.IntonationScale)
 		}
-		// 上書きしていないフィールドは元の値のまま
-		if q.VolumeScale != 1.0 {
-			t.Errorf("expected volumeScale 1.0, got %f", q.VolumeScale)
-		}
 
 		w.Header().Set("Content-Type", "audio/wav")
 		w.Write([]byte("wav"))
 	}))
 	defer server.Close()
 
+	// 既にWithOverridesで上書き済みのqueryを渡す想定
 	query := &entity.AudioQuery{
-		SpeedScale:         1.0,
-		PitchScale:         0.0,
-		IntonationScale:    1.0,
+		SpeedScale:         1.5,
+		PitchScale:         0.5,
+		IntonationScale:    2.0,
 		VolumeScale:        1.0,
 		OutputSamplingRate: 24000,
 	}
 
-	speed := 1.5
-	pitch := 0.5
-	intonation := 2.0
-
 	client := infra.NewVoicevoxClient(server.URL)
-	_, err := client.Synthesize(context.Background(), query, 1, &speed, &pitch, &intonation)
+	_, err := client.Synthesize(context.Background(), query, 1)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
-	}
-
-	// 元のqueryが変更されていないことを確認
-	if query.SpeedScale != 1.0 {
-		t.Errorf("original query should not be modified, speedScale: %f", query.SpeedScale)
 	}
 }
 
@@ -325,7 +313,7 @@ func TestSynthesize_Non200(t *testing.T) {
 	}
 
 	client := infra.NewVoicevoxClient(server.URL)
-	wav, err := client.Synthesize(context.Background(), query, 1, nil, nil, nil)
+	wav, err := client.Synthesize(context.Background(), query, 1)
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}

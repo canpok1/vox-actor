@@ -49,10 +49,8 @@ type mockVoicevoxClient struct {
 }
 
 type synthesizeCallArgs struct {
-	speakerID  int
-	speed      *float64
-	pitch      *float64
-	intonation *float64
+	query     *entity.AudioQuery
+	speakerID int
 }
 
 func (m *mockVoicevoxClient) HealthCheck(_ context.Context) error {
@@ -65,9 +63,9 @@ func (m *mockVoicevoxClient) CreateQuery(_ context.Context, _ string, speakerID 
 	return m.query, m.createQueryErr
 }
 
-func (m *mockVoicevoxClient) Synthesize(_ context.Context, _ *entity.AudioQuery, speakerID int, speed, pitch, intonation *float64) ([]byte, error) {
+func (m *mockVoicevoxClient) Synthesize(_ context.Context, query *entity.AudioQuery, speakerID int) ([]byte, error) {
 	m.synthesizeCalls++
-	m.synthesizeArgs = append(m.synthesizeArgs, synthesizeCallArgs{speakerID: speakerID, speed: speed, pitch: pitch, intonation: intonation})
+	m.synthesizeArgs = append(m.synthesizeArgs, synthesizeCallArgs{query: query, speakerID: speakerID})
 	return m.wavData, m.synthesizeErr
 }
 
@@ -235,14 +233,15 @@ func TestActUsecase_Run_WithOptions(t *testing.T) {
 		t.Fatalf("expected 1 Synthesize call, got: %d", len(client.synthesizeArgs))
 	}
 	args := client.synthesizeArgs[0]
-	if args.speed == nil || *args.speed != 1.5 {
-		t.Errorf("expected speed 1.5, got: %v", args.speed)
+	// WithOverridesにより、queryのフィールドが上書きされている
+	if args.query.SpeedScale != 1.5 {
+		t.Errorf("expected SpeedScale 1.5, got: %f", args.query.SpeedScale)
 	}
-	if args.pitch == nil || *args.pitch != 0.5 {
-		t.Errorf("expected pitch 0.5, got: %v", args.pitch)
+	if args.query.PitchScale != 0.5 {
+		t.Errorf("expected PitchScale 0.5, got: %f", args.query.PitchScale)
 	}
-	if args.intonation == nil || *args.intonation != 1.2 {
-		t.Errorf("expected intonation 1.2, got: %v", args.intonation)
+	if args.query.IntonationScale != 1.2 {
+		t.Errorf("expected IntonationScale 1.2, got: %f", args.query.IntonationScale)
 	}
 }
 
@@ -443,7 +442,7 @@ func (m *cancellingVoicevoxClient) CreateQuery(_ context.Context, _ string, _ in
 	return m.query, nil
 }
 
-func (m *cancellingVoicevoxClient) Synthesize(_ context.Context, _ *entity.AudioQuery, _ int, _, _, _ *float64) ([]byte, error) {
+func (m *cancellingVoicevoxClient) Synthesize(_ context.Context, _ *entity.AudioQuery, _ int) ([]byte, error) {
 	return m.wavData, nil
 }
 
@@ -736,14 +735,15 @@ func TestActUsecase_Run_ScriptEmotionParams(t *testing.T) {
 		t.Fatalf("expected 1 Synthesize call, got %d", len(client.synthesizeArgs))
 	}
 	args := client.synthesizeArgs[0]
-	if args.speed == nil || *args.speed != 1.5 {
-		t.Errorf("expected speed 1.5, got %v", args.speed)
+	// WithOverridesにより、queryのフィールドが上書きされている
+	if args.query.SpeedScale != 1.5 {
+		t.Errorf("expected SpeedScale 1.5, got %f", args.query.SpeedScale)
 	}
-	if args.pitch == nil || *args.pitch != 0.1 {
-		t.Errorf("expected pitch 0.1, got %v", args.pitch)
+	if args.query.PitchScale != 0.1 {
+		t.Errorf("expected PitchScale 0.1, got %f", args.query.PitchScale)
 	}
-	if args.intonation == nil || *args.intonation != 1.8 {
-		t.Errorf("expected intonation 1.8, got %v", args.intonation)
+	if args.query.IntonationScale != 1.8 {
+		t.Errorf("expected IntonationScale 1.8, got %f", args.query.IntonationScale)
 	}
 }
 
@@ -783,8 +783,8 @@ func TestActUsecase_Run_ScriptParamsOverrideGlobal(t *testing.T) {
 	}
 	args := client.synthesizeArgs[0]
 	// スクリプト単位のSpeedScale(0.5)がグローバル(2.0)より優先される
-	if args.speed == nil || *args.speed != 0.5 {
-		t.Errorf("expected speed 0.5 (script override), got %v", args.speed)
+	if args.query.SpeedScale != 0.5 {
+		t.Errorf("expected SpeedScale 0.5 (script override), got %f", args.query.SpeedScale)
 	}
 }
 
@@ -818,8 +818,8 @@ func TestActUsecase_Run_ScriptNoParams_UsesGlobal(t *testing.T) {
 	}
 	args := client.synthesizeArgs[0]
 	// スクリプトにSpeedScaleがないのでグローバル(2.0)が使われる
-	if args.speed == nil || *args.speed != 2.0 {
-		t.Errorf("expected speed 2.0 (global), got %v", args.speed)
+	if args.query.SpeedScale != 2.0 {
+		t.Errorf("expected SpeedScale 2.0 (global), got %f", args.query.SpeedScale)
 	}
 }
 
@@ -870,16 +870,16 @@ func TestActUsecase_Run_MultipleScriptsWithDifferentParams(t *testing.T) {
 	if len(client.synthesizeArgs) != 3 {
 		t.Fatalf("expected 3 Synthesize calls, got %d", len(client.synthesizeArgs))
 	}
-	// a.json: speed=0.8
-	if client.synthesizeArgs[0].speed == nil || *client.synthesizeArgs[0].speed != 0.8 {
-		t.Errorf("expected first speed 0.8, got %v", client.synthesizeArgs[0].speed)
+	// a.json: speed=0.8（WithOverridesでqueryに適用済み）
+	if client.synthesizeArgs[0].query.SpeedScale != 0.8 {
+		t.Errorf("expected first SpeedScale 0.8, got %f", client.synthesizeArgs[0].query.SpeedScale)
 	}
-	// b.txt: speed=nil (no script or global)
-	if client.synthesizeArgs[1].speed != nil {
-		t.Errorf("expected second speed nil, got %v", *client.synthesizeArgs[1].speed)
+	// b.txt: speed未指定（デフォルトのquery値=0.0のまま）
+	if client.synthesizeArgs[1].query.SpeedScale != 0.0 {
+		t.Errorf("expected second SpeedScale 0.0 (default), got %f", client.synthesizeArgs[1].query.SpeedScale)
 	}
 	// c.json: speed=1.5
-	if client.synthesizeArgs[2].speed == nil || *client.synthesizeArgs[2].speed != 1.5 {
-		t.Errorf("expected third speed 1.5, got %v", client.synthesizeArgs[2].speed)
+	if client.synthesizeArgs[2].query.SpeedScale != 1.5 {
+		t.Errorf("expected third SpeedScale 1.5, got %f", client.synthesizeArgs[2].query.SpeedScale)
 	}
 }

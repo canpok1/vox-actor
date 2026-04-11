@@ -155,11 +155,11 @@ func (c *RetryableVoicevoxClient) CreateQuery(ctx context.Context, text string, 
 }
 
 // Synthesize は音声合成を実行し、WAV形式のバイト列を返す。失敗時は指数バックオフでリトライを行う。
-func (c *RetryableVoicevoxClient) Synthesize(ctx context.Context, query *entity.AudioQuery, speakerID int, speed, pitch, intonation *float64) ([]byte, error) {
+func (c *RetryableVoicevoxClient) Synthesize(ctx context.Context, query *entity.AudioQuery, speakerID int) ([]byte, error) {
 	var result []byte
 	err := c.retryWithBackoff(ctx, func() error {
 		var err error
-		result, err = c.inner.Synthesize(ctx, query, speakerID, speed, pitch, intonation)
+		result, err = c.inner.Synthesize(ctx, query, speakerID)
 		return err
 	})
 	return result, err

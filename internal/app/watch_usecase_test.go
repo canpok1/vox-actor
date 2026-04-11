@@ -364,9 +364,9 @@ func TestWatchUsecase_Run_ScriptParamsOverrideGlobal(t *testing.T) {
 	if args.speakerID != 7 {
 		t.Errorf("expected Synthesize speakerID 7, got %d", args.speakerID)
 	}
-	// スクリプト単位のSpeed(0.5)がグローバル(2.0)より優先される
-	if args.speed == nil || *args.speed != 0.5 {
-		t.Errorf("expected speed 0.5 (script override), got %v", args.speed)
+	// スクリプト単位のSpeed(0.5)がグローバル(2.0)より優先される（WithOverridesでqueryに適用済み）
+	if args.query.SpeedScale != 0.5 {
+		t.Errorf("expected SpeedScale 0.5 (script override), got %f", args.query.SpeedScale)
 	}
 }
 
@@ -404,9 +404,9 @@ func TestWatchUsecase_Run_ScriptNoParams_UsesGlobal(t *testing.T) {
 		t.Fatalf("expected 1 Synthesize call, got %d", len(client.synthesizeArgs))
 	}
 	args := client.synthesizeArgs[0]
-	// スクリプトにSpeedScaleがないのでグローバル(2.0)が使われる
-	if args.speed == nil || *args.speed != 2.0 {
-		t.Errorf("expected speed 2.0 (global), got %v", args.speed)
+	// スクリプトにSpeedScaleがないのでグローバル(2.0)が使われる（WithOverridesでqueryに適用済み）
+	if args.query.SpeedScale != 2.0 {
+		t.Errorf("expected SpeedScale 2.0 (global), got %f", args.query.SpeedScale)
 	}
 	// SpeakerIDもデフォルト(3)が使われる
 	if args.speakerID != 3 {

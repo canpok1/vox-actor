@@ -80,14 +80,15 @@ func TestSayUsecase_Run_WithParams(t *testing.T) {
 	if args.speakerID != 5 {
 		t.Errorf("expected speakerID 5, got: %d", args.speakerID)
 	}
-	if args.speed == nil || *args.speed != 1.5 {
-		t.Errorf("expected speed 1.5, got: %v", args.speed)
+	// WithOverridesにより、Synthesizeに渡されるqueryのフィールドが上書きされている
+	if args.query.SpeedScale != 1.5 {
+		t.Errorf("expected SpeedScale 1.5, got: %f", args.query.SpeedScale)
 	}
-	if args.pitch == nil || *args.pitch != 0.5 {
-		t.Errorf("expected pitch 0.5, got: %v", args.pitch)
+	if args.query.PitchScale != 0.5 {
+		t.Errorf("expected PitchScale 0.5, got: %f", args.query.PitchScale)
 	}
-	if args.intonation == nil || *args.intonation != 1.2 {
-		t.Errorf("expected intonation 1.2, got: %v", args.intonation)
+	if args.query.IntonationScale != 1.2 {
+		t.Errorf("expected IntonationScale 1.2, got: %f", args.query.IntonationScale)
 	}
 }
 
