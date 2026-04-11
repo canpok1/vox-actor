@@ -6,8 +6,6 @@ allowed-tools: Bash(gh issue view *), Bash(gh pr list *)
 argument-hint: "<issue-number>"
 ---
 
-Issue $ARGUMENTS の対応状況を確認します。
-
 ## 手順
 
 1. Issue自体の状態を取得する
@@ -40,7 +38,3 @@ Issue $ARGUMENTS の対応状況を確認します。
 - **PR番号**: `ALREADY_DONE` / `IN_PROGRESS` の場合のみ
 - **PR URL**: `ALREADY_DONE` の場合のみ
 
-## 禁止事項
-
-- このスキルは**チェックのみ**を行う。Issueのクローズ、コメント投稿、PR操作などの副作用は一切発生させないこと
-- 副作用が必要な処理（例: `ALREADY_DONE` 時のIssueクローズ）は呼び出し元の責務とする

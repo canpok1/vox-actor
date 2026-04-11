@@ -18,8 +18,8 @@ GitHub Issue $ARGUMENTS を対応します。
   - `PREVIOUSLY_ABANDONED` / `NOT_STARTED`: 次のステップに進む
 2. Issue の内容を把握する
 3. 実装する
-4. `/review` スキルで自己レビュー（コード品質 + ドキュメント整合性チェック）を行う
+4. `review` スキルで自己レビュー（コード品質 + ドキュメント整合性チェック）を行う
 5. `commit-push-pr` スキルでPRを作成する
-6. `/fix-pr` スキルでCI待機・レビュー対応・マージを行う
+6. `fix-pr` スキルでCI待機・レビュー対応・マージを行う
   - 引数にPR番号を渡す
-7. `/retro` スキルで振り返りを行う
+7. `retro` スキルで振り返りを行う
