@@ -105,7 +105,8 @@
     "commit-commands@claude-plugins-official": true,
     "vox-actor-plugin@vox-actor-marketplace": true,
     "base-tools@canpok1-plugins": true,
-    "skill-creator@claude-plugins-official": true
+    "skill-creator@claude-plugins-official": true,
+    "auto-monologue-plugin@vox-actor-marketplace": true
   },
   "extraKnownMarketplaces": {
     "vox-actor-marketplace": {

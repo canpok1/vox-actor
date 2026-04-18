@@ -8,6 +8,11 @@
       "name": "vox-actor-plugin",
       "source": "./plugins/vox-actor-plugin",
       "description": "vox-actorを利用するためのプラグイン"
+    },
+    {
+      "name": "auto-monologue-plugin",
+      "source": "./plugins/auto-monologue-plugin",
+      "description": "独り言を自動的に生成するためのプラグイン"
     }
   ]
 }
