@@ -194,7 +194,10 @@ vox-actor act --verbose script.txt
 
 LLMの作業状況を指定ディレクトリにテキストファイルとして出力し、vox-actorの監視モードで読み上げることで、作業の進捗を音声で把握できます。
 
-claude code向けプラグインを同梱しているので、claude codeでは簡単に導入できます。
+claude code向けプラグインを同梱しているので、claude codeでは簡単に導入できます。同梱プラグインは以下の2種類です。
+
+- `vox-actor-plugin`: 独り言スキル（`/vox-actor-plugin:monologue`）を提供するプラグイン
+- `auto-monologue-plugin`: Stop hookでClaudeに独り言スキルの活用を促すプラグイン（`vox-actor-plugin` と併用することで、作業の区切りで独り言が自動生成されるようになる）
 
 1. 環境変数を設定する。
    ```
@@ -210,15 +213,18 @@ claude code向けプラグインを同梱しているので、claude codeでは�
 3. claude codeにプラグインを導入する。
    ```
    # claude code上で実行
-   /plugin marketplace add canpok1/vox-actor 
-   /plugin install vox-actor-plugin@monologue
+   /plugin marketplace add canpok1/vox-actor
+   /plugin install vox-actor-plugin@vox-actor-marketplace
+   # 自動で独り言を生成したい場合は auto-monologue-plugin も導入する
+   /plugin install auto-monologue-plugin@vox-actor-marketplace
    ```
 
 4. 独り言スキル（monologue）を実行する。
    ```
    # claude code上で実行
-   /monologue
+   /vox-actor-plugin:monologue
    ```
+   `auto-monologue-plugin` を導入している場合は、作業の区切りで自動的に独り言が生成される。
 
 
 ## 開発
