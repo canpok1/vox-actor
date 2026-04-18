@@ -106,7 +106,8 @@
     "vox-actor-plugin@vox-actor-marketplace": true,
     "base-tools@canpok1-plugins": true,
     "skill-creator@claude-plugins-official": true,
-    "auto-monologue-plugin@vox-actor-marketplace": true
+    "auto-monologue-plugin@vox-actor-marketplace": true,
+    "superpowers@claude-plugins-official": true
   },
   "extraKnownMarketplaces": {
     "vox-actor-marketplace": {
