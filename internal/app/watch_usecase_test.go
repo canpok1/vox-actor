@@ -491,7 +491,7 @@ func TestWatchUsecase_Run_DefaultMode_MovesToDoneNotDelete(t *testing.T) {
 	}
 }
 
-func TestWatchUsecase_Run_DeleteMode_LogsFileDeleted(t *testing.T) {
+func TestWatchUsecase_Run_DeleteMode_FileDeletedSuppressedAtInfoLevel(t *testing.T) {
 	reader := &mockScriptReader{
 		scripts: []entity.Script{
 			{Path: "a.txt", Text: "おはよう", IsEmpty: false},
@@ -519,8 +519,41 @@ func TestWatchUsecase_Run_DeleteMode_LogsFileDeleted(t *testing.T) {
 	}
 
 	output := buf.String()
+	if strings.Contains(output, "file deleted") {
+		t.Errorf("expected 'file deleted' NOT in INFO log (demoted to DEBUG), got: %s", output)
+	}
+}
+
+func TestWatchUsecase_Run_DeleteMode_FileDeletedAppearsAtDebugLevel(t *testing.T) {
+	reader := &mockScriptReader{
+		scripts: []entity.Script{
+			{Path: "a.txt", Text: "おはよう", IsEmpty: false},
+		},
+	}
+	client := &mockVoicevoxClient{
+		query:   &entity.AudioQuery{},
+		wavData: []byte("fake-wav"),
+	}
+	player := &mockAudioPlayer{}
+	mover := &mockFileMover{}
+	watcher := &mockDirWatcher{
+		files: []string{"/tmp/watch/a.txt"},
+	}
+
+	var buf bytes.Buffer
+	logger := slog.New(logging.NewHumanHandler(&buf, &logging.HumanHandlerOptions{Level: slog.LevelDebug, NoColor: true}))
+
+	uc := app.NewWatchUsecase(reader, client, player, mover, watcher, app.WithDeleteMode(), app.WithWatchLogger(logger))
+	params := app.WatchParams{Paths: []string{"/tmp/watch"}, SpeakerID: 3}
+
+	err := uc.Run(context.Background(), params)
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	output := buf.String()
 	if !strings.Contains(output, "file deleted") {
-		t.Errorf("expected log to contain 'file deleted', got: %s", output)
+		t.Errorf("expected log to contain 'file deleted' at Debug level, got: %s", output)
 	}
 }
 
@@ -534,7 +567,7 @@ func (w *blockingDirWatcher) Watch(_ context.Context, _ string) (<-chan string, 
 	return w.fileCh, w.errCh
 }
 
-func TestWatchUsecase_Run_FileMovedToDoneLoggedAtInfoLevel(t *testing.T) {
+func TestWatchUsecase_Run_FileMovedToDoneSuppressedAtInfoLevel(t *testing.T) {
 	reader := &mockScriptReader{
 		scripts: []entity.Script{
 			{Path: "a.txt", Text: "おはよう", IsEmpty: false},
@@ -562,12 +595,12 @@ func TestWatchUsecase_Run_FileMovedToDoneLoggedAtInfoLevel(t *testing.T) {
 	}
 
 	output := buf.String()
-	if !strings.Contains(output, "file moved to done") {
-		t.Errorf("expected log to contain 'file moved to done' at Info level, got: %s", output)
+	if strings.Contains(output, "file moved to done") {
+		t.Errorf("expected 'file moved to done' NOT in INFO log (demoted to DEBUG), got: %s", output)
 	}
 }
 
-func TestWatchUsecase_Run_SynthesisCompletedLoggedAtInfoLevel(t *testing.T) {
+func TestWatchUsecase_Run_SynthesisCompletedSuppressedAtInfoLevel(t *testing.T) {
 	reader := &mockScriptReader{
 		scripts: []entity.Script{
 			{Path: "a.txt", Text: "おはよう", IsEmpty: false},
@@ -595,8 +628,115 @@ func TestWatchUsecase_Run_SynthesisCompletedLoggedAtInfoLevel(t *testing.T) {
 	}
 
 	output := buf.String()
-	if !strings.Contains(output, "synthesis completed") {
-		t.Errorf("expected log to contain 'synthesis completed' at Info level, got: %s", output)
+	for _, msg := range []string{"processing script", "synthesis completed", "query created"} {
+		if strings.Contains(output, msg) {
+			t.Errorf("expected %q NOT in INFO log (demoted to DEBUG), got: %s", msg, output)
+		}
+	}
+}
+
+func TestWatchUsecase_Run_PlaybackCompletedAtInfoIncludesProgressAndText(t *testing.T) {
+	reader := &mockScriptReader{
+		scripts: []entity.Script{
+			{Path: "a.txt", Text: "おはよう", IsEmpty: false},
+		},
+	}
+	client := &mockVoicevoxClient{
+		query:   &entity.AudioQuery{},
+		wavData: []byte("fake-wav"),
+	}
+	player := &mockAudioPlayer{}
+	mover := &mockFileMover{}
+	watcher := &mockDirWatcher{
+		files: []string{"/tmp/watch/a.txt"},
+	}
+
+	var buf bytes.Buffer
+	logger := slog.New(logging.NewHumanHandler(&buf, &logging.HumanHandlerOptions{Level: slog.LevelInfo, NoColor: true}))
+
+	uc := app.NewWatchUsecase(reader, client, player, mover, watcher, app.WithWatchLogger(logger))
+	params := app.WatchParams{Paths: []string{"/tmp/watch"}, SpeakerID: 3}
+
+	if err := uc.Run(context.Background(), params); err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	output := buf.String()
+	if !strings.Contains(output, "[1/1] playback completed") {
+		t.Errorf("expected log to contain '[1/1] playback completed', got: %s", output)
+	}
+	if !strings.Contains(output, "text=おはよう") {
+		t.Errorf("expected log to contain 'text=おはよう', got: %s", output)
+	}
+}
+
+func TestWatchUsecase_Run_PlaybackCompletedTruncatesLongTextAndEscapesNewlines(t *testing.T) {
+	longText := "あいうえおかきくけこさし\nすせそたちつ"
+	reader := &mockScriptReader{
+		scripts: []entity.Script{
+			{Path: "a.txt", Text: longText, IsEmpty: false},
+		},
+	}
+	client := &mockVoicevoxClient{
+		query:   &entity.AudioQuery{},
+		wavData: []byte("fake-wav"),
+	}
+	player := &mockAudioPlayer{}
+	mover := &mockFileMover{}
+	watcher := &mockDirWatcher{
+		files: []string{"/tmp/watch/a.txt"},
+	}
+
+	var buf bytes.Buffer
+	logger := slog.New(logging.NewHumanHandler(&buf, &logging.HumanHandlerOptions{Level: slog.LevelInfo, NoColor: true}))
+
+	uc := app.NewWatchUsecase(reader, client, player, mover, watcher, app.WithWatchLogger(logger))
+	params := app.WatchParams{Paths: []string{"/tmp/watch"}, SpeakerID: 3}
+
+	if err := uc.Run(context.Background(), params); err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	output := buf.String()
+	want := `text=あいうえおかきくけこさし\nすせ...`
+	if !strings.Contains(output, want) {
+		t.Errorf("expected log to contain %q, got: %s", want, output)
+	}
+}
+
+func TestWatchUsecase_Run_PlaybackCompletedSkipsEmptyAndNumeratesContiguously(t *testing.T) {
+	reader := &mockScriptReader{
+		scripts: []entity.Script{
+			{Path: "1.txt", Text: "first", IsEmpty: false},
+			{Path: "2.txt", Text: "", IsEmpty: true},
+			{Path: "3.txt", Text: "third", IsEmpty: false},
+		},
+	}
+	client := &mockVoicevoxClient{
+		query:   &entity.AudioQuery{},
+		wavData: []byte("fake-wav"),
+	}
+	player := &mockAudioPlayer{}
+	mover := &mockFileMover{}
+	watcher := &mockDirWatcher{
+		files: []string{"/tmp/watch/a.txt"},
+	}
+
+	var buf bytes.Buffer
+	logger := slog.New(logging.NewHumanHandler(&buf, &logging.HumanHandlerOptions{Level: slog.LevelInfo, NoColor: true}))
+
+	uc := app.NewWatchUsecase(reader, client, player, mover, watcher, app.WithWatchLogger(logger))
+	params := app.WatchParams{Paths: []string{"/tmp/watch"}, SpeakerID: 3}
+
+	if err := uc.Run(context.Background(), params); err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	output := buf.String()
+	for _, expected := range []string{"[1/2] playback completed", "[2/2] playback completed"} {
+		if !strings.Contains(output, expected) {
+			t.Errorf("expected log to contain %q, got: %s", expected, output)
+		}
 	}
 }
 
