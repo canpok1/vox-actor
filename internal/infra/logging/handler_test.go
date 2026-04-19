@@ -251,11 +251,11 @@ func TestHumanHandler_Handle_DryRunPrefix(t *testing.T) {
 	})
 	logger := slog.New(h)
 
-	logger.Info("would synthesize and play", "path", "script.json", "text", "こんにちは")
+	logger.Info("playback completed", "path", "script.json", "text", "こんにちは")
 
 	output := buf.String()
 	// 時刻の直後に [dry run] プレフィックスが挿入される
-	if !strings.Contains(output, "] [dry run] would synthesize and play") {
+	if !strings.Contains(output, "] [dry run] playback completed") {
 		t.Errorf("expected '[dry run]' prefix after timestamp, got: %q", output)
 	}
 	// 属性も通常通り出力される

@@ -216,8 +216,10 @@ func (u *WatchUsecase) processFile(ctx context.Context, path string, params Watc
 		pitch := script.ResolvePitch(params.Pitch)
 		intonation := script.ResolveIntonation(params.Intonation)
 
+		playbackMsg := fmt.Sprintf("[%d/%d] playback completed", current, total)
 		if params.DryRun {
-			logDryRunSynthesize(u.logger, script.Path, script.Text, speakerID, speed, pitch, intonation)
+			attrs := dryRunPlaybackAttrs(script.Text, speakerID, speed, pitch, intonation)
+			u.logger.Info(playbackMsg, attrs...)
 			continue
 		}
 
@@ -240,6 +242,6 @@ func (u *WatchUsecase) processFile(ctx context.Context, path string, params Watc
 			u.logger.Error("play error (skipping script)", "path", script.Path, "error", err)
 			continue
 		}
-		u.logger.Info(fmt.Sprintf("[%d/%d] playback completed", current, total), "text", truncateAndEscapeText(script.Text))
+		u.logger.Info(playbackMsg, "text", truncateAndEscapeText(script.Text))
 	}
 }
