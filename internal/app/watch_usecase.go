@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"path/filepath"
 	"sync"
@@ -170,13 +171,13 @@ func (u *WatchUsecase) processFile(ctx context.Context, path string, params Watc
 			if delErr := u.mover.Delete(path); delErr != nil {
 				u.logger.Error("delete error", "path", path, "error", delErr)
 			} else {
-				u.logger.Info("file deleted", "path", path)
+				u.logger.Debug("file deleted", "path", path)
 			}
 		} else {
 			if moveErr := u.mover.MoveToDone(path); moveErr != nil {
 				u.logger.Error("move error", "path", path, "error", moveErr)
 			} else {
-				u.logger.Info("file moved to done", "path", path)
+				u.logger.Debug("file moved to done", "path", path)
 			}
 		}
 	}()
@@ -187,13 +188,22 @@ func (u *WatchUsecase) processFile(ctx context.Context, path string, params Watc
 		return
 	}
 
+	total := 0
+	for _, s := range scripts {
+		if !s.IsEmpty {
+			total++
+		}
+	}
+
+	current := 0
 	for _, script := range scripts {
 		if script.IsEmpty {
 			u.logger.Debug("skipping empty script", "path", script.Path)
 			continue
 		}
 
-		u.logger.Info("processing script", "path", script.Path)
+		current++
+		u.logger.Debug("processing script", "path", script.Path)
 
 		// セリフ単位パラメータがあればグローバルパラメータより優先する
 		speakerID := script.ResolveSpeakerID(params.SpeakerID)
@@ -214,12 +224,12 @@ func (u *WatchUsecase) processFile(ctx context.Context, path string, params Watc
 			u.logger.Error("synthesize error (skipping script)", "path", script.Path, "error", err)
 			continue
 		}
-		u.logger.Info("synthesis completed", "path", script.Path, "wavSize", len(wavData))
+		u.logger.Debug("synthesis completed", "path", script.Path, "wavSize", len(wavData))
 
 		if err := u.player.Play(ctx, wavData); err != nil {
 			u.logger.Error("play error (skipping script)", "path", script.Path, "error", err)
 			continue
 		}
-		u.logger.Info("playback completed", "path", script.Path)
+		u.logger.Info(fmt.Sprintf("[%d/%d] playback completed", current, total), "text", truncateAndEscapeText(script.Text))
 	}
 }
