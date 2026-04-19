@@ -1,7 +1,11 @@
 #!/bin/bash
 if [ -z "$VOX_ACTOR_WORKSPACE" ]; then
-  echo "[ERROR] 環境変数 'VOX_ACTOR_WORKSPACE' が設定されていません。"
-  exit 1
+  GIT_COMMON_DIR=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)
+  if [ -z "$GIT_COMMON_DIR" ]; then
+    echo "[ERROR] 環境変数 'VOX_ACTOR_WORKSPACE' が設定されておらず、gitリポジトリ外のためデフォルト出力先を決定できません。"
+    exit 1
+  fi
+  VOX_ACTOR_WORKSPACE="$(dirname "$GIT_COMMON_DIR")/.tmp/notify"
 fi
 
 PROBABILITY="$1"
