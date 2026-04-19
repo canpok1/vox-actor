@@ -80,8 +80,8 @@ func TestWatchUsecase_Run_ProcessesFilesFromWatcher(t *testing.T) {
 	}
 
 	uc := app.NewWatchUsecase(reader, client, player, mover, watcher)
-	params := app.ActParams{
-		Path:      "/tmp/watch",
+	params := app.WatchParams{
+		Paths:     []string{"/tmp/watch"},
 		SpeakerID: 3,
 	}
 
@@ -115,8 +115,8 @@ func TestWatchUsecase_Run_MovesFileToDoneAfterProcessing(t *testing.T) {
 	}
 
 	uc := app.NewWatchUsecase(reader, client, player, mover, watcher)
-	params := app.ActParams{
-		Path:      "/tmp/watch",
+	params := app.WatchParams{
+		Paths:     []string{"/tmp/watch"},
 		SpeakerID: 3,
 	}
 
@@ -149,8 +149,8 @@ func TestWatchUsecase_Run_EmptyFileSkippedAndMovedToDone(t *testing.T) {
 	}
 
 	uc := app.NewWatchUsecase(reader, client, player, mover, watcher)
-	params := app.ActParams{
-		Path:      "/tmp/watch",
+	params := app.WatchParams{
+		Paths:     []string{"/tmp/watch"},
 		SpeakerID: 3,
 	}
 
@@ -183,8 +183,8 @@ func TestWatchUsecase_Run_ReadError_SkipsAndMovesToDone(t *testing.T) {
 	}
 
 	uc := app.NewWatchUsecase(reader, client, player, mover, watcher)
-	params := app.ActParams{
-		Path:      "/tmp/watch",
+	params := app.WatchParams{
+		Paths:     []string{"/tmp/watch"},
 		SpeakerID: 3,
 	}
 
@@ -218,8 +218,8 @@ func TestWatchUsecase_Run_MultipleFiles_ProcessedInOrder(t *testing.T) {
 	}
 
 	uc := app.NewWatchUsecase(reader, client, player, mover, watcher)
-	params := app.ActParams{
-		Path:      "/tmp/watch",
+	params := app.WatchParams{
+		Paths:     []string{"/tmp/watch"},
 		SpeakerID: 3,
 	}
 
@@ -259,7 +259,7 @@ func TestWatchUsecase_Run_HealthCheckError(t *testing.T) {
 	watcher := &mockDirWatcher{}
 
 	uc := app.NewWatchUsecase(reader, client, player, mover, watcher)
-	params := app.ActParams{Path: "/tmp/watch", SpeakerID: 3}
+	params := app.WatchParams{Paths: []string{"/tmp/watch"}, SpeakerID: 3}
 
 	err := uc.Run(context.Background(), params)
 	if err == nil {
@@ -288,7 +288,7 @@ func TestWatchUsecase_Run_ContextCancelled_StopsProcessing(t *testing.T) {
 	mover := &mockFileMover{}
 
 	uc := app.NewWatchUsecase(reader, client, player, mover, customWatcher)
-	params := app.ActParams{Path: "/tmp/watch", SpeakerID: 3}
+	params := app.WatchParams{Paths: []string{"/tmp/watch"}, SpeakerID: 3}
 
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -338,8 +338,8 @@ func TestWatchUsecase_Run_ScriptParamsOverrideGlobal(t *testing.T) {
 	}
 
 	uc := app.NewWatchUsecase(reader, client, player, mover, watcher)
-	params := app.ActParams{
-		Path:      "/tmp/watch",
+	params := app.WatchParams{
+		Paths:     []string{"/tmp/watch"},
 		SpeakerID: 3,
 		Speed:     &globalSpeed,
 	}
@@ -390,8 +390,8 @@ func TestWatchUsecase_Run_ScriptNoParams_UsesGlobal(t *testing.T) {
 	}
 
 	uc := app.NewWatchUsecase(reader, client, player, mover, watcher)
-	params := app.ActParams{
-		Path:      "/tmp/watch",
+	params := app.WatchParams{
+		Paths:     []string{"/tmp/watch"},
 		SpeakerID: 3,
 		Speed:     &globalSpeed,
 	}
@@ -432,8 +432,8 @@ func TestWatchUsecase_Run_DeleteMode_DeletesFileInsteadOfMove(t *testing.T) {
 	}
 
 	uc := app.NewWatchUsecase(reader, client, player, mover, watcher, app.WithDeleteMode())
-	params := app.ActParams{
-		Path:      "/tmp/watch",
+	params := app.WatchParams{
+		Paths:     []string{"/tmp/watch"},
 		SpeakerID: 3,
 	}
 
@@ -472,8 +472,8 @@ func TestWatchUsecase_Run_DefaultMode_MovesToDoneNotDelete(t *testing.T) {
 
 	// WithDeleteModeなしで作成
 	uc := app.NewWatchUsecase(reader, client, player, mover, watcher)
-	params := app.ActParams{
-		Path:      "/tmp/watch",
+	params := app.WatchParams{
+		Paths:     []string{"/tmp/watch"},
 		SpeakerID: 3,
 	}
 
@@ -511,7 +511,7 @@ func TestWatchUsecase_Run_DeleteMode_LogsFileDeleted(t *testing.T) {
 	logger := slog.New(logging.NewHumanHandler(&buf, &logging.HumanHandlerOptions{Level: slog.LevelInfo, NoColor: true}))
 
 	uc := app.NewWatchUsecase(reader, client, player, mover, watcher, app.WithDeleteMode(), app.WithWatchLogger(logger))
-	params := app.ActParams{Path: "/tmp/watch", SpeakerID: 3}
+	params := app.WatchParams{Paths: []string{"/tmp/watch"}, SpeakerID: 3}
 
 	err := uc.Run(context.Background(), params)
 	if err != nil {
@@ -554,7 +554,7 @@ func TestWatchUsecase_Run_FileMovedToDoneLoggedAtInfoLevel(t *testing.T) {
 	logger := slog.New(logging.NewHumanHandler(&buf, &logging.HumanHandlerOptions{Level: slog.LevelInfo, NoColor: true}))
 
 	uc := app.NewWatchUsecase(reader, client, player, mover, watcher, app.WithWatchLogger(logger))
-	params := app.ActParams{Path: "/tmp/watch", SpeakerID: 3}
+	params := app.WatchParams{Paths: []string{"/tmp/watch"}, SpeakerID: 3}
 
 	err := uc.Run(context.Background(), params)
 	if err != nil {
@@ -587,7 +587,7 @@ func TestWatchUsecase_Run_SynthesisCompletedLoggedAtInfoLevel(t *testing.T) {
 	logger := slog.New(logging.NewHumanHandler(&buf, &logging.HumanHandlerOptions{Level: slog.LevelInfo, NoColor: true}))
 
 	uc := app.NewWatchUsecase(reader, client, player, mover, watcher, app.WithWatchLogger(logger))
-	params := app.ActParams{Path: "/tmp/watch", SpeakerID: 3}
+	params := app.WatchParams{Paths: []string{"/tmp/watch"}, SpeakerID: 3}
 
 	err := uc.Run(context.Background(), params)
 	if err != nil {
@@ -620,8 +620,8 @@ func TestWatchUsecase_Run_LogsProcessingStatus(t *testing.T) {
 	logger := slog.New(logging.NewHumanHandler(&buf, &logging.HumanHandlerOptions{Level: slog.LevelInfo, NoColor: true}))
 
 	uc := app.NewWatchUsecase(reader, client, player, mover, watcher, app.WithWatchLogger(logger))
-	params := app.ActParams{
-		Path:      "/tmp/watch",
+	params := app.WatchParams{
+		Paths:     []string{"/tmp/watch"},
 		SpeakerID: 3,
 	}
 
@@ -660,8 +660,8 @@ func TestWatchUsecase_Run_WatcherError_LoggedViaLogger(t *testing.T) {
 	logger := slog.New(logging.NewHumanHandler(&buf, &logging.HumanHandlerOptions{Level: slog.LevelInfo, NoColor: true}))
 
 	uc := app.NewWatchUsecase(reader, client, player, mover, customWatcher, app.WithWatchLogger(logger))
-	params := app.ActParams{
-		Path:      "/tmp/watch",
+	params := app.WatchParams{
+		Paths:     []string{"/tmp/watch"},
 		SpeakerID: 3,
 	}
 
@@ -698,4 +698,162 @@ func (w *errorThenFileWatcher) Watch(_ context.Context, _ string) (<-chan string
 	}()
 
 	return fileCh, errCh
+}
+
+// perPathDirWatcher は呼ばれた dir に応じて異なるファイルを返すウォッチャー。
+type perPathDirWatcher struct {
+	filesByPath map[string][]string
+	errsByPath  map[string][]error
+}
+
+func (w *perPathDirWatcher) Watch(_ context.Context, dir string) (<-chan string, <-chan error) {
+	files := w.filesByPath[dir]
+	errs := w.errsByPath[dir]
+	fileCh := make(chan string, len(files))
+	errCh := make(chan error, len(errs))
+	for _, f := range files {
+		fileCh <- f
+	}
+	for _, e := range errs {
+		errCh <- e
+	}
+	close(fileCh)
+	close(errCh)
+	return fileCh, errCh
+}
+
+func TestWatchUsecase_Run_MultiplePaths_FanIn(t *testing.T) {
+	reader := &mockScriptReader{
+		scripts: []entity.Script{
+			{Path: "any.txt", Text: "こんにちは", IsEmpty: false},
+		},
+	}
+	client := &mockVoicevoxClient{
+		query:   &entity.AudioQuery{},
+		wavData: []byte("fake-wav"),
+	}
+	player := &mockAudioPlayer{}
+	mover := &mockFileMover{}
+	watcher := &perPathDirWatcher{
+		filesByPath: map[string][]string{
+			"/tmp/a": {"/tmp/a/1.txt", "/tmp/a/2.txt"},
+			"/tmp/b": {"/tmp/b/1.txt"},
+		},
+	}
+
+	uc := app.NewWatchUsecase(reader, client, player, mover, watcher)
+	params := app.WatchParams{
+		Paths:     []string{"/tmp/a", "/tmp/b"},
+		SpeakerID: 3,
+	}
+
+	if err := uc.Run(context.Background(), params); err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	if player.playCalls != 3 {
+		t.Errorf("expected 3 Play calls across both dirs, got: %d", player.playCalls)
+	}
+	if len(mover.movedFiles) != 3 {
+		t.Errorf("expected 3 files moved to done, got: %d", len(mover.movedFiles))
+	}
+
+	moved := make(map[string]bool)
+	for _, p := range mover.movedFiles {
+		moved[p] = true
+	}
+	for _, want := range []string{"/tmp/a/1.txt", "/tmp/a/2.txt", "/tmp/b/1.txt"} {
+		if !moved[want] {
+			t.Errorf("expected %s to be processed, missing: %v", want, mover.movedFiles)
+		}
+	}
+}
+
+func TestWatchUsecase_Run_DuplicatePaths_LogsWarningAndMerges(t *testing.T) {
+	reader := &mockScriptReader{
+		scripts: []entity.Script{
+			{Path: "any.txt", Text: "こんにちは", IsEmpty: false},
+		},
+	}
+	client := &mockVoicevoxClient{
+		query:   &entity.AudioQuery{},
+		wavData: []byte("fake-wav"),
+	}
+	player := &mockAudioPlayer{}
+	mover := &mockFileMover{}
+	watcher := &perPathDirWatcher{
+		filesByPath: map[string][]string{
+			"/tmp/a": {"/tmp/a/1.txt"},
+		},
+	}
+
+	var buf bytes.Buffer
+	logger := slog.New(logging.NewHumanHandler(&buf, &logging.HumanHandlerOptions{Level: slog.LevelInfo, NoColor: true}))
+
+	uc := app.NewWatchUsecase(reader, client, player, mover, watcher, app.WithWatchLogger(logger))
+	params := app.WatchParams{
+		Paths:     []string{"/tmp/a", "/tmp/a"},
+		SpeakerID: 3,
+	}
+
+	if err := uc.Run(context.Background(), params); err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	// 重複指定時は1回だけ監視される
+	if player.playCalls != 1 {
+		t.Errorf("expected 1 Play call (duplicate paths merged), got: %d", player.playCalls)
+	}
+
+	output := buf.String()
+	if !strings.Contains(output, "duplicate watch path") {
+		t.Errorf("expected warning log for duplicate path, got: %s", output)
+	}
+}
+
+func TestWatchUsecase_Run_OneWatcherError_OthersContinue(t *testing.T) {
+	reader := &mockScriptReader{
+		scripts: []entity.Script{
+			{Path: "any.txt", Text: "こんにちは", IsEmpty: false},
+		},
+	}
+	client := &mockVoicevoxClient{
+		query:   &entity.AudioQuery{},
+		wavData: []byte("fake-wav"),
+	}
+	player := &mockAudioPlayer{}
+	mover := &mockFileMover{}
+	watcher := &perPathDirWatcher{
+		filesByPath: map[string][]string{
+			"/tmp/a": {"/tmp/a/1.txt"},
+			"/tmp/b": nil,
+		},
+		errsByPath: map[string][]error{
+			"/tmp/b": {errors.New("bad watcher for b")},
+		},
+	}
+
+	var buf bytes.Buffer
+	logger := slog.New(logging.NewHumanHandler(&buf, &logging.HumanHandlerOptions{Level: slog.LevelInfo, NoColor: true}))
+
+	uc := app.NewWatchUsecase(reader, client, player, mover, watcher, app.WithWatchLogger(logger))
+	params := app.WatchParams{
+		Paths:     []string{"/tmp/a", "/tmp/b"},
+		SpeakerID: 3,
+	}
+
+	if err := uc.Run(context.Background(), params); err != nil {
+		t.Fatalf("expected no error (watcher errors should be logged), got: %v", err)
+	}
+
+	// /tmp/a のファイルは処理される
+	if player.playCalls != 1 {
+		t.Errorf("expected 1 Play call, got: %d", player.playCalls)
+	}
+
+	// エラーログが出力される
+	output := buf.String()
+	if !strings.Contains(output, "bad watcher for b") {
+		t.Errorf("expected watcher error log, got: %s", output)
+	}
 }

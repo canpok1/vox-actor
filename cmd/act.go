@@ -2,15 +2,12 @@ package cmd
 
 import (
 	"fmt"
-	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
 
 	"github.com/canpok1/vox-actor/internal/app"
-	"github.com/canpok1/vox-actor/internal/infra/logging"
 	"github.com/spf13/cobra"
-	"golang.org/x/term"
 )
 
 // ActDeps はactコマンドの依存を保持する。
@@ -72,39 +69,20 @@ func runAct(cmd *cobra.Command, args []string, deps *ActDeps) error {
 		return fmt.Errorf("act command dependencies are not initialized")
 	}
 
-	// シグナルハンドリング: SIGINT/SIGTERM受信時にcontextをキャンセルする
 	ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	verbose, _ := cmd.Flags().GetBool("verbose")
 	engineURL, _ := cmd.Flags().GetString("engine-url")
 	speakerID, _ := cmd.Flags().GetInt("speaker")
 	speed, _ := cmd.Flags().GetFloat64("speed")
 	pitch, _ := cmd.Flags().GetFloat64("pitch")
 	intonation, _ := cmd.Flags().GetFloat64("intonation")
 
-	// ログレベルの設定: --verbose 指定時は Debug、通常時は Info
-	logLevel := slog.LevelInfo
-	if verbose {
-		logLevel = slog.LevelDebug
-	}
-	noColor := !term.IsTerminal(int(os.Stderr.Fd())) || os.Getenv("NO_COLOR") != ""
-	logger := slog.New(logging.NewHumanHandler(os.Stderr, &logging.HumanHandlerOptions{
-		Level:   logLevel,
-		NoColor: noColor,
-	}))
+	logger := buildLoggerFromFlags(cmd)
 
 	client := deps.ClientFactory(engineURL)
 	if client == nil {
 		return fmt.Errorf("failed to create VoicevoxClient for %s", engineURL)
-	}
-
-	params := app.ActParams{
-		Path:       args[0],
-		SpeakerID:  speakerID,
-		Speed:      &speed,
-		Pitch:      &pitch,
-		Intonation: &intonation,
 	}
 
 	if watch || watchDelete {
@@ -117,9 +95,21 @@ func runAct(cmd *cobra.Command, args []string, deps *ActDeps) error {
 			opts = append(opts, app.WithDeleteMode())
 		}
 		uc := app.NewWatchUsecase(deps.Reader, client, deps.Player, deps.Mover, watcher, opts...)
-		return uc.Run(ctx, params)
+		return uc.Run(ctx, app.WatchParams{
+			Paths:      []string{args[0]},
+			SpeakerID:  speakerID,
+			Speed:      &speed,
+			Pitch:      &pitch,
+			Intonation: &intonation,
+		})
 	}
 
 	uc := app.NewActUsecase(deps.Reader, client, deps.Player, app.WithLogger(logger))
-	return uc.Run(ctx, params)
+	return uc.Run(ctx, app.ActParams{
+		Path:       args[0],
+		SpeakerID:  speakerID,
+		Speed:      &speed,
+		Pitch:      &pitch,
+		Intonation: &intonation,
+	})
 }

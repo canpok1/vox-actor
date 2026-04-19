@@ -77,7 +77,7 @@ vox-actor act [options] <path>
 
 * `.json` 単一台本モード（感情制御パラメータの JSON 指定）
 * `.jsonl` 朗読劇モード
-* 監視モード（`--watch`）
+* 監視モード（`act --watch` による単一ディレクトリ監視、`watch` による複数ディレクトリ監視）
 * 環境変数による設定（`VOX_ENGINE_URL`, `VOX_SPEAKER`）
 * `--verbose` による詳細ログ
 * 処理中のエンジン接続リトライ

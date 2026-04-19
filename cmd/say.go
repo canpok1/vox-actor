@@ -2,15 +2,12 @@ package cmd
 
 import (
 	"fmt"
-	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
 
 	"github.com/canpok1/vox-actor/internal/app"
-	"github.com/canpok1/vox-actor/internal/infra/logging"
 	"github.com/spf13/cobra"
-	"golang.org/x/term"
 )
 
 // SayDeps はsayコマンドの依存を保持する。
@@ -45,26 +42,16 @@ func runSay(cmd *cobra.Command, args []string, deps *SayDeps) error {
 		return fmt.Errorf("say command dependencies are not initialized")
 	}
 
-	// シグナルハンドリング: SIGINT/SIGTERM受信時にcontextをキャンセルする
 	ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	verbose, _ := cmd.Flags().GetBool("verbose")
 	engineURL, _ := cmd.Flags().GetString("engine-url")
 	speakerID, _ := cmd.Flags().GetInt("speaker")
 	speed, _ := cmd.Flags().GetFloat64("speed")
 	pitch, _ := cmd.Flags().GetFloat64("pitch")
 	intonation, _ := cmd.Flags().GetFloat64("intonation")
 
-	logLevel := slog.LevelInfo
-	if verbose {
-		logLevel = slog.LevelDebug
-	}
-	noColor := !term.IsTerminal(int(os.Stderr.Fd())) || os.Getenv("NO_COLOR") != ""
-	logger := slog.New(logging.NewHumanHandler(os.Stderr, &logging.HumanHandlerOptions{
-		Level:   logLevel,
-		NoColor: noColor,
-	}))
+	logger := buildLoggerFromFlags(cmd)
 
 	client := deps.ClientFactory(engineURL)
 	if client == nil {
