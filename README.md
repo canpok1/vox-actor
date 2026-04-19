@@ -259,11 +259,11 @@ vox-actor watch --dry-run /path/to/watch-dir
 |---|---|---|
 | 読み上げ方式 | `vox-actor say` をその場で直接呼び出す | テキスト等をファイルに書き出し、別プロセスの `vox-actor watch` が読み上げる |
 | 監視プロセス | 不要 | `vox-actor watch` の常駐が必要 |
-| ファイル出力先 | エラーログのみ（`$VOX_ACTOR_WORKSPACE/monologue-errors.log`） | 通知ファイル（`$VOX_ACTOR_WORKSPACE/notify_*.json`）＋エラーログ |
+| ファイル出力先 | エラーログのみ（`$VOX_ACTOR_WORKSPACE/monologue-errors.log`） | 通知ファイル（`$VOX_ACTOR_WORKSPACE/queue/notify_*.json`）＋エラーログ |
 | 同時呼び出し時 | 並列再生 | 検知順に逐次再生 |
 | 前提 | `vox-actor` コマンドが `PATH` 上にある | claude code 側と `vox-actor watch` 側で `VOX_ACTOR_WORKSPACE` を共有 |
 
-> `VOX_ACTOR_WORKSPACE` 未指定時は `<gitリポジトリ直下>/.tmp/notify` がデフォルト出力先として使われる（gitリポジトリ外では必須）。`file` モードでホストとLLM実行環境を分ける場合は、双方から参照可能な共有パスを明示的に指定する。
+> `VOX_ACTOR_WORKSPACE` は vox-actor 関連ファイルのルートディレクトリを指す（配下に `queue/` と `monologue-errors.log` が置かれる）。未指定時のデフォルトは gitリポジトリ内なら `<gitリポジトリ直下>/.vox-actor`、gitリポジトリ外なら `$PWD/.vox-actor`。`file` モードでホストとLLM実行環境を分ける場合は、双方から参照可能な共有パスを明示的に指定する。
 
 モードは `VOX_ACTOR_MONOLOGUE_MODE` 環境変数で明示するか、未設定時は `vox-actor` コマンドの有無で自動判定されます（あり → `direct`、なし → `file`）。
 
@@ -271,9 +271,10 @@ vox-actor watch --dry-run /path/to/watch-dir
 
 1. **ホスト側で監視プロセスを常駐させる**
    ```bash
-   # テキストファイルの受け渡し先ディレクトリを指定
+   # vox-actor 関連ファイルのルートディレクトリを指定
    export VOX_ACTOR_WORKSPACE=/path/to/shared/directory
-   vox-actor watch "$VOX_ACTOR_WORKSPACE"
+   # 通知ファイルは $VOX_ACTOR_WORKSPACE/queue/ に配置されるためそこを監視する
+   vox-actor watch "$VOX_ACTOR_WORKSPACE/queue"
    ```
 
 2. **claude code 側で `file` モードを明示し、共有ディレクトリを指定する**

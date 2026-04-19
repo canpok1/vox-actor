@@ -68,8 +68,10 @@ ${CLAUDE_PLUGIN_ROOT}/skills/monologue/scripts/monologue.sh 通知確率 "（キ
 
 通知の実行に使用する `${CLAUDE_PLUGIN_ROOT}/skills/monologue/scripts/monologue.sh` は以下の前提条件を必要とする:
 
-- **環境変数 `VOX_ACTOR_WORKSPACE`**: 通知ファイルやエラーログの出力先ディレクトリを指定する。未設定の場合はgitリポジトリ直下の `.tmp/notify` がデフォルト出力先として使用される。gitリポジトリ外かつ未設定の場合はエラー終了する
-- **出力先ディレクトリ**: `${VOX_ACTOR_WORKSPACE}` またはデフォルトの `<gitリポジトリ直下>/.tmp/notify`。ディレクトリが存在しない場合はスクリプトが自動作成する
+- **環境変数 `VOX_ACTOR_WORKSPACE`**: vox-actor関連ファイルのルートディレクトリを指定する。配下に `queue/`（fileモードの通知JSON出力先）および `monologue-errors.log`（directモードのエラーログ）が置かれる。未設定の場合のデフォルト値は以下のとおり
+  - gitリポジトリ内: `<gitリポジトリ直下>/.vox-actor`
+  - gitリポジトリ外: `$PWD/.vox-actor`
+- **出力先ディレクトリ**: 上記のルートディレクトリおよび配下の `queue/` はスクリプトが必要に応じて自動作成する
 
 ### 通知モード
 
@@ -89,7 +91,7 @@ ${CLAUDE_PLUGIN_ROOT}/skills/monologue/scripts/monologue.sh 通知確率 "（キ
 
 #### `file` モード
 
-`${VOX_ACTOR_WORKSPACE}` に通知ファイルを書き出す。ファイル名は `notify_{ミリ秒タイムスタンプ}.json`、形式は `{"speaker": スピーカーID, "text": "セリフ", "speedScale": 話速}`。外部の通知監視プロセス（`vox-actor watch` 等）がこのファイルを検知して読み上げる
+`${VOX_ACTOR_WORKSPACE}/queue/` に通知ファイルを書き出す。ファイル名は `notify_{ミリ秒タイムスタンプ}.json`、形式は `{"speaker": スピーカーID, "text": "セリフ", "speedScale": 話速}`。外部の通知監視プロセス（`vox-actor watch` 等）はこの `queue/` ディレクトリを監視対象として検知・読み上げする
 
 ## キャラクター設定ファイルについて
 
