@@ -15,9 +15,9 @@
   - Docker版: `docker run --rm -p 50021:50021 voicevox/voicevox_engine:latest`
 - Go 1.26.1 以上（ソースからビルドする場合のみ）
 
-## 🚀 クイックスタート（LLM連携フロー）
+## 🚀 クイックスタート
 
-claude code で作業の区切りごとに独り言を読み上げさせる最短手順です。`vox-actor` コマンドが `PATH` 上にある環境では `direct` モードで動作し、`vox-actor watch` の常駐や `VOX_ACTOR_WORKSPACE` の設定は不要です。
+claude code で作業の区切りごとに独り言を読み上げさせる最短手順です。
 
 1. **vox-actorをインストールする（Homebrew）**
 
@@ -40,14 +40,88 @@ claude code で作業の区切りごとに独り言を読み上げさせる最�
 
 3. **作業の区切りで自動的に独り言が読み上げられる**
 
-   `auto-monologue-plugin` を導入していれば、claude code の作業の区切りごとに自動で独り言が生成・読み上げされます。手動で呼び出す場合は `/vox-actor-plugin:monologue` を実行します。概念や仕様をキャラクターに解説してもらいたい場合は `/vox-actor-plugin:explain <トピック>` を実行すると、複数セリフの台本が生成されて音声で読み上げられます。
+   `auto-monologue-plugin` を導入していれば、claude code の作業の区切りごとに自動で独り言が生成・読み上げされます。手動で呼び出す場合は `/vox-actor-plugin:monologue` を、キャラクターに概念を解説させたい場合は `/vox-actor-plugin:explain <トピック>` を実行します。
 
-> **💡 リモート環境で使う場合や複数セッションの音声を逐次再生したい場合**
-> `direct` モードは同時呼び出し時に音声が並列再生されます。ホストとclaude code実行環境が分かれている場合や、逐次再生したい場合は[🔀 高度な利用（リモート環境・監視モード）](#-高度な利用リモート環境監視モード)を参照してください。
+リモート環境での利用や複数セッションの音声を逐次再生したい場合は[高度な利用](#-高度な利用リモート環境監視モード)を参照してください。
 
-## 🛠 その他の使い方
+## 🎯 できること（概要）
 
-LLM連携を使わず、CLIとして単体で使う場合の例です。
+vox-actor は **CLI** と **claude code プラグイン／スキル** の 2 系統の使い方があります。
+
+### CLI
+
+`vox-actor` コマンドを直接呼び出してテキストや台本ファイルを読み上げる使い方です。
+
+- `vox-actor say <text>`: コマンドライン引数のテキストを直接読み上げる
+- `vox-actor act <path>`: テキストファイル／JSON台本／JSONL台本／ディレクトリを読み上げる
+- `vox-actor watch <dir1> [<dir2> ...]`: 1つ以上のディレクトリを並列監視し、配置されたファイルを検知順に逐次再生する
+
+詳細は [CLIリファレンス](#-cliリファレンス) を参照してください。
+
+### claude code プラグイン／スキル
+
+claude code から `/vox-actor-plugin:<skill>` 形式で呼び出すスキルです。LLM が生成したセリフをキャラクターになりきって読み上げます。
+
+- `/vox-actor-plugin:monologue`: 作業開始／終了／想定外のことが起こった時など、節目のキャラクターの一言独り言
+- `/vox-actor-plugin:explain <トピック>`: 指定したトピックを冒頭→本題→まとめの流れで、複数セリフのJSONL台本としてキャラクターに解説させる
+
+詳細は [プラグイン／スキルリファレンス](#-プラグインスキルリファレンス) を参照してください。
+
+### 使い分け指針
+
+| 用途 | 使うもの |
+|------|---------|
+| 手元のテキストや台本ファイルを即座に読み上げたい | CLI（`say` / `act`） |
+| 監視ディレクトリに配置されたファイルを逐次再生したい | CLI（`watch`） |
+| claude code の作業フローに読み上げを組み込みたい | プラグイン／スキル |
+| キャラクターになりきった独り言や解説を生成したい | プラグイン／スキル |
+
+## 📦 インストール方法
+
+お好みの方法でインストールできます。
+
+- **Homebrew（macOS/Linux）**
+   ```bash
+   brew tap canpok1/tap
+   brew install --cask vox-actor
+   ```
+
+- **バイナリダウンロード**
+
+   [GitHub Releases](https://github.com/canpok1/vox-actor/releases)からビルド済みバイナリをダウンロードして配置します。
+
+   ```bash
+   # Linux (x86_64) の場合
+   curl -fLo vox-actor.tar.gz https://github.com/canpok1/vox-actor/releases/latest/download/vox-actor_Linux_x86_64.tar.gz
+   tar xzf vox-actor.tar.gz
+   sudo mv vox-actor /usr/local/bin/
+
+   # macOS (Apple Silicon) の場合
+   curl -fLo vox-actor.tar.gz https://github.com/canpok1/vox-actor/releases/latest/download/vox-actor_Darwin_arm64.tar.gz
+   tar xzf vox-actor.tar.gz
+   sudo mv vox-actor /usr/local/bin/
+
+   # macOS (Intel) の場合
+   curl -fLo vox-actor.tar.gz https://github.com/canpok1/vox-actor/releases/latest/download/vox-actor_Darwin_x86_64.tar.gz
+   tar xzf vox-actor.tar.gz
+   sudo mv vox-actor /usr/local/bin/
+   ```
+
+- **`go install` を使う**
+   ```bash
+   go install github.com/canpok1/vox-actor@latest
+   ```
+
+- **ソースからビルド**
+   ```bash
+   git clone https://github.com/canpok1/vox-actor.git
+   cd vox-actor
+   make build
+   ```
+
+## 📖 CLIリファレンス
+
+オプションの優先順位: **オプション > 環境変数 > デフォルト値**
 
 ### テキストの直接読み上げ
 
@@ -113,10 +187,6 @@ vox-actor act script.jsonl
 ```bash
 vox-actor --version
 ```
-
-## 📖 コマンドリファレンス
-
-オプションの優先順位: **オプション > 環境変数 > デフォルト値**
 
 ### `say` サブコマンド
 
@@ -203,48 +273,76 @@ vox-actor watch --dry-run /path/to/watch-dir
 - 疎通確認（`HealthCheck`）も行いません
 - `watch` / `act --watch` ではディレクトリ監視・`done/` への移動／削除は通常通り実施されるため、監視フロー全体を検証できます
 
-## 📦 インストール方法
+## 🧩 プラグイン／スキルリファレンス
 
-お好みの方法でインストールできます。
+claude code に `vox-actor-plugin` を導入すると、以下のスラッシュコマンドが利用できます。
 
-- **Homebrew（macOS/Linux）**
-   ```bash
-   brew tap canpok1/tap
-   brew install --cask vox-actor
-   ```
+### `/vox-actor-plugin:monologue`
 
-- **バイナリダウンロード**
+作業開始／終了／想定外のことが起こった時など、節目のキャラクターの一言独り言を読み上げます。
 
-   [GitHub Releases](https://github.com/canpok1/vox-actor/releases)からビルド済みバイナリをダウンロードして配置します。
+```
+/vox-actor-plugin:monologue [キャラクター名]
+```
 
-   ```bash
-   # Linux (x86_64) の場合
-   curl -fLo vox-actor.tar.gz https://github.com/canpok1/vox-actor/releases/latest/download/vox-actor_Linux_x86_64.tar.gz
-   tar xzf vox-actor.tar.gz
-   sudo mv vox-actor /usr/local/bin/
+- 1文程度の短い独り言を生成し、キャラクターになりきって読み上げます
+- キャラクター設定ファイルの `speakers` からセリフの感情に合うスピーカーIDを選定します
+- 再生方式は `direct` / `file` モードで自動切替されます（[高度な利用](#-高度な利用リモート環境監視モード) を参照）
 
-   # macOS (Apple Silicon) の場合
-   curl -fLo vox-actor.tar.gz https://github.com/canpok1/vox-actor/releases/latest/download/vox-actor_Darwin_arm64.tar.gz
-   tar xzf vox-actor.tar.gz
-   sudo mv vox-actor /usr/local/bin/
+#### メモリ設定
 
-   # macOS (Intel) の場合
-   curl -fLo vox-actor.tar.gz https://github.com/canpok1/vox-actor/releases/latest/download/vox-actor_Darwin_x86_64.tar.gz
-   tar xzf vox-actor.tar.gz
-   sudo mv vox-actor /usr/local/bin/
-   ```
+| 項目 | キー | デフォルト値 | 説明 |
+|------|------|-------------|------|
+| 通知確率 | `monologue_probability` | `100` | 1〜100の整数。通知する確率（%） |
 
-- **`go install` を使う**
-   ```bash
-   go install github.com/canpok1/vox-actor@latest
-   ```
+ユーザー指示（例: 「独り言の頻度を30%にして」）で更新すると、以降の実行に反映されます。
 
-- **ソースからビルド**
-   ```bash
-   git clone https://github.com/canpok1/vox-actor.git
-   cd vox-actor
-   make build
-   ```
+### `/vox-actor-plugin:explain <トピック>`
+
+指定したトピックを冒頭→本題→まとめの流れで、複数セリフのJSONL台本としてキャラクターに解説させます。`monologue` が1文の独り言用であるのに対し、本スキルはまとまった長さの解説向けです。
+
+```
+/vox-actor-plugin:explain <トピック>
+```
+
+- `<トピック>`: 解説してほしい概念・質問・仕様文書などを自由記述で渡します
+- 生成されたJSONL台本は一時ファイルに書き出され、`vox-actor act` で再生されます
+- 再生方式は `direct` / `file` モードで自動切替されます（[高度な利用](#-高度な利用リモート環境監視モード) を参照）
+
+#### メモリ設定
+
+以下の設定を claude code のメモリに保存しておくと、次回以降の実行に反映されます。
+
+| 項目 | キー | デフォルト値 | 値 | 説明 |
+|------|------|-------------|----|-----|
+| 説明キャラクター | `explanation_character` | `zundamon` | `characters/<name>.md` の `<name>` | 例: 「説明はめたんで」→ `metan` を保存 |
+| 説明の長さ | `explanation_length` | `medium` | `short` / `medium` / `long` | 下記の長さ表を参照 |
+
+##### 説明の長さ
+
+| 設定 | セリフ数の目安 | 想定再生時間 |
+|------|---------------|------------|
+| `short` | 3〜5 | 〜十数秒 |
+| `medium`（既定） | 6〜10 | 30秒〜1分 |
+| `long` | 10+ | 数分 |
+
+#### 呼び出し例
+
+```
+/vox-actor-plugin:explain クロージャとは何か
+```
+
+#### JSONL出力例
+
+短めの説明（ずんだもん）:
+
+```jsonl
+{"text": "クロージャって何なのだ？説明するのだ！", "speaker": 3, "speedScale": 1.1}
+{"text": "簡単に言うと、関数が作られた時の周りの変数を覚えておく仕組みなのだ", "speaker": 3, "speedScale": 1.0}
+{"text": "むむっ、ちょっと難しいけど…例えるならお弁当箱に具材を詰めて持ち歩く感じなのだ", "speaker": 3, "speedScale": 1.0}
+{"text": "後から開けても中身がそのまま残ってるみたいに、変数の値も残るのだ〜", "speaker": 1, "speedScale": 0.9}
+{"text": "わかったかな？お疲れ様なのだ！", "speaker": 1, "speedScale": 1.0}
+```
 
 ## 🔀 高度な利用（リモート環境・監視モード）
 
@@ -284,7 +382,7 @@ vox-actor watch --dry-run /path/to/watch-dir
    export VOX_ACTOR_MONOLOGUE_MODE=file
    ```
 
-3. **claude code にプラグインを導入する**（[クイックスタート](#-クイックスタートllm連携フロー)と同じ手順）
+3. **claude code にプラグインを導入する**（[クイックスタート](#-クイックスタート)と同じ手順）
 
 ### ディレクトリ監視モードの詳細（`watch` コマンド）
 
