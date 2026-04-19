@@ -12,6 +12,8 @@ import (
 type HumanHandlerOptions struct {
 	Level   slog.Level
 	NoColor bool
+	// DryRun を true にすると、時刻の直後に "[dry run] " プレフィックスが挟まれる。
+	DryRun bool
 }
 
 // HumanHandler は人間が読みやすい形式でログを出力する slog.Handler 実装。
@@ -67,7 +69,11 @@ func (h *HumanHandler) Handle(_ context.Context, r slog.Record) error {
 		attrStr += ")"
 	}
 
-	line := fmt.Sprintf("%s[%s] %s%s\n", prefix, timeStr, r.Message, attrStr)
+	dryRunPrefix := ""
+	if h.opts.DryRun {
+		dryRunPrefix = "[dry run] "
+	}
+	line := fmt.Sprintf("%s[%s] %s%s%s\n", prefix, timeStr, dryRunPrefix, r.Message, attrStr)
 
 	if !h.opts.NoColor {
 		line = colorize(r.Level, line)
