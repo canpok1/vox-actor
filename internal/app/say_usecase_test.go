@@ -1,12 +1,16 @@
 package app_test
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"log/slog"
+	"strings"
 	"testing"
 
 	"github.com/canpok1/vox-actor/internal/app"
 	"github.com/canpok1/vox-actor/internal/domain/entity"
+	"github.com/canpok1/vox-actor/internal/infra/logging"
 )
 
 // say_usecase テストリスト
@@ -170,6 +174,82 @@ func TestWithSayLogger_Nil_NoPanic(t *testing.T) {
 	err := uc.Run(context.Background(), params)
 	if err != nil {
 		t.Fatalf("expected no error, got: %v", err)
+	}
+}
+
+func TestSayUsecase_Run_DryRun_SkipsClientAndPlayerAndLogs(t *testing.T) {
+	client := &mockVoicevoxClient{
+		query:   &entity.AudioQuery{},
+		wavData: []byte("fake-wav"),
+	}
+	player := &mockAudioPlayer{}
+
+	var buf bytes.Buffer
+	logger := slog.New(logging.NewHumanHandler(&buf, &logging.HumanHandlerOptions{
+		Level:   slog.LevelInfo,
+		NoColor: true,
+		DryRun:  true,
+	}))
+
+	speed := 1.2
+	pitch := 0.1
+	intonation := 1.5
+
+	uc := app.NewSayUsecase(client, player, app.WithSayLogger(logger))
+	params := app.SayParams{
+		Text:       "こんにちは",
+		SpeakerID:  3,
+		Speed:      &speed,
+		Pitch:      &pitch,
+		Intonation: &intonation,
+		DryRun:     true,
+	}
+
+	err := uc.Run(context.Background(), params)
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	// dry-run時: VoicevoxClient/AudioPlayer のメソッドは一切呼ばれない
+	if client.createQueryCalls != 0 {
+		t.Errorf("expected 0 CreateQuery calls in dry-run, got: %d", client.createQueryCalls)
+	}
+	if client.synthesizeCalls != 0 {
+		t.Errorf("expected 0 Synthesize calls in dry-run, got: %d", client.synthesizeCalls)
+	}
+	if player.playCalls != 0 {
+		t.Errorf("expected 0 Play calls in dry-run, got: %d", player.playCalls)
+	}
+
+	// ログに [dry run] プレフィックスと合成予定情報が含まれる
+	output := buf.String()
+	if !strings.Contains(output, "[dry run] would synthesize and play") {
+		t.Errorf("expected '[dry run] would synthesize and play' in log, got: %s", output)
+	}
+	for _, want := range []string{"text=こんにちは", "speaker=3", "speed=1.2", "pitch=0.1", "intonation=1.5"} {
+		if !strings.Contains(output, want) {
+			t.Errorf("expected %q in log, got: %s", want, output)
+		}
+	}
+}
+
+func TestSayUsecase_Run_DryRun_NoHealthCheck(t *testing.T) {
+	// HealthCheckがエラーを返してもdry-runでは呼ばれずエラーにならない
+	client := &mockVoicevoxClient{
+		healthCheckErr: errors.New("connection refused"),
+	}
+	player := &mockAudioPlayer{}
+
+	uc := app.NewSayUsecase(client, player)
+	params := app.SayParams{
+		Text:      "こんにちは",
+		SpeakerID: 3,
+		DryRun:    true,
+	}
+
+	err := uc.Run(context.Background(), params)
+	if err != nil {
+		t.Fatalf("expected no error in dry-run even with HealthCheck failing, got: %v", err)
 	}
 }
 

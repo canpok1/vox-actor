@@ -14,6 +14,8 @@ type ActParams struct {
 	Speed      *float64
 	Pitch      *float64
 	Intonation *float64
+	// DryRun が true の場合、VOICEVOXエンジン/音声再生を一切呼ばずログ出力のみ行う。
+	DryRun bool
 }
 
 // ActOption はActUsecaseの生成時に指定するオプション。
@@ -62,10 +64,12 @@ func (u *ActUsecase) Run(ctx context.Context, params ActParams) error {
 	u.logger.Debug("act starting", "path", params.Path, "speakerID", params.SpeakerID,
 		"speed", params.Speed, "pitch", params.Pitch, "intonation", params.Intonation)
 
-	if err := u.client.HealthCheck(ctx); err != nil {
-		return err
+	if !params.DryRun {
+		if err := u.client.HealthCheck(ctx); err != nil {
+			return err
+		}
+		u.logger.Info("engine health check passed")
 	}
-	u.logger.Info("engine health check passed")
 
 	scripts, err := u.reader.Read(params.Path)
 	if err != nil {
@@ -100,6 +104,18 @@ func (u *ActUsecase) Run(ctx context.Context, params ActParams) error {
 		speed := script.ResolveSpeed(params.Speed)
 		pitch := script.ResolvePitch(params.Pitch)
 		intonation := script.ResolveIntonation(params.Intonation)
+
+		if params.DryRun {
+			u.logger.Info("would synthesize and play",
+				"path", script.Path,
+				"text", truncateAndEscapeText(script.Text),
+				"speaker", speakerID,
+				"speed", formatFloatPtr(speed),
+				"pitch", formatFloatPtr(pitch),
+				"intonation", formatFloatPtr(intonation),
+			)
+			continue
+		}
 
 		query, err := u.client.CreateQuery(ctx, script.Text, speakerID)
 		if err != nil {

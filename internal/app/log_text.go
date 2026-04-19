@@ -1,6 +1,9 @@
 package app
 
-import "strings"
+import (
+	"strconv"
+	"strings"
+)
 
 // logTextMaxRunes はログ出力時にtextを切り詰めるrune数の上限。
 const logTextMaxRunes = 15
@@ -22,4 +25,13 @@ func truncateAndEscapeText(text string) string {
 		s += "..."
 	}
 	return s
+}
+
+// formatFloatPtr は *float64 をログ表示用文字列に整形する。
+// nil の場合は "default" を返す。
+func formatFloatPtr(v *float64) string {
+	if v == nil {
+		return "default"
+	}
+	return strconv.FormatFloat(*v, 'g', -1, 64)
 }

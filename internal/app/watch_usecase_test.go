@@ -557,6 +557,131 @@ func TestWatchUsecase_Run_DeleteMode_FileDeletedAppearsAtDebugLevel(t *testing.T
 	}
 }
 
+func TestWatchUsecase_Run_DryRun_SkipsClientAndPlayerAndMovesToDone(t *testing.T) {
+	reader := &mockScriptReader{
+		scripts: []entity.Script{
+			{Path: "a.txt", Text: "おはよう", IsEmpty: false},
+		},
+	}
+	client := &mockVoicevoxClient{
+		query:   &entity.AudioQuery{},
+		wavData: []byte("fake-wav"),
+	}
+	player := &mockAudioPlayer{}
+	mover := &mockFileMover{}
+	watcher := &mockDirWatcher{
+		files: []string{"/tmp/watch/a.txt"},
+	}
+
+	var buf bytes.Buffer
+	logger := slog.New(logging.NewHumanHandler(&buf, &logging.HumanHandlerOptions{
+		Level:   slog.LevelInfo,
+		NoColor: true,
+		DryRun:  true,
+	}))
+
+	uc := app.NewWatchUsecase(reader, client, player, mover, watcher, app.WithWatchLogger(logger))
+	params := app.WatchParams{
+		Paths:     []string{"/tmp/watch"},
+		SpeakerID: 3,
+		DryRun:    true,
+	}
+
+	if err := uc.Run(context.Background(), params); err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	// dry-run: 合成・再生は呼ばれない
+	if client.createQueryCalls != 0 {
+		t.Errorf("expected 0 CreateQuery calls in dry-run, got: %d", client.createQueryCalls)
+	}
+	if player.playCalls != 0 {
+		t.Errorf("expected 0 Play calls in dry-run, got: %d", player.playCalls)
+	}
+	// ただしdone/への移動は通常通り実施
+	if len(mover.movedFiles) != 1 {
+		t.Fatalf("expected 1 file moved to done in dry-run, got: %d", len(mover.movedFiles))
+	}
+	if mover.movedFiles[0] != "/tmp/watch/a.txt" {
+		t.Errorf("expected moved file '/tmp/watch/a.txt', got: %s", mover.movedFiles[0])
+	}
+
+	output := buf.String()
+	if !strings.Contains(output, "[dry run] would synthesize and play") {
+		t.Errorf("expected '[dry run] would synthesize and play' in log, got: %s", output)
+	}
+	if !strings.Contains(output, "path=/tmp/watch/a.txt") {
+		t.Errorf("expected 'path=/tmp/watch/a.txt' in log, got: %s", output)
+	}
+	if !strings.Contains(output, "text=おはよう") {
+		t.Errorf("expected 'text=おはよう' in log, got: %s", output)
+	}
+}
+
+func TestWatchUsecase_Run_DryRun_NoHealthCheck(t *testing.T) {
+	reader := &mockScriptReader{
+		scripts: []entity.Script{
+			{Path: "a.txt", Text: "おはよう", IsEmpty: false},
+		},
+	}
+	client := &mockVoicevoxClient{
+		healthCheckErr: errors.New("connection refused"),
+	}
+	player := &mockAudioPlayer{}
+	mover := &mockFileMover{}
+	watcher := &mockDirWatcher{
+		files: []string{"/tmp/watch/a.txt"},
+	}
+
+	uc := app.NewWatchUsecase(reader, client, player, mover, watcher)
+	params := app.WatchParams{
+		Paths:     []string{"/tmp/watch"},
+		SpeakerID: 3,
+		DryRun:    true,
+	}
+
+	err := uc.Run(context.Background(), params)
+	if err != nil {
+		t.Fatalf("expected no error in dry-run even with HealthCheck failing, got: %v", err)
+	}
+}
+
+func TestWatchUsecase_Run_DryRun_DeleteModeStillDeletes(t *testing.T) {
+	reader := &mockScriptReader{
+		scripts: []entity.Script{
+			{Path: "a.txt", Text: "おはよう", IsEmpty: false},
+		},
+	}
+	client := &mockVoicevoxClient{
+		query:   &entity.AudioQuery{},
+		wavData: []byte("fake-wav"),
+	}
+	player := &mockAudioPlayer{}
+	mover := &mockFileMover{}
+	watcher := &mockDirWatcher{
+		files: []string{"/tmp/watch/a.txt"},
+	}
+
+	uc := app.NewWatchUsecase(reader, client, player, mover, watcher, app.WithDeleteMode())
+	params := app.WatchParams{
+		Paths:     []string{"/tmp/watch"},
+		SpeakerID: 3,
+		DryRun:    true,
+	}
+
+	if err := uc.Run(context.Background(), params); err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	// dry-runでもdelete modeは維持される
+	if len(mover.deletedFiles) != 1 {
+		t.Fatalf("expected 1 file deleted in dry-run delete mode, got: %d", len(mover.deletedFiles))
+	}
+	if len(mover.movedFiles) != 0 {
+		t.Errorf("expected 0 files moved in dry-run delete mode, got: %d", len(mover.movedFiles))
+	}
+}
+
 // blockingDirWatcher はテスト用のブロッキングウォッチャー。
 type blockingDirWatcher struct {
 	fileCh chan string

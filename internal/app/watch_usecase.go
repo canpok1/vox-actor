@@ -15,6 +15,9 @@ type WatchParams struct {
 	Speed      *float64
 	Pitch      *float64
 	Intonation *float64
+	// DryRun が true の場合、VOICEVOXエンジン/音声再生は一切呼ばずログ出力のみ行う。
+	// ディレクトリ監視・done/移動・削除は通常通り実施する。
+	DryRun bool
 }
 
 // WatchOption はWatchUsecaseの生成時に指定するオプション。
@@ -66,10 +69,12 @@ func NewWatchUsecase(reader ScriptReader, client VoicevoxClient, player AudioPla
 func (u *WatchUsecase) Run(ctx context.Context, params WatchParams) error {
 	u.logger.Debug("watch mode starting", "paths", params.Paths, "speakerID", params.SpeakerID)
 
-	if err := u.client.HealthCheck(ctx); err != nil {
-		return err
+	if !params.DryRun {
+		if err := u.client.HealthCheck(ctx); err != nil {
+			return err
+		}
+		u.logger.Info("engine health check passed")
 	}
-	u.logger.Info("engine health check passed")
 
 	paths := u.dedupePaths(params.Paths)
 	fileCh := u.fanInWatchers(ctx, paths)
@@ -210,6 +215,18 @@ func (u *WatchUsecase) processFile(ctx context.Context, path string, params Watc
 		speed := script.ResolveSpeed(params.Speed)
 		pitch := script.ResolvePitch(params.Pitch)
 		intonation := script.ResolveIntonation(params.Intonation)
+
+		if params.DryRun {
+			u.logger.Info("would synthesize and play",
+				"path", script.Path,
+				"text", truncateAndEscapeText(script.Text),
+				"speaker", speakerID,
+				"speed", formatFloatPtr(speed),
+				"pitch", formatFloatPtr(pitch),
+				"intonation", formatFloatPtr(intonation),
+			)
+			continue
+		}
 
 		query, err := u.client.CreateQuery(ctx, script.Text, speakerID)
 		if err != nil {
