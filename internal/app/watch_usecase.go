@@ -6,6 +6,8 @@ import (
 	"log/slog"
 	"path/filepath"
 	"sync"
+
+	"github.com/canpok1/vox-actor/internal/domain/entity"
 )
 
 // WatchParams はWatchUsecaseのパラメータ。
@@ -200,48 +202,65 @@ func (u *WatchUsecase) processFile(ctx context.Context, path string, params Watc
 		}
 	}
 
+	if params.DryRun {
+		u.processScriptsDryRun(ctx, scripts, total, params)
+		return
+	}
+
+	cfg := synthPipelineConfig{
+		defaultSpeakerID:  params.SpeakerID,
+		defaultSpeed:      params.Speed,
+		defaultPitch:      params.Pitch,
+		defaultIntonation: params.Intonation,
+		synthesisLogLevel: slog.LevelDebug,
+	}
+	ch := startSynthPipeline(ctx, u.client, u.logger, scripts, cfg)
+
+	for result := range ch {
+		switch result.stage {
+		case synthStageQueryFailed:
+			u.logger.Error("create query error (skipping script)", "path", result.script.Path, "error", result.err)
+			continue
+		case synthStageSynthesizeFailed:
+			u.logger.Error("synthesize error (skipping script)", "path", result.script.Path, "error", result.err)
+			continue
+		}
+
+		u.logger.Debug("processing script", "path", result.script.Path)
+
+		if err := u.player.Play(ctx, result.wav); err != nil {
+			u.logger.Error("play error (skipping script)", "path", result.script.Path, "error", err)
+			continue
+		}
+		u.logger.Info(fmt.Sprintf("[%d/%d] playback completed", result.index, total), "text", truncateAndEscapeText(result.script.Text))
+
+		// 現在のセリフ処理完了後にctxキャンセルを検知したら残りをスキップする。
+		if ctx.Err() != nil {
+			return
+		}
+	}
+}
+
+// processScriptsDryRun はDryRunモードで1ファイル分のスクリプト群を処理する。
+// VOICEVOXエンジン/音声再生は一切呼ばず、既存のログ互換性を保ったまま逐次出力する。
+func (u *WatchUsecase) processScriptsDryRun(ctx context.Context, scripts []entity.Script, total int, params WatchParams) {
 	current := 0
 	for _, script := range scripts {
+		if ctx.Err() != nil {
+			return
+		}
 		if script.IsEmpty {
 			u.logger.Debug("skipping empty script", "path", script.Path)
 			continue
 		}
-
 		current++
-		u.logger.Debug("processing script", "path", script.Path)
 
-		// セリフ単位パラメータがあればグローバルパラメータより優先する
 		speakerID := script.ResolveSpeakerID(params.SpeakerID)
 		speed := script.ResolveSpeed(params.Speed)
 		pitch := script.ResolvePitch(params.Pitch)
 		intonation := script.ResolveIntonation(params.Intonation)
 
-		playbackMsg := fmt.Sprintf("[%d/%d] playback completed", current, total)
-		if params.DryRun {
-			attrs := dryRunPlaybackAttrs(script.Text, speakerID, speed, pitch, intonation)
-			u.logger.Info(playbackMsg, attrs...)
-			continue
-		}
-
-		query, err := u.client.CreateQuery(ctx, script.Text, speakerID)
-		if err != nil {
-			u.logger.Error("create query error (skipping script)", "path", script.Path, "error", err)
-			continue
-		}
-		u.logger.Debug("query created", "path", script.Path)
-
-		q := query.WithOverrides(speed, pitch, intonation)
-		wavData, err := u.client.Synthesize(ctx, &q, speakerID)
-		if err != nil {
-			u.logger.Error("synthesize error (skipping script)", "path", script.Path, "error", err)
-			continue
-		}
-		u.logger.Debug("synthesis completed", "path", script.Path, "wavSize", len(wavData))
-
-		if err := u.player.Play(ctx, wavData); err != nil {
-			u.logger.Error("play error (skipping script)", "path", script.Path, "error", err)
-			continue
-		}
-		u.logger.Info(playbackMsg, "text", truncateAndEscapeText(script.Text))
+		attrs := dryRunPlaybackAttrs(script.Text, speakerID, speed, pitch, intonation)
+		u.logger.Info(fmt.Sprintf("[%d/%d] playback completed", current, total), attrs...)
 	}
 }

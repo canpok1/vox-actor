@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+
+	"github.com/canpok1/vox-actor/internal/domain/entity"
 )
 
 // ActParams はactユースケースのパラメータ。
@@ -59,7 +61,7 @@ func NewActUsecase(reader ScriptReader, client VoicevoxClient, player AudioPlaye
 }
 
 // Run はactユースケースを実行する。
-// 疎通確認→読込→合成→再生の一連フローを実行する。
+// 疎通確認→読込→（プリフェッチ付き）合成→再生の一連フローを実行する。
 func (u *ActUsecase) Run(ctx context.Context, params ActParams) error {
 	u.logger.Debug("act starting", "path", params.Path, "speakerID", params.SpeakerID,
 		"speed", params.Speed, "pitch", params.Pitch, "intonation", params.Intonation)
@@ -85,61 +87,72 @@ func (u *ActUsecase) Run(ctx context.Context, params ActParams) error {
 		}
 	}
 
+	if params.DryRun {
+		return u.runDryRun(ctx, scripts, total, params)
+	}
+
+	cfg := synthPipelineConfig{
+		defaultSpeakerID:  params.SpeakerID,
+		defaultSpeed:      params.Speed,
+		defaultPitch:      params.Pitch,
+		defaultIntonation: params.Intonation,
+		synthesisLogLevel: slog.LevelInfo,
+	}
+	ch := startSynthPipeline(ctx, u.client, u.logger, scripts, cfg)
+
+	for result := range ch {
+		switch result.stage {
+		case synthStageQueryFailed:
+			return fmt.Errorf("create query for %s: %w", result.script.Path, result.err)
+		case synthStageSynthesizeFailed:
+			return fmt.Errorf("synthesize %s: %w", result.script.Path, result.err)
+		}
+
+		u.logger.Info(fmt.Sprintf("[%d/%d] processing script", result.index, total), "path", result.script.Path)
+
+		if err := u.player.Play(ctx, result.wav); err != nil {
+			if ctx.Err() != nil {
+				return nil
+			}
+			return fmt.Errorf("play %s: %w", result.script.Path, err)
+		}
+		u.logger.Info("playback completed", "path", result.script.Path)
+
+		// 現在のセリフ処理完了後にctxキャンセルを検知したら残りをスキップする。
+		// プリフェッチ済みアイテムがバッファに残っていても再生しない。
+		if ctx.Err() != nil {
+			return nil
+		}
+	}
+
+	u.logger.Info("all scripts processed")
+	return nil
+}
+
+// runDryRun はDryRunモードのactユースケースを実行する。
+// VOICEVOXエンジン/音声再生は一切呼ばず、既存のログ互換性を保ったまま逐次出力する。
+func (u *ActUsecase) runDryRun(ctx context.Context, scripts []entity.Script, total int, params ActParams) error {
 	current := 0
 	for _, script := range scripts {
 		if ctx.Err() != nil {
 			return nil
 		}
-
 		if script.IsEmpty {
 			u.logger.Debug("skipping empty script", "path", script.Path)
 			continue
 		}
-
 		current++
 		u.logger.Info(fmt.Sprintf("[%d/%d] processing script", current, total), "path", script.Path)
 
-		// セリフ単位パラメータがあればグローバルパラメータより優先する
 		speakerID := script.ResolveSpeakerID(params.SpeakerID)
 		speed := script.ResolveSpeed(params.Speed)
 		pitch := script.ResolvePitch(params.Pitch)
 		intonation := script.ResolveIntonation(params.Intonation)
 
-		if params.DryRun {
-			u.logger.Info("synthesis completed", "path", script.Path, "wavSize", 0)
-			attrs := append([]any{"path", script.Path}, dryRunPlaybackAttrs(script.Text, speakerID, speed, pitch, intonation)...)
-			u.logger.Info("playback completed", attrs...)
-			continue
-		}
-
-		query, err := u.client.CreateQuery(ctx, script.Text, speakerID)
-		if err != nil {
-			if ctx.Err() != nil {
-				return nil
-			}
-			return fmt.Errorf("create query for %s: %w", script.Path, err)
-		}
-		u.logger.Debug("query created", "path", script.Path)
-
-		q := query.WithOverrides(speed, pitch, intonation)
-		wavData, err := u.client.Synthesize(ctx, &q, speakerID)
-		if err != nil {
-			if ctx.Err() != nil {
-				return nil
-			}
-			return fmt.Errorf("synthesize %s: %w", script.Path, err)
-		}
-		u.logger.Info("synthesis completed", "path", script.Path, "wavSize", len(wavData))
-
-		if err := u.player.Play(ctx, wavData); err != nil {
-			if ctx.Err() != nil {
-				return nil
-			}
-			return fmt.Errorf("play %s: %w", script.Path, err)
-		}
-		u.logger.Info("playback completed", "path", script.Path)
+		u.logger.Info("synthesis completed", "path", script.Path, "wavSize", 0)
+		attrs := append([]any{"path", script.Path}, dryRunPlaybackAttrs(script.Text, speakerID, speed, pitch, intonation)...)
+		u.logger.Info("playback completed", attrs...)
 	}
-
 	u.logger.Info("all scripts processed")
 	return nil
 }
