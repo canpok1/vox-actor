@@ -1,11 +1,11 @@
 #!/bin/bash
 if [ -z "$VOX_ACTOR_WORKSPACE" ]; then
   GIT_COMMON_DIR=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)
-  if [ -z "$GIT_COMMON_DIR" ]; then
-    echo "[ERROR] 環境変数 'VOX_ACTOR_WORKSPACE' が設定されておらず、gitリポジトリ外のためデフォルト出力先を決定できません。"
-    exit 1
+  if [ -n "$GIT_COMMON_DIR" ]; then
+    VOX_ACTOR_WORKSPACE="$(dirname "$GIT_COMMON_DIR")/.vox-actor"
+  else
+    VOX_ACTOR_WORKSPACE="$PWD/.vox-actor"
   fi
-  VOX_ACTOR_WORKSPACE="$(dirname "$GIT_COMMON_DIR")/.tmp/notify"
 fi
 
 PROBABILITY="$1"
@@ -88,8 +88,10 @@ case "$MODE" in
     disown 2>/dev/null
     ;;
   file)
+    QUEUE_DIR="${VOX_ACTOR_WORKSPACE}/queue"
+    mkdir -p "$QUEUE_DIR"
     jq -cn --argjson speaker "$SPEAKER" --arg text "$TEXT" --argjson speedScale "$SPEED_SCALE" \
-      '{speaker: $speaker, text: $text, speedScale: $speedScale}' > "${VOX_ACTOR_WORKSPACE}/notify_$(($(date +%s%N)/1000000)).json"
+      '{speaker: $speaker, text: $text, speedScale: $speedScale}' > "${QUEUE_DIR}/notify_$(($(date +%s%N)/1000000)).json"
     ;;
   *)
     echo "[ERROR] VOX_ACTOR_MONOLOGUE_MODE は 'direct' または 'file' で指定してください: '$MODE'"
