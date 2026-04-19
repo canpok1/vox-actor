@@ -109,6 +109,19 @@ func TestRegisterCommonFlags_Verbose(t *testing.T) {
 	}
 }
 
+func TestRegisterCommonFlags_DryRun(t *testing.T) {
+	cmd := &cobra.Command{Use: "test"}
+	registerCommonFlags(cmd)
+
+	dryRun, err := cmd.Flags().GetBool("dry-run")
+	if err != nil {
+		t.Fatalf("expected dry-run flag to exist, got error: %v", err)
+	}
+	if dryRun {
+		t.Error("expected default dry-run to be false")
+	}
+}
+
 func TestRegisterCommonFlags_EngineURL(t *testing.T) {
 	t.Setenv("VOX_ENGINE_URL", "")
 

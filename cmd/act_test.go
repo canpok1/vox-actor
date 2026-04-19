@@ -109,7 +109,7 @@ func TestActCmd_HelpContainsFlags(t *testing.T) {
 	}
 
 	output := buf.String()
-	flags := []string{"--engine-url", "--speaker", "--speed", "--pitch", "--intonation", "--watch", "--verbose"}
+	flags := []string{"--engine-url", "--speaker", "--speed", "--pitch", "--intonation", "--watch", "--verbose", "--dry-run"}
 	for _, flag := range flags {
 		if !strings.Contains(output, flag) {
 			t.Errorf("expected help output to contain '%s'", flag)
