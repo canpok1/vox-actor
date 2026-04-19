@@ -1,13 +1,31 @@
 package cmd
 
 import (
+	"log/slog"
 	"os"
 	"strconv"
 
+	"github.com/canpok1/vox-actor/internal/infra/logging"
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 )
 
-// registerCommonFlags はact/sayコマンド共通のフラグを登録する。
+// buildLoggerFromFlags は --verbose フラグと端末/環境変数の状態からロガーを構築する。
+// 標準エラー出力が端末でない場合、または NO_COLOR 環境変数が設定されている場合は色を無効化する。
+func buildLoggerFromFlags(cmd *cobra.Command) *slog.Logger {
+	verbose, _ := cmd.Flags().GetBool("verbose")
+	logLevel := slog.LevelInfo
+	if verbose {
+		logLevel = slog.LevelDebug
+	}
+	noColor := !term.IsTerminal(int(os.Stderr.Fd())) || os.Getenv("NO_COLOR") != ""
+	return slog.New(logging.NewHumanHandler(os.Stderr, &logging.HumanHandlerOptions{
+		Level:   logLevel,
+		NoColor: noColor,
+	}))
+}
+
+// registerCommonFlags は各サブコマンド共通のフラグを登録する。
 func registerCommonFlags(cmd *cobra.Command) {
 	engineURLDefault := "http://localhost:50021"
 	if v := os.Getenv("VOX_ENGINE_URL"); v != "" {

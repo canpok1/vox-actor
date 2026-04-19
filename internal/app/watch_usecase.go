@@ -3,7 +3,18 @@ package app
 import (
 	"context"
 	"log/slog"
+	"path/filepath"
+	"sync"
 )
+
+// WatchParams はWatchUsecaseのパラメータ。
+type WatchParams struct {
+	Paths      []string
+	SpeakerID  int
+	Speed      *float64
+	Pitch      *float64
+	Intonation *float64
+}
 
 // WatchOption はWatchUsecaseの生成時に指定するオプション。
 type WatchOption func(*WatchUsecase)
@@ -50,29 +61,27 @@ func NewWatchUsecase(reader ScriptReader, client VoicevoxClient, player AudioPla
 }
 
 // Run はディレクトリ監視モードを実行する。
-// 疎通確認後、ディレクトリを監視してファイルを順次処理する。
-func (u *WatchUsecase) Run(ctx context.Context, params ActParams) error {
-	u.logger.Debug("watch mode starting", "path", params.Path, "speakerID", params.SpeakerID)
+// 疎通確認後、指定された全ディレクトリを並列監視してファイルを fan-in で順次処理する。
+func (u *WatchUsecase) Run(ctx context.Context, params WatchParams) error {
+	u.logger.Debug("watch mode starting", "paths", params.Paths, "speakerID", params.SpeakerID)
 
 	if err := u.client.HealthCheck(ctx); err != nil {
 		return err
 	}
 	u.logger.Info("engine health check passed")
 
-	fileCh, errCh := u.watcher.Watch(ctx, params.Path)
-	u.logger.Info("watching directory", "path", params.Path)
+	paths := u.dedupePaths(params.Paths)
+	fileCh := u.fanInWatchers(ctx, paths)
+
+	for _, p := range paths {
+		u.logger.Info("watching directory", "path", p)
+	}
 
 	for {
 		select {
 		case <-ctx.Done():
 			u.logger.Info("watch mode stopping")
 			return nil
-		case err, ok := <-errCh:
-			if !ok {
-				errCh = nil
-				continue
-			}
-			u.logger.Error("watcher error", "error", err)
 		case path, ok := <-fileCh:
 			if !ok {
 				return nil
@@ -83,9 +92,79 @@ func (u *WatchUsecase) Run(ctx context.Context, params ActParams) error {
 	}
 }
 
+// dedupePaths は重複するパスを除去し、警告ログを出力する。
+// 絶対パスに正規化して比較する。
+func (u *WatchUsecase) dedupePaths(paths []string) []string {
+	seen := make(map[string]bool)
+	result := make([]string, 0, len(paths))
+	for _, p := range paths {
+		key := p
+		if abs, err := filepath.Abs(p); err == nil {
+			key = abs
+		}
+		if seen[key] {
+			u.logger.Warn("duplicate watch path, merging", "path", p)
+			continue
+		}
+		seen[key] = true
+		result = append(result, p)
+	}
+	return result
+}
+
+// fanInWatchers は指定された各パスで DirWatcher.Watch を起動し、
+// 検知ファイルを単一チャネルに fan-in する。全 watcher 停止時にチャネルをクローズする。
+func (u *WatchUsecase) fanInWatchers(ctx context.Context, paths []string) <-chan string {
+	fileCh := make(chan string)
+	var wg sync.WaitGroup
+
+	for _, path := range paths {
+		wg.Add(1)
+		go func(p string) {
+			defer wg.Done()
+			u.forwardWatcher(ctx, p, fileCh)
+		}(path)
+	}
+
+	go func() {
+		wg.Wait()
+		close(fileCh)
+	}()
+
+	return fileCh
+}
+
+// forwardWatcher は1ディレクトリの監視結果を fan-in 先チャネルへ転送する。
+// エラーはログ出力のみ行い監視を継続する。
+func (u *WatchUsecase) forwardWatcher(ctx context.Context, path string, fileCh chan<- string) {
+	sub, errSub := u.watcher.Watch(ctx, path)
+	for sub != nil || errSub != nil {
+		select {
+		case <-ctx.Done():
+			return
+		case f, ok := <-sub:
+			if !ok {
+				sub = nil
+				continue
+			}
+			select {
+			case fileCh <- f:
+			case <-ctx.Done():
+				return
+			}
+		case e, ok := <-errSub:
+			if !ok {
+				errSub = nil
+				continue
+			}
+			u.logger.Error("watcher error", "path", path, "error", e)
+		}
+	}
+}
+
 // processFile は1ファイルを処理し、完了後にdone/に移動する（deleteModeの場合は削除する）。
 // エラーが発生してもスキップして後処理を実行する。
-func (u *WatchUsecase) processFile(ctx context.Context, path string, params ActParams) {
+func (u *WatchUsecase) processFile(ctx context.Context, path string, params WatchParams) {
 	defer func() {
 		if u.deleteMode {
 			if delErr := u.mover.Delete(path); delErr != nil {

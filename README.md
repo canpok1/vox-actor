@@ -39,7 +39,13 @@
 4. **ディレクトリを監視して自動読み上げする**
 
    ```bash
-   vox-actor act --watch /path/to/watch-dir
+   vox-actor watch /path/to/watch-dir
+   ```
+
+   複数ディレクトリを同時に監視する場合は、スペース区切りでパスを追加できます。
+
+   ```bash
+   vox-actor watch /path/to/dir-a /path/to/dir-b
    ```
 
    別のターミナルからテキストファイルを配置すると、自動的に読み上げられます。
@@ -140,19 +146,36 @@ vox-actor act script.json
 
 ### ディレクトリ監視モード
 
-ディレクトリを監視し、ファイルが配置されると自動的に読み上げます。処理済みファイルは監視ディレクトリ内の `done/` サブディレクトリに移動されます。
+ディレクトリを監視し、ファイルが配置されると自動的に読み上げます。処理済みファイルは各監視ディレクトリ内の `done/` サブディレクトリに移動されます。
 
 ```bash
-vox-actor act --watch /path/to/watch-dir
+vox-actor watch /path/to/watch-dir
 ```
+
+複数ディレクトリを同時に監視する場合:
+
+```bash
+vox-actor watch /path/to/dir-a /path/to/dir-b
+```
+
+各ディレクトリは並列で監視され、検知したファイルは検知順に1件ずつ再生されます。処理済みファイルは各ディレクトリ直下の `done/` に移動されます（例: `./dir-a/foo.txt` → `./dir-a/done/foo.txt`）。
 
 処理済みファイルを `done/` に移動する代わりに削除する場合:
 
 ```bash
+vox-actor watch --delete /path/to/watch-dir
+```
+
+#### `act --watch` / `act --watch-delete`（後方互換）
+
+従来どおり `act` コマンドでも単一ディレクトリの監視が可能です。
+
+```bash
+vox-actor act --watch /path/to/watch-dir
 vox-actor act --watch-delete /path/to/watch-dir
 ```
 
-`--watch` と `--watch-delete` は同時に指定できません。
+`--watch` と `--watch-delete` は同時に指定できません。複数ディレクトリを同時に監視したい場合は `watch` コマンドを使ってください。
 
 詳細ログを出力する場合:
 
@@ -173,6 +196,18 @@ vox-actor act --verbose script.txt
 | `--intonation` | — | `1.0` | 抑揚 |
 | `--watch` | — | `false` | ディレクトリ監視モードを有効化 |
 | `--watch-delete` | — | `false` | ディレクトリ監視モード（処理済みファイルを削除） |
+| `--verbose` | — | `false` | 詳細ログを出力 |
+
+### `watch` サブコマンド
+
+| オプション | 環境変数 | デフォルト値 | 説明 |
+|---|---|---|---|
+| `--engine-url` | `VOX_ENGINE_URL` | `http://localhost:50021` | VOICEVOXエンジンのURL |
+| `--speaker` | `VOX_SPEAKER` | `3` | キャラクターID |
+| `--speed` | — | `1.0` | 話速 |
+| `--pitch` | — | `0.0` | 音高 |
+| `--intonation` | — | `1.0` | 抑揚 |
+| `--delete` | — | `false` | 処理済みファイルを削除（未指定時は各ディレクトリの `done/` に移動） |
 | `--verbose` | — | `false` | 詳細ログを出力 |
 
 ### `say` サブコマンド
@@ -207,7 +242,7 @@ claude code向けプラグインを同梱しているので、claude codeでは�
 
 2. vox-actorを監視モードで起動する。
    ```
-   vox-actor act --watch $VOX_ACTOR_WORKSPACE
+   vox-actor watch $VOX_ACTOR_WORKSPACE
    ```
 
 3. claude codeにプラグインを導入する。
