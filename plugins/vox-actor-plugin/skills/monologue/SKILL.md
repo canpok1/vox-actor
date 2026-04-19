@@ -68,9 +68,28 @@ ${CLAUDE_PLUGIN_ROOT}/skills/monologue/scripts/monologue.sh 通知確率 "（キ
 
 通知の実行に使用する `${CLAUDE_PLUGIN_ROOT}/skills/monologue/scripts/monologue.sh` は以下の前提条件を必要とする:
 
-- **環境変数 `VOX_ACTOR_WORKSPACE`**: 通知ファイルの出力先ディレクトリを指定する。未設定の場合はgitリポジトリ直下の `.tmp/notify` がデフォルト出力先として使用される。gitリポジトリ外かつ未設定の場合はエラー終了する
-- **通知ディレクトリ**: 出力先ディレクトリ（`${VOX_ACTOR_WORKSPACE}` またはデフォルトの `<gitリポジトリ直下>/.tmp/notify`）に通知ファイルを書き出す。ディレクトリが存在しない場合はスクリプトが自動作成する
-- **通知ファイル形式**: `notify_{ミリ秒タイムスタンプ}.json` として作成される。JSON形式（`{"speaker": スピーカーID, "text": "セリフ", "speedScale": 話速}`）で出力される。外部の通知監視プロセスがこのファイルを検知してユーザーに通知する
+- **環境変数 `VOX_ACTOR_WORKSPACE`**: 通知ファイルやエラーログの出力先ディレクトリを指定する。未設定の場合はgitリポジトリ直下の `.tmp/notify` がデフォルト出力先として使用される。gitリポジトリ外かつ未設定の場合はエラー終了する
+- **出力先ディレクトリ**: `${VOX_ACTOR_WORKSPACE}` またはデフォルトの `<gitリポジトリ直下>/.tmp/notify`。ディレクトリが存在しない場合はスクリプトが自動作成する
+
+### 通知モード
+
+通知方式は以下のルールで自動切替する:
+
+1. 環境変数 `VOX_ACTOR_MONOLOGUE_MODE` が設定されていればそれに従う（`direct` または `file`）
+2. 未設定なら `vox-actor` コマンドの有無で判定する（あり → `direct`、なし → `file`）
+
+#### `direct` モード
+
+`vox-actor say --speaker <スピーカーID> --speed <話速> "<セリフ>"` をバックグラウンドで起動し、スクリプトは即座に戻る。
+
+- VOICEVOXエンジンのURLは `vox-actor` 側の環境変数 `VOX_ENGINE_URL` で解決する（非デフォルトポート時はユーザーが設定）
+- 監視プロセス（`vox-actor watch`）の常駐は不要
+- 複数セッションから並列に呼ばれても許容する（エンジンへの並列リクエストと音声再生の重なりは発生するがエラーにはならない）。逐次再生が必要な場合は `VOX_ACTOR_MONOLOGUE_MODE=file` + 監視プロセス構成に切り替えれば対応可能
+- `vox-actor say` 失敗時もスクリプト本体はエラー終了せず、標準出力/標準エラーの内容を `${VOX_ACTOR_WORKSPACE}/monologue-errors.log` にタイムスタンプ付きで追記する。ログは末尾200行でローテーションされる。失敗検知は `tail -f ${VOX_ACTOR_WORKSPACE}/monologue-errors.log` で行える
+
+#### `file` モード
+
+`${VOX_ACTOR_WORKSPACE}` に通知ファイルを書き出す。ファイル名は `notify_{ミリ秒タイムスタンプ}.json`、形式は `{"speaker": スピーカーID, "text": "セリフ", "speedScale": 話速}`。外部の通知監視プロセス（`vox-actor watch` 等）がこのファイルを検知して読み上げる
 
 ## キャラクター設定ファイルについて
 
