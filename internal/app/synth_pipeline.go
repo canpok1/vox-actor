@@ -105,6 +105,7 @@ func startSynthPipeline(
 			}
 			logger.Log(ctx, cfg.synthesisLogLevel, "synthesis completed", "path", script.Path, "wavSize", len(wavData))
 
+			result.stage = synthStageOK
 			result.wav = wavData
 			if !sendSynthResult(ctx, ch, result) {
 				return

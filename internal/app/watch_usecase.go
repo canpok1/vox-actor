@@ -243,9 +243,12 @@ func (u *WatchUsecase) processFile(ctx context.Context, path string, params Watc
 
 // processScriptsDryRun はDryRunモードで1ファイル分のスクリプト群を処理する。
 // VOICEVOXエンジン/音声再生は一切呼ばず、既存のログ互換性を保ったまま逐次出力する。
-func (u *WatchUsecase) processScriptsDryRun(_ context.Context, scripts []entity.Script, total int, params WatchParams) {
+func (u *WatchUsecase) processScriptsDryRun(ctx context.Context, scripts []entity.Script, total int, params WatchParams) {
 	current := 0
 	for _, script := range scripts {
+		if ctx.Err() != nil {
+			return
+		}
 		if script.IsEmpty {
 			u.logger.Debug("skipping empty script", "path", script.Path)
 			continue

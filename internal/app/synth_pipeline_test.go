@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"io"
 	"log/slog"
 	"runtime"
 	"strings"
@@ -33,16 +32,11 @@ type pipelineMockClient struct {
 	createQueryErrs map[int]error
 	synthesizeErrs  map[int]error
 
-	// 呼び出し遅延を注入できる。0ならノーウェイト。
-	createQueryDelay time.Duration
-	synthesizeDelay  time.Duration
+	// Synthesize遅延。prefetch競合を模擬したいケースで使う。
+	synthesizeDelay time.Duration
 
-	// 呼び出し履歴
 	createQueryCalls []pipelineCreateQueryArgs
 	synthesizeCalls  []pipelineSynthesizeArgs
-
-	// 呼び出し時フック
-	onCreateQuery func(callIndex int)
 }
 
 func (m *pipelineMockClient) HealthCheck(_ context.Context) error { return nil }
@@ -51,17 +45,9 @@ func (m *pipelineMockClient) CreateQuery(_ context.Context, text string, speaker
 	m.mu.Lock()
 	callIndex := len(m.createQueryCalls)
 	m.createQueryCalls = append(m.createQueryCalls, pipelineCreateQueryArgs{text: text, speakerID: speakerID})
-	delay := m.createQueryDelay
 	err := m.createQueryErrs[callIndex]
-	hook := m.onCreateQuery
 	m.mu.Unlock()
 
-	if delay > 0 {
-		time.Sleep(delay)
-	}
-	if hook != nil {
-		hook(callIndex)
-	}
 	if err != nil {
 		return nil, err
 	}
@@ -85,10 +71,6 @@ func (m *pipelineMockClient) Synthesize(_ context.Context, query *entity.AudioQu
 	return []byte("wav"), nil
 }
 
-func discardPipelineLogger() *slog.Logger {
-	return slog.New(slog.NewTextHandler(io.Discard, nil))
-}
-
 func TestStartSynthPipeline_ForwardsScriptsInOrder(t *testing.T) {
 	client := &pipelineMockClient{}
 	scripts := []entity.Script{
@@ -98,7 +80,7 @@ func TestStartSynthPipeline_ForwardsScriptsInOrder(t *testing.T) {
 	}
 	cfg := synthPipelineConfig{defaultSpeakerID: 3, synthesisLogLevel: slog.LevelInfo}
 
-	ch := startSynthPipeline(context.Background(), client, discardPipelineLogger(), scripts, cfg)
+	ch := startSynthPipeline(context.Background(), client, discardLogger(), scripts, cfg)
 
 	var got []synthResult
 	for r := range ch {
@@ -133,7 +115,7 @@ func TestStartSynthPipeline_SkipsEmptyScripts_IndexCountsNonEmptyOnly(t *testing
 	}
 	cfg := synthPipelineConfig{defaultSpeakerID: 3, synthesisLogLevel: slog.LevelInfo}
 
-	ch := startSynthPipeline(context.Background(), client, discardPipelineLogger(), scripts, cfg)
+	ch := startSynthPipeline(context.Background(), client, discardLogger(), scripts, cfg)
 
 	var got []synthResult
 	for r := range ch {
@@ -165,7 +147,7 @@ func TestStartSynthPipeline_PropagatesCreateQueryError(t *testing.T) {
 	}
 	cfg := synthPipelineConfig{defaultSpeakerID: 3, synthesisLogLevel: slog.LevelInfo}
 
-	ch := startSynthPipeline(context.Background(), client, discardPipelineLogger(), scripts, cfg)
+	ch := startSynthPipeline(context.Background(), client, discardLogger(), scripts, cfg)
 
 	var got []synthResult
 	for r := range ch {
@@ -196,7 +178,7 @@ func TestStartSynthPipeline_PropagatesSynthesizeError(t *testing.T) {
 	}
 	cfg := synthPipelineConfig{defaultSpeakerID: 3, synthesisLogLevel: slog.LevelInfo}
 
-	ch := startSynthPipeline(context.Background(), client, discardPipelineLogger(), scripts, cfg)
+	ch := startSynthPipeline(context.Background(), client, discardLogger(), scripts, cfg)
 
 	got := drainPipeline(ch)
 	if len(got) != 1 {
@@ -226,7 +208,7 @@ func TestStartSynthPipeline_ContextCancel_ExitsProducerWithoutLeak(t *testing.T)
 
 	goroutinesBefore := runtime.NumGoroutine()
 
-	ch := startSynthPipeline(ctx, client, discardPipelineLogger(), scripts, cfg)
+	ch := startSynthPipeline(ctx, client, discardLogger(), scripts, cfg)
 
 	// 1件だけ受け取ってキャンセル
 	<-ch
@@ -265,7 +247,7 @@ func TestStartSynthPipeline_ContextAlreadyCancelled_ClosesChannelImmediately(t *
 	}
 	cfg := synthPipelineConfig{defaultSpeakerID: 3, synthesisLogLevel: slog.LevelInfo}
 
-	ch := startSynthPipeline(ctx, client, discardPipelineLogger(), scripts, cfg)
+	ch := startSynthPipeline(ctx, client, discardLogger(), scripts, cfg)
 
 	select {
 	case _, ok := <-ch:
@@ -316,7 +298,7 @@ func TestStartSynthPipeline_MultipleInvocations_NoGoroutineLeak(t *testing.T) {
 			{Path: "a.txt", Text: "A", IsEmpty: false},
 			{Path: "b.txt", Text: "B", IsEmpty: false},
 		}
-		ch := startSynthPipeline(context.Background(), client, discardPipelineLogger(), scripts, cfg)
+		ch := startSynthPipeline(context.Background(), client, discardLogger(), scripts, cfg)
 		drainPipeline(ch)
 	}
 
