@@ -649,6 +649,95 @@ func TestActUsecase_Run_WithNilLogger_NoPanic(t *testing.T) {
 	}
 }
 
+// --- dry-run テスト ---
+
+func TestActUsecase_Run_DryRun_SkipsClientAndPlayerAndLogs(t *testing.T) {
+	reader := &mockScriptReader{
+		scripts: []entity.Script{
+			{Path: "a.txt", Text: "おはよう", IsEmpty: false},
+			{Path: "b.txt", Text: "", IsEmpty: true},
+			{Path: "c.txt", Text: "こんにちは", IsEmpty: false},
+		},
+	}
+	client := &mockVoicevoxClient{
+		query:   &entity.AudioQuery{},
+		wavData: []byte("fake-wav"),
+	}
+	player := &mockAudioPlayer{}
+
+	var buf bytes.Buffer
+	logger := slog.New(logging.NewHumanHandler(&buf, &logging.HumanHandlerOptions{
+		Level:   slog.LevelInfo,
+		NoColor: true,
+		DryRun:  true,
+	}))
+
+	uc := app.NewActUsecase(reader, client, player, app.WithLogger(logger))
+	params := app.ActParams{
+		Path:      "scripts/",
+		SpeakerID: 3,
+		DryRun:    true,
+	}
+
+	err := uc.Run(context.Background(), params)
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	if client.createQueryCalls != 0 {
+		t.Errorf("expected 0 CreateQuery calls in dry-run, got: %d", client.createQueryCalls)
+	}
+	if client.synthesizeCalls != 0 {
+		t.Errorf("expected 0 Synthesize calls in dry-run, got: %d", client.synthesizeCalls)
+	}
+	if player.playCalls != 0 {
+		t.Errorf("expected 0 Play calls in dry-run, got: %d", player.playCalls)
+	}
+
+	output := buf.String()
+	// dry-run時のログ: would synthesize, 進捗, 空ファイルスキップ
+	if !strings.Contains(output, "[dry run] would synthesize and play") {
+		t.Errorf("expected '[dry run] would synthesize and play' in log, got: %s", output)
+	}
+	if !strings.Contains(output, "[dry run] [1/2] processing script") {
+		t.Errorf("expected '[dry run] [1/2] processing script' in log, got: %s", output)
+	}
+	if !strings.Contains(output, "[dry run] [2/2] processing script") {
+		t.Errorf("expected '[dry run] [2/2] processing script' in log, got: %s", output)
+	}
+	if !strings.Contains(output, "path=a.txt") {
+		t.Errorf("expected 'path=a.txt' in log, got: %s", output)
+	}
+	if !strings.Contains(output, "text=おはよう") {
+		t.Errorf("expected 'text=おはよう' in log, got: %s", output)
+	}
+}
+
+func TestActUsecase_Run_DryRun_NoHealthCheck(t *testing.T) {
+	reader := &mockScriptReader{
+		scripts: []entity.Script{
+			{Path: "a.txt", Text: "おはよう", IsEmpty: false},
+		},
+	}
+	// HealthCheckがエラーを返してもdry-runでは呼ばれずエラーにならない
+	client := &mockVoicevoxClient{
+		healthCheckErr: errors.New("connection refused"),
+	}
+	player := &mockAudioPlayer{}
+
+	uc := app.NewActUsecase(reader, client, player)
+	params := app.ActParams{
+		Path:      "scripts/",
+		SpeakerID: 3,
+		DryRun:    true,
+	}
+
+	err := uc.Run(context.Background(), params)
+	if err != nil {
+		t.Fatalf("expected no error in dry-run even with HealthCheck failing, got: %v", err)
+	}
+}
+
 // --- セリフ単位パラメータ テスト ---
 
 // テストリスト: セリフ単位パラメータ

@@ -121,6 +121,7 @@ vox-actor say <text>
 | `--pitch` | — | `0.0` | 音高 |
 | `--intonation` | — | `1.0` | 抑揚 |
 | `--verbose` | — | `false` | 詳細ログを出力 |
+| `--dry-run` | — | `false` | VOICEVOX・音声再生を行わず、読み上げ対象をログ出力（[詳細](#-dry-runモード)） |
 
 ### `act` サブコマンド
 
@@ -140,6 +141,7 @@ vox-actor act <path>
 | `--watch` | — | `false` | ディレクトリ監視モードを有効化（後方互換。[高度な利用](#-高度な利用リモート環境監視モード)参照） |
 | `--watch-delete` | — | `false` | ディレクトリ監視モード（処理済みファイルを削除。後方互換） |
 | `--verbose` | — | `false` | 詳細ログを出力 |
+| `--dry-run` | — | `false` | VOICEVOX・音声再生を行わず、読み上げ対象をログ出力（[詳細](#-dry-runモード)） |
 
 ### `watch` サブコマンド
 
@@ -158,6 +160,32 @@ vox-actor watch <dir1> [<dir2> ...]
 | `--intonation` | — | `1.0` | 抑揚 |
 | `--delete` | — | `false` | 処理済みファイルを削除（未指定時は各ディレクトリの `done/` に移動） |
 | `--verbose` | — | `false` | 詳細ログを出力 |
+| `--dry-run` | — | `false` | VOICEVOX・音声再生を行わず、読み上げ対象をログ出力（[詳細](#-dry-runモード)） |
+
+### 🧪 dry-runモード
+
+`--dry-run` を付けると、VOICEVOXエンジンへの通信・音声再生を一切行わず、読み上げ対象の情報のみをログ出力します。VOICEVOXエンジン未起動の環境や音声出力不可の環境（CI・リモート・コンテナなど）での動作確認に利用できます。
+
+```bash
+# テキスト指定
+vox-actor say --dry-run "こんにちは"
+
+# ファイル指定
+vox-actor act --dry-run script.json
+
+# ディレクトリ監視（ディレクトリ監視・done/移動・削除は通常通り実施）
+vox-actor watch --dry-run /path/to/watch-dir
+```
+
+出力例（標準エラー出力）:
+
+```
+  [2026-04-19 15:04:05] [dry run] would synthesize and play (path=script.json, text=こんにちは, speaker=3, speed=1.2, pitch=0.1, intonation=1.5)
+```
+
+- 合成・再生の代わりに `[dry run]` プレフィックス付きのログが出力されます
+- 疎通確認（`HealthCheck`）も行いません
+- `watch` / `act --watch` ではディレクトリ監視・`done/` への移動／削除は通常通り実施されるため、監視フロー全体を検証できます
 
 ## 📦 インストール方法
 

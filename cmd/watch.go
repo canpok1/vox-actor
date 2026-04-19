@@ -65,6 +65,7 @@ func runWatch(cmd *cobra.Command, args []string, deps *WatchDeps) error {
 	speed, _ := cmd.Flags().GetFloat64("speed")
 	pitch, _ := cmd.Flags().GetFloat64("pitch")
 	intonation, _ := cmd.Flags().GetFloat64("intonation")
+	dryRun, _ := cmd.Flags().GetBool("dry-run")
 
 	logger := buildLoggerFromFlags(cmd)
 
@@ -86,5 +87,6 @@ func runWatch(cmd *cobra.Command, args []string, deps *WatchDeps) error {
 		Speed:      &speed,
 		Pitch:      &pitch,
 		Intonation: &intonation,
+		DryRun:     dryRun,
 	})
 }

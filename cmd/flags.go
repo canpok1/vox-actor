@@ -10,10 +10,12 @@ import (
 	"golang.org/x/term"
 )
 
-// buildLoggerFromFlags は --verbose フラグと端末/環境変数の状態からロガーを構築する。
+// buildLoggerFromFlags は --verbose / --dry-run フラグと端末/環境変数の状態からロガーを構築する。
 // 標準エラー出力が端末でない場合、または NO_COLOR 環境変数が設定されている場合は色を無効化する。
+// --dry-run が指定されている場合はログメッセージに [dry run] プレフィックスを挿入する。
 func buildLoggerFromFlags(cmd *cobra.Command) *slog.Logger {
 	verbose, _ := cmd.Flags().GetBool("verbose")
+	dryRun, _ := cmd.Flags().GetBool("dry-run")
 	logLevel := slog.LevelInfo
 	if verbose {
 		logLevel = slog.LevelDebug
@@ -22,6 +24,7 @@ func buildLoggerFromFlags(cmd *cobra.Command) *slog.Logger {
 	return slog.New(logging.NewHumanHandler(os.Stderr, &logging.HumanHandlerOptions{
 		Level:   logLevel,
 		NoColor: noColor,
+		DryRun:  dryRun,
 	}))
 }
 
@@ -45,4 +48,5 @@ func registerCommonFlags(cmd *cobra.Command) {
 	cmd.Flags().Float64("pitch", 0.0, "音高")
 	cmd.Flags().Float64("intonation", 1.0, "抑揚")
 	cmd.Flags().Bool("verbose", false, "詳細ログを出力")
+	cmd.Flags().Bool("dry-run", false, "VOICEVOX・音声再生を行わず、読み上げ対象をログ出力")
 }

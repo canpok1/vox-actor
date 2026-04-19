@@ -50,6 +50,7 @@ func runSay(cmd *cobra.Command, args []string, deps *SayDeps) error {
 	speed, _ := cmd.Flags().GetFloat64("speed")
 	pitch, _ := cmd.Flags().GetFloat64("pitch")
 	intonation, _ := cmd.Flags().GetFloat64("intonation")
+	dryRun, _ := cmd.Flags().GetBool("dry-run")
 
 	logger := buildLoggerFromFlags(cmd)
 
@@ -64,6 +65,7 @@ func runSay(cmd *cobra.Command, args []string, deps *SayDeps) error {
 		Speed:      &speed,
 		Pitch:      &pitch,
 		Intonation: &intonation,
+		DryRun:     dryRun,
 	}
 
 	uc := app.NewSayUsecase(client, deps.Player, app.WithSayLogger(logger))

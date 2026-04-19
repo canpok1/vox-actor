@@ -242,6 +242,45 @@ func TestHumanHandler_Handle_ColorEnabledForInfo(t *testing.T) {
 	}
 }
 
+func TestHumanHandler_Handle_DryRunPrefix(t *testing.T) {
+	var buf bytes.Buffer
+	h := logging.NewHumanHandler(&buf, &logging.HumanHandlerOptions{
+		Level:   slog.LevelInfo,
+		NoColor: true,
+		DryRun:  true,
+	})
+	logger := slog.New(h)
+
+	logger.Info("would synthesize and play", "path", "script.json", "text", "こんにちは")
+
+	output := buf.String()
+	// 時刻の直後に [dry run] プレフィックスが挿入される
+	if !strings.Contains(output, "] [dry run] would synthesize and play") {
+		t.Errorf("expected '[dry run]' prefix after timestamp, got: %q", output)
+	}
+	// 属性も通常通り出力される
+	if !strings.Contains(output, "(path=script.json, text=こんにちは)") {
+		t.Errorf("expected attributes after message, got: %q", output)
+	}
+}
+
+func TestHumanHandler_Handle_DryRunPrefix_Disabled(t *testing.T) {
+	var buf bytes.Buffer
+	h := logging.NewHumanHandler(&buf, &logging.HumanHandlerOptions{
+		Level:   slog.LevelInfo,
+		NoColor: true,
+		DryRun:  false,
+	})
+	logger := slog.New(h)
+
+	logger.Info("normal message")
+
+	output := buf.String()
+	if strings.Contains(output, "[dry run]") {
+		t.Errorf("expected no '[dry run]' prefix when DryRun=false, got: %q", output)
+	}
+}
+
 func TestHumanHandler_Handle_NewlineTerminated(t *testing.T) {
 	var buf bytes.Buffer
 	h := logging.NewHumanHandler(&buf, &logging.HumanHandlerOptions{
