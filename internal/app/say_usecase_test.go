@@ -221,15 +221,25 @@ func TestSayUsecase_Run_DryRun_SkipsClientAndPlayerAndLogs(t *testing.T) {
 		t.Errorf("expected 0 Play calls in dry-run, got: %d", player.playCalls)
 	}
 
-	// ログに [dry run] プレフィックスと合成予定情報が含まれる
+	// ログに [dry run] プレフィックスと非dry-run同形式のメッセージが含まれる
 	output := buf.String()
-	if !strings.Contains(output, "[dry run] would synthesize and play") {
-		t.Errorf("expected '[dry run] would synthesize and play' in log, got: %s", output)
+	if !strings.Contains(output, "[dry run] synthesis completed") {
+		t.Errorf("expected '[dry run] synthesis completed' in log, got: %s", output)
+	}
+	if !strings.Contains(output, "wavSize=0") {
+		t.Errorf("expected 'wavSize=0' in log, got: %s", output)
+	}
+	if !strings.Contains(output, "[dry run] playback completed") {
+		t.Errorf("expected '[dry run] playback completed' in log, got: %s", output)
 	}
 	for _, want := range []string{"text=こんにちは", "speaker=3", "speed=1.2", "pitch=0.1", "intonation=1.5"} {
 		if !strings.Contains(output, want) {
 			t.Errorf("expected %q in log, got: %s", want, output)
 		}
+	}
+	// say の dry-run では engine health check passed は出力されない
+	if strings.Contains(output, "engine health check passed") {
+		t.Errorf("expected no 'engine health check passed' in dry-run, got: %s", output)
 	}
 }
 

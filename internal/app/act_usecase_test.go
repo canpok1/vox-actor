@@ -695,21 +695,35 @@ func TestActUsecase_Run_DryRun_SkipsClientAndPlayerAndLogs(t *testing.T) {
 	}
 
 	output := buf.String()
-	// dry-run時のログ: would synthesize, 進捗, 空ファイルスキップ
-	if !strings.Contains(output, "[dry run] would synthesize and play") {
-		t.Errorf("expected '[dry run] would synthesize and play' in log, got: %s", output)
-	}
+	// dry-run時のログ: 非dry-run と同じメッセージ名で出力される
 	if !strings.Contains(output, "[dry run] [1/2] processing script") {
 		t.Errorf("expected '[dry run] [1/2] processing script' in log, got: %s", output)
 	}
 	if !strings.Contains(output, "[dry run] [2/2] processing script") {
 		t.Errorf("expected '[dry run] [2/2] processing script' in log, got: %s", output)
 	}
+	if !strings.Contains(output, "[dry run] synthesis completed") {
+		t.Errorf("expected '[dry run] synthesis completed' in log, got: %s", output)
+	}
+	if !strings.Contains(output, "wavSize=0") {
+		t.Errorf("expected 'wavSize=0' in log, got: %s", output)
+	}
+	if !strings.Contains(output, "[dry run] playback completed") {
+		t.Errorf("expected '[dry run] playback completed' in log, got: %s", output)
+	}
+	if !strings.Contains(output, "[dry run] all scripts processed") {
+		t.Errorf("expected '[dry run] all scripts processed' in log, got: %s", output)
+	}
 	if !strings.Contains(output, "path=a.txt") {
 		t.Errorf("expected 'path=a.txt' in log, got: %s", output)
 	}
 	if !strings.Contains(output, "text=おはよう") {
 		t.Errorf("expected 'text=おはよう' in log, got: %s", output)
+	}
+	for _, want := range []string{"speaker=3", "speed=default", "pitch=default", "intonation=default"} {
+		if !strings.Contains(output, want) {
+			t.Errorf("expected %q in log, got: %s", want, output)
+		}
 	}
 }
 

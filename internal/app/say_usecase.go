@@ -55,7 +55,9 @@ func (u *SayUsecase) Run(ctx context.Context, params SayParams) error {
 		"speed", params.Speed, "pitch", params.Pitch, "intonation", params.Intonation)
 
 	if params.DryRun {
-		logDryRunSynthesize(u.logger, "", params.Text, params.SpeakerID, params.Speed, params.Pitch, params.Intonation)
+		u.logger.Info("synthesis completed", "wavSize", 0)
+		attrs := dryRunPlaybackAttrs(params.Text, params.SpeakerID, params.Speed, params.Pitch, params.Intonation)
+		u.logger.Info("playback completed", attrs...)
 		return nil
 	}
 

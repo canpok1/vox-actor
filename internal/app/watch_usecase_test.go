@@ -607,15 +607,32 @@ func TestWatchUsecase_Run_DryRun_SkipsClientAndPlayerAndMovesToDone(t *testing.T
 	}
 
 	output := buf.String()
-	if !strings.Contains(output, "[dry run] would synthesize and play") {
-		t.Errorf("expected '[dry run] would synthesize and play' in log, got: %s", output)
+	if !strings.Contains(output, "[dry run] [1/1] playback completed") {
+		t.Errorf("expected '[dry run] [1/1] playback completed' in log, got: %s", output)
 	}
-	if !strings.Contains(output, "path=/tmp/watch/a.txt") {
-		t.Errorf("expected 'path=/tmp/watch/a.txt' in log, got: %s", output)
+	for _, want := range []string{"text=おはよう", "speaker=3", "speed=default", "pitch=default", "intonation=default"} {
+		if !strings.Contains(output, want) {
+			t.Errorf("expected %q in log, got: %s", want, output)
+		}
 	}
-	if !strings.Contains(output, "text=おはよう") {
-		t.Errorf("expected 'text=おはよう' in log, got: %s", output)
+	// watch の playback completed には path を含めない
+	playbackLine := findLineContaining(output, "playback completed")
+	if playbackLine == "" {
+		t.Fatalf("expected a 'playback completed' log line, got: %s", output)
 	}
+	if strings.Contains(playbackLine, "path=") {
+		t.Errorf("expected no 'path=...' on playback completed, got: %s", playbackLine)
+	}
+}
+
+// findLineContaining は s の中から substr を含む最初の行を返す（見つからなければ空文字）。
+func findLineContaining(s, substr string) string {
+	for line := range strings.SplitSeq(s, "\n") {
+		if strings.Contains(line, substr) {
+			return line
+		}
+	}
+	return ""
 }
 
 func TestWatchUsecase_Run_DryRun_NoHealthCheck(t *testing.T) {

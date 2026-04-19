@@ -180,10 +180,13 @@ vox-actor watch --dry-run /path/to/watch-dir
 出力例（標準エラー出力）:
 
 ```
-  [2026-04-19 15:04:05] [dry run] would synthesize and play (path=script.json, text=こんにちは, speaker=3, speed=1.2, pitch=0.1, intonation=1.5)
+  [2026-04-19 15:04:05] [dry run] synthesis completed (wavSize=0)
+  [2026-04-19 15:04:05] [dry run] playback completed (text=こんにちは, speaker=3, speed=1.2, pitch=0.1, intonation=1.5)
 ```
 
-- 合成・再生の代わりに `[dry run]` プレフィックス付きのログが出力されます
+- 非dry-run と同じメッセージ名（`synthesis completed` / `playback completed` 等）で、`[dry run]` プレフィックスが付与されます
+- `synthesis completed` の `wavSize` は `0`（実際には合成していないため）です
+- `playback completed` には dry-run 時のみ `text` / `speaker` / `speed` / `pitch` / `intonation` が属性として付与されます
 - 疎通確認（`HealthCheck`）も行いません
 - `watch` / `act --watch` ではディレクトリ監視・`done/` への移動／削除は通常通り実施されるため、監視フロー全体を検証できます
 
