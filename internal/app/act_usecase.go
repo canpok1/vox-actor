@@ -106,14 +106,7 @@ func (u *ActUsecase) Run(ctx context.Context, params ActParams) error {
 		intonation := script.ResolveIntonation(params.Intonation)
 
 		if params.DryRun {
-			u.logger.Info("would synthesize and play",
-				"path", script.Path,
-				"text", truncateAndEscapeText(script.Text),
-				"speaker", speakerID,
-				"speed", formatFloatPtr(speed),
-				"pitch", formatFloatPtr(pitch),
-				"intonation", formatFloatPtr(intonation),
-			)
+			logDryRunSynthesize(u.logger, script.Path, script.Text, speakerID, speed, pitch, intonation)
 			continue
 		}
 
