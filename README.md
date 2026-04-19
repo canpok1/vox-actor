@@ -8,16 +8,18 @@
 - **多彩な入力** — 直接テキスト／テキストファイル／JSON台本／ディレクトリ監視に対応
 - **感情制御** — キャラクター・話速・音高・抑揚をセリフ単位で調整可能
 
+## 🧩 前提条件
+
+- [VOICEVOXエンジン](https://voicevox.hiroshiba.jp/) が起動していること（デフォルト: `http://localhost:50021`）
+  - インストーラー版: [公式サイト](https://voicevox.hiroshiba.jp/)からダウンロードしてインストール後、アプリを起動する
+  - Docker版: `docker run --rm -p 50021:50021 voicevox/voicevox_engine:latest`
+- Go 1.26.1 以上（ソースからビルドする場合のみ）
+
 ## 🚀 クイックスタート（LLM連携フロー）
 
 claude code で作業の区切りごとに独り言を読み上げさせる最短手順です。`vox-actor` コマンドが `PATH` 上にある環境では `direct` モードで動作し、`vox-actor watch` の常駐や `VOX_ACTOR_WORKSPACE` の設定は不要です。
 
-1. **VOICEVOXエンジンを起動する**
-
-   - インストーラー版: [公式サイト](https://voicevox.hiroshiba.jp/)からダウンロードしてインストール後、アプリを起動する
-   - Docker版: `docker run --rm -p 50021:50021 voicevox/voicevox_engine:latest`
-
-2. **vox-actorをインストールする（Homebrew）**
+1. **vox-actorをインストールする（Homebrew）**
 
    ```bash
    brew tap canpok1/tap
@@ -26,7 +28,7 @@ claude code で作業の区切りごとに独り言を読み上げさせる最�
 
    Homebrew以外のインストール方法は[インストール方法](#-インストール方法)を参照してください。
 
-3. **claude codeにプラグインを導入する**
+2. **claude codeにプラグインを導入する**
 
    ```
    # claude code上で実行
@@ -36,7 +38,7 @@ claude code で作業の区切りごとに独り言を読み上げさせる最�
    /plugin install auto-monologue-plugin@vox-actor-marketplace
    ```
 
-4. **作業の区切りで自動的に独り言が読み上げられる**
+3. **作業の区切りで自動的に独り言が読み上げられる**
 
    `auto-monologue-plugin` を導入していれば、claude code の作業の区切りごとに自動で独り言が生成・読み上げされます。手動で呼び出す場合は `/vox-actor-plugin:monologue` を実行します。
 
@@ -101,9 +103,13 @@ vox-actor --version
 
 ## 📖 コマンドリファレンス
 
-オプションの優先順位: **CLIフラグ > 環境変数 > デフォルト値**
+オプションの優先順位: **オプション > 環境変数 > デフォルト値**
 
 ### `say` サブコマンド
+
+```
+vox-actor say <text>
+```
 
 テキストを直接引数で渡して読み上げる。
 
@@ -117,6 +123,10 @@ vox-actor --version
 | `--verbose` | — | `false` | 詳細ログを出力 |
 
 ### `act` サブコマンド
+
+```
+vox-actor act <path>
+```
 
 テキストファイル／JSON台本／ディレクトリを読み上げる。
 
@@ -132,6 +142,10 @@ vox-actor --version
 | `--verbose` | — | `false` | 詳細ログを出力 |
 
 ### `watch` サブコマンド
+
+```
+vox-actor watch <dir1> [<dir2> ...]
+```
 
 1つ以上のディレクトリを並列監視し、配置されたファイルを検知順に逐次再生する。
 
@@ -188,13 +202,6 @@ vox-actor --version
    make build
    ```
 
-## 🧩 前提条件
-
-- [VOICEVOXエンジン](https://voicevox.hiroshiba.jp/) が起動していること（デフォルト: `http://localhost:50021`）
-  - インストーラー版: [公式サイト](https://voicevox.hiroshiba.jp/)からダウンロードしてインストール後、アプリを起動する
-  - Docker版: `docker run --rm -p 50021:50021 voicevox/voicevox_engine:latest`
-- Go 1.26.1 以上（ソースからビルドする場合のみ）
-
 ## 🔀 高度な利用（リモート環境・監視モード）
 
 以下のようなケースでは、`watch` コマンドを常駐させる `file` モードでの利用が適しています。
@@ -208,9 +215,11 @@ vox-actor --version
 |---|---|---|
 | 読み上げ方式 | `vox-actor say` をその場で直接呼び出す | テキスト等をファイルに書き出し、別プロセスの `vox-actor watch` が読み上げる |
 | 監視プロセス | 不要 | `vox-actor watch` の常駐が必要 |
-| `VOX_ACTOR_WORKSPACE` | 任意（エラーログ出力先として使用） | 必須（ファイル受け渡し用ディレクトリ） |
+| ファイル出力先 | エラーログのみ（`$VOX_ACTOR_WORKSPACE/monologue-errors.log`） | 通知ファイル（`$VOX_ACTOR_WORKSPACE/notify_*.json`）＋エラーログ |
 | 同時呼び出し時 | 並列再生 | 検知順に逐次再生 |
 | 前提 | `vox-actor` コマンドが `PATH` 上にある | claude code 側と `vox-actor watch` 側で `VOX_ACTOR_WORKSPACE` を共有 |
+
+> `VOX_ACTOR_WORKSPACE` 未指定時は `<gitリポジトリ直下>/.tmp/notify` がデフォルト出力先として使われる（gitリポジトリ外では必須）。`file` モードでホストとLLM実行環境を分ける場合は、双方から参照可能な共有パスを明示的に指定する。
 
 モードは `VOX_ACTOR_MONOLOGUE_MODE` 環境変数で明示するか、未設定時は `vox-actor` コマンドの有無で自動判定されます（あり → `direct`、なし → `file`）。
 
@@ -257,6 +266,8 @@ vox-actor watch --delete /path/to/watch-dir
 ```bash
 echo "こんばんは" > /path/to/watch-dir/sample.txt
 ```
+
+`watch` コマンドは `Ctrl+C`（SIGINT）または SIGTERM で停止できる。
 
 ### `act --watch` / `act --watch-delete`（後方互換）
 
