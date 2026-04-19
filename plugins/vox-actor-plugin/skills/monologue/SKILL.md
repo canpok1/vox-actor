@@ -4,7 +4,7 @@ description: 作業開始時、作業終了時、想定外のことが起こっ�
 argument-hint: "[キャラクター名]"
 allowed-tools:
   - "Bash(${CLAUDE_PLUGIN_ROOT}/skills/monologue/scripts/monologue.sh *)"
-  - "Read(${CLAUDE_PLUGIN_ROOT}/skills/monologue/characters/*.md)"
+  - "Read(${CLAUDE_PLUGIN_ROOT}/characters/*.md)"
 ---
 
 作業の開始時や終了時に、キャラクターになりきった独り言を通知します。
@@ -52,7 +52,7 @@ ${CLAUDE_PLUGIN_ROOT}/skills/monologue/scripts/monologue.sh 通知確率 "（キ
 `$ARGUMENTS` で指定されたキャラクターの設定ファイルを読み込み、そのキャラクターになりきった一言コメントを生成する。
 
 - `$ARGUMENTS` が空の場合: デフォルトキャラクター「ずんだもん」を使用
-- キャラクター設定ファイル: `${CLAUDE_PLUGIN_ROOT}/skills/monologue/characters/{キャラクター名}.md`（例: `${CLAUDE_PLUGIN_ROOT}/skills/monologue/characters/zundamon.md`）
+- キャラクター設定ファイル: `${CLAUDE_PLUGIN_ROOT}/characters/{キャラクター名}.md`（例: `${CLAUDE_PLUGIN_ROOT}/characters/zundamon.md`）
 
 ## メモリに保存する設定項目
 
