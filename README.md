@@ -227,25 +227,28 @@ vox-actor act --verbose script.txt
 
 ### claude codeなどのLLMの作業状況を音声で通知する
 
-LLMの作業状況を指定ディレクトリにテキストファイルとして出力し、vox-actorの監視モードで読み上げることで、作業の進捗を音声で把握できます。
+LLMの作業状況を音声で通知できます。通知方式は実行環境に応じて2種類あります。
+
+- **`direct` モード**: `vox-actor say` をその場で直接呼び出す方式。監視プロセスの常駐が不要で、ファイルI/Oやポーリング遅延も発生しない。`vox-actor` コマンドが `PATH` 上に存在する環境で利用できる
+- **`file` モード**: テキストファイルを指定ディレクトリに書き出し、別プロセスで起動した `vox-actor watch` が読み上げる方式。`vox-actor` コマンドがない端末からでも（共有ディレクトリ経由で）利用できる
+
+どちらを使うかは `VOX_ACTOR_MONOLOGUE_MODE` 環境変数で明示するか、未設定時は `vox-actor` コマンドの有無で自動判定されます（あり → `direct`、なし → `file`）。
 
 claude code向けプラグインを同梱しているので、claude codeでは簡単に導入できます。同梱プラグインは以下の2種類です。
 
 - `vox-actor-plugin`: 独り言スキル（`/vox-actor-plugin:monologue`）を提供するプラグイン
 - `auto-monologue-plugin`: Stop hookでClaudeに独り言スキルの活用を促すプラグイン（`vox-actor-plugin` と併用することで、作業の区切りで独り言が自動生成されるようになる）
 
-1. 環境変数を設定する。
+#### セットアップ（`direct` モード）
+
+1. 環境変数を設定する（エラーログ出力先の指定。任意）。
    ```
-   # テキストファイルの出力先ディレクトリを指定
    export VOX_ACTOR_WORKSPACE=/path/to/directory
+   # VOICEVOXエンジンのURLがデフォルトでない場合のみ
+   export VOX_ENGINE_URL=http://localhost:50021
    ```
 
-2. vox-actorを監視モードで起動する。
-   ```
-   vox-actor watch $VOX_ACTOR_WORKSPACE
-   ```
-
-3. claude codeにプラグインを導入する。
+2. claude codeにプラグインを導入する。
    ```
    # claude code上で実行
    /plugin marketplace add canpok1/vox-actor
@@ -254,12 +257,33 @@ claude code向けプラグインを同梱しているので、claude codeでは�
    /plugin install auto-monologue-plugin@vox-actor-marketplace
    ```
 
-4. 独り言スキル（monologue）を実行する。
+3. 独り言スキル（monologue）を実行する。
    ```
    # claude code上で実行
    /vox-actor-plugin:monologue
    ```
    `auto-monologue-plugin` を導入している場合は、作業の区切りで自動的に独り言が生成される。
+
+`vox-actor say` の失敗は `$VOX_ACTOR_WORKSPACE/monologue-errors.log` に追記されるので、`tail -f` で確認できます（ログは末尾200行でローテーション）。複数セッションから並列に呼ばれても許容されます（エンジンへのリクエストや音声再生が重なる場合があります）。逐次再生したい場合は後述の `file` モードに切り替えてください。
+
+#### セットアップ（`file` モード）
+
+`vox-actor` コマンドが手元にない環境や、監視プロセスで逐次再生したい場合に使います。
+
+1. 環境変数を設定する。
+   ```
+   # テキストファイルの出力先ディレクトリを指定
+   export VOX_ACTOR_WORKSPACE=/path/to/directory
+   # モードを明示する場合（vox-actorコマンドがある環境で file モードを強制したい場合）
+   export VOX_ACTOR_MONOLOGUE_MODE=file
+   ```
+
+2. vox-actorを監視モードで起動する。
+   ```
+   vox-actor watch $VOX_ACTOR_WORKSPACE
+   ```
+
+3. claude codeにプラグインを導入し、独り言スキルを実行する（`direct` モードと同じ手順）。
 
 
 ## 開発

@@ -48,12 +48,51 @@ if ! [[ "$SPEED_SCALE" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
   exit 1
 fi
 
-# 乱数判定: ROLL <= PROBABILITY なら通知する
 ROLL=$((RANDOM % 100 + 1))
 if [ "$ROLL" -gt "$PROBABILITY" ]; then
   exit 0
 fi
 
+MODE="${VOX_ACTOR_MONOLOGUE_MODE:-}"
+if [ -z "$MODE" ]; then
+  if command -v vox-actor >/dev/null 2>&1; then
+    MODE="direct"
+  else
+    MODE="file"
+  fi
+fi
+
 mkdir -p "$VOX_ACTOR_WORKSPACE"
-jq -cn --argjson speaker "$SPEAKER" --arg text "$TEXT" --argjson speedScale "$SPEED_SCALE" \
-  '{speaker: $speaker, text: $text, speedScale: $speedScale}' > "${VOX_ACTOR_WORKSPACE}/notify_$(($(date +%s%N)/1000000)).json"
+
+case "$MODE" in
+  direct)
+    ERROR_LOG="${VOX_ACTOR_WORKSPACE}/monologue-errors.log"
+    MAX_LOG_LINES=200
+    (
+      OUTPUT=$(vox-actor say --speaker "$SPEAKER" --speed "$SPEED_SCALE" "$TEXT" 2>&1)
+      STATUS=$?
+      if [ "$STATUS" -ne 0 ]; then
+        TS=$(date '+%Y-%m-%d %H:%M:%S')
+        {
+          echo "[$TS] exit=$STATUS speaker=$SPEAKER speed=$SPEED_SCALE text=$TEXT"
+          printf '%s\n' "$OUTPUT" | sed 's/^/  /'
+        } >> "$ERROR_LOG"
+        LINES=$(wc -l < "$ERROR_LOG")
+        if [ "$LINES" -gt "$MAX_LOG_LINES" ]; then
+          TMP_LOG=$(mktemp "${ERROR_LOG}.XXXXXX")
+          tail -n "$MAX_LOG_LINES" "$ERROR_LOG" > "$TMP_LOG"
+          mv "$TMP_LOG" "$ERROR_LOG"
+        fi
+      fi
+    ) </dev/null >/dev/null 2>&1 &
+    disown 2>/dev/null
+    ;;
+  file)
+    jq -cn --argjson speaker "$SPEAKER" --arg text "$TEXT" --argjson speedScale "$SPEED_SCALE" \
+      '{speaker: $speaker, text: $text, speedScale: $speedScale}' > "${VOX_ACTOR_WORKSPACE}/notify_$(($(date +%s%N)/1000000)).json"
+    ;;
+  *)
+    echo "[ERROR] VOX_ACTOR_MONOLOGUE_MODE は 'direct' または 'file' で指定してください: '$MODE'"
+    exit 1
+    ;;
+esac
