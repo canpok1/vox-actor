@@ -349,7 +349,7 @@ claude code に `vox-actor-plugin` を導入すると、以下のスラッシュ
 以下のようなケースでは、`watch` コマンドを常駐させる `file` モードでの利用が適しています。
 
 - claude code がコンテナ／リモート環境で動作し、`vox-actor` コマンドはホスト側にしか存在しない
-- 複数セッションから同時に呼ばれても音声を逐次再生したい（`direct` モードは並列再生になる）
+- 複数セッションから同時に呼ばれても音声を逐次再生したい（`direct` モードは同一セッション内では逐次だが、セッション間では並列再生になる）
 
 ### `direct` モードと `file` モードの違い
 
@@ -358,7 +358,7 @@ claude code に `vox-actor-plugin` を導入すると、以下のスラッシュ
 | 読み上げ方式 | `vox-actor say` をその場で直接呼び出す | テキスト等をファイルに書き出し、別プロセスの `vox-actor watch` が読み上げる |
 | 監視プロセス | 不要 | `vox-actor watch` の常駐が必要 |
 | ファイル出力先 | エラーログのみ（`$VOX_ACTOR_WORKSPACE/monologue-errors.log`） | 通知ファイル（`$VOX_ACTOR_WORKSPACE/queue/notify_*.json`）＋エラーログ |
-| 同時呼び出し時 | 並列再生 | 検知順に逐次再生 |
+| 同時呼び出し時 | 同一セッション内は逐次再生、複数セッション間は並列再生 | 検知順に逐次再生 |
 | 前提 | `vox-actor` コマンドが `PATH` 上にある | claude code 側と `vox-actor watch` 側で `VOX_ACTOR_WORKSPACE` を共有 |
 
 > `VOX_ACTOR_WORKSPACE` は vox-actor 関連ファイルのルートディレクトリを指す（配下に `queue/` と `monologue-errors.log` が置かれる）。未指定時のデフォルトは gitリポジトリ内なら `<gitリポジトリ直下>/.vox-actor`、gitリポジトリ外なら `$PWD/.vox-actor`。`file` モードでホストとLLM実行環境を分ける場合は、双方から参照可能な共有パスを明示的に指定する。
