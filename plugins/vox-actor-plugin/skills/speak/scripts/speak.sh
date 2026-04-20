@@ -33,7 +33,7 @@ mkdir -p "$VOX_ACTOR_WORKSPACE"
 
 case "$MODE" in
   direct)
-    ERROR_LOG="${VOX_ACTOR_WORKSPACE}/explain-errors.log"
+    ERROR_LOG="${VOX_ACTOR_WORKSPACE}/speak-errors.log"
     MAX_LOG_LINES=200
     OUTPUT=$(vox-actor act "$JSONL_PATH" 2>&1)
     STATUS=$?
@@ -55,7 +55,7 @@ case "$MODE" in
   file)
     QUEUE_DIR="${VOX_ACTOR_WORKSPACE}/queue"
     mkdir -p "$QUEUE_DIR"
-    DEST="${QUEUE_DIR}/explain_$(($(date +%s%N)/1000000)).jsonl"
+    DEST="${QUEUE_DIR}/speak_$(($(date +%s%N)/1000000)).jsonl"
     mv "$JSONL_PATH" "$DEST"
     ;;
   *)
