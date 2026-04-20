@@ -279,7 +279,7 @@ claude code に `vox-actor-plugin` を導入すると、以下のスラッシュ
 
 ### 対応キャラクター一覧
 
-`monologue` / `speak` スキルで利用できるキャラクターは `plugins/vox-actor-plugin/characters/` に設定ファイルとして同梱されています。キャラクター名（`<name>`）は `/vox-actor-plugin:monologue <name>` の引数や `speak` スキルの `explanation_character` メモリ設定で指定します。
+`monologue` / `speak` スキルで利用できるキャラクターは `plugins/vox-actor-plugin/characters/` に設定ファイルとして同梱されています。キャラクター名（`<name>`）は `/vox-actor-plugin:monologue <name>` の引数や、両スキル共通の `default_character` メモリ設定で指定します。
 
 | キャラクター名 | `<name>` | 分類 | 特徴 |
 |---|---|---|---|
@@ -306,6 +306,7 @@ claude code に `vox-actor-plugin` を導入すると、以下のスラッシュ
 
 | 項目 | キー | デフォルト値 | 説明 |
 |------|------|-------------|------|
+| デフォルトキャラクター | `default_character` | `zundamon` | `characters/<name>.md` の `<name>`。`speak` スキルと共用。引数指定があればそちらが優先 |
 | 通知確率 | `monologue_probability` | `100` | 1〜100の整数。通知する確率（%） |
 
 ユーザー指示（例: 「独り言の頻度を30%にして」）で更新すると、以降の実行に反映されます。
@@ -328,8 +329,8 @@ claude code に `vox-actor-plugin` を導入すると、以下のスラッシュ
 
 | 項目 | キー | デフォルト値 | 値 | 説明 |
 |------|------|-------------|----|-----|
-| 読み上げキャラクター | `explanation_character` | `zundamon` | `characters/<name>.md` の `<name>` | 例: 「読み上げはめたんで」→ `metan` を保存 |
-| 読み上げの長さ | `explanation_length` | `medium` | `short` / `medium` / `long` | 下記の長さ表を参照 |
+| デフォルトキャラクター | `default_character` | `zundamon` | `characters/<name>.md` の `<name>` | `monologue` スキルと共用。例: 「読み上げはめたんで」→ `metan` を保存 |
+| 読み上げの長さ | `speak_length` | `medium` | `short` / `medium` / `long` | 下記の長さ表を参照 |
 
 ##### 読み上げの長さ
 
@@ -370,7 +371,7 @@ claude code に `vox-actor-plugin` を導入すると、以下のスラッシュ
 |---|---|---|
 | 読み上げ方式 | `vox-actor say` をその場で直接呼び出す | テキスト等をファイルに書き出し、別プロセスの `vox-actor watch` が読み上げる |
 | 監視プロセス | 不要 | `vox-actor watch` の常駐が必要 |
-| ファイル出力先 | エラーログのみ（`$VOX_ACTOR_WORKSPACE/monologue-errors.log`） | 通知ファイル（`$VOX_ACTOR_WORKSPACE/queue/notify_*.json`）＋エラーログ |
+| ファイル出力先 | エラーログのみ（`$VOX_ACTOR_WORKSPACE/monologue-errors.log`） | 通知ファイル（`$VOX_ACTOR_WORKSPACE/queue/monologue_*.json`）＋エラーログ |
 | 同時呼び出し時 | 同一セッション内は逐次再生、複数セッション間は並列再生 | 検知順に逐次再生 |
 | 前提 | `vox-actor` コマンドが `PATH` 上にある | claude code 側と `vox-actor watch` 側で `VOX_ACTOR_WORKSPACE` を共有 |
 

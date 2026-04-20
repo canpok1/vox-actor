@@ -49,9 +49,12 @@ ${CLAUDE_PLUGIN_ROOT}/skills/monologue/scripts/monologue.sh 通知確率 "（キ
 
 ## キャラクター設定
 
-`$ARGUMENTS` で指定されたキャラクターの設定ファイルを読み込み、そのキャラクターになりきった一言コメントを生成する。
+以下の優先順位でキャラクターを解決し、そのキャラクターになりきった一言コメントを生成する。
 
-- `$ARGUMENTS` が空の場合: デフォルトキャラクター「ずんだもん」を使用
+1. `$ARGUMENTS` が指定されていればそれを使用
+2. 指定がなければメモリの `default_character` を使用（`speak` スキルと共用）
+3. メモリ未設定なら `zundamon` を使用
+
 - キャラクター設定ファイル: `${CLAUDE_PLUGIN_ROOT}/characters/{キャラクター名}.md`（例: `${CLAUDE_PLUGIN_ROOT}/characters/zundamon.md`）
 
 ## メモリに保存する設定項目
@@ -60,6 +63,7 @@ ${CLAUDE_PLUGIN_ROOT}/skills/monologue/scripts/monologue.sh 通知確率 "（キ
 
 | 項目 | キー | デフォルト値 | 説明 |
 |------|------|-------------|------|
+| デフォルトキャラクター | `default_character` | `zundamon` | `characters/<name>.md` の `<name>`。`speak` スキルと共用 |
 | 通知確率 | `monologue_probability` | 100 | 1〜100の整数。通知する確率（%） |
 
 ## 前提条件
@@ -91,7 +95,7 @@ ${CLAUDE_PLUGIN_ROOT}/skills/monologue/scripts/monologue.sh 通知確率 "（キ
 
 #### `file` モード
 
-`${VOX_ACTOR_WORKSPACE}/queue/` に通知ファイルを書き出す。ファイル名は `notify_{ミリ秒タイムスタンプ}.json`、形式は `{"speaker": スピーカーID, "text": "セリフ", "speedScale": 話速}`。外部の通知監視プロセス（`vox-actor watch` 等）はこの `queue/` ディレクトリを監視対象として検知・読み上げする
+`${VOX_ACTOR_WORKSPACE}/queue/` に通知ファイルを書き出す。ファイル名は `monologue_{ミリ秒タイムスタンプ}.json`、形式は `{"speaker": スピーカーID, "text": "セリフ", "speedScale": 話速}`。外部の通知監視プロセス（`vox-actor watch` 等）はこの `queue/` ディレクトリを監視対象として検知・読み上げする
 
 ## キャラクター設定ファイルについて
 

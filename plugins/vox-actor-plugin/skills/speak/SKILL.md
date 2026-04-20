@@ -14,7 +14,7 @@ allowed-tools:
 ## 実行フロー
 
 1. `$ARGUMENTS` を読み上げ内容として受け取る
-2. メモリから `explanation_character`（既定 `zundamon`）と `explanation_length`（既定 `medium`）を読み取る
+2. メモリから `default_character`（既定 `zundamon`、`monologue` スキルと共用）と `speak_length`（既定 `medium`）を読み取る
 3. `${CLAUDE_PLUGIN_ROOT}/characters/<name>.md` を読み、`speakers` 一覧と性格を把握する
 4. 長さ設定に応じた **JSONL台本** を生成する（各行: `{"text":..., "speaker":..., "speedScale":...}`）
    - 冒頭の挨拶／つかみ → 本題 → まとめの流れを意識する
@@ -62,10 +62,10 @@ ${CLAUDE_PLUGIN_ROOT}/skills/speak/scripts/speak.sh <jsonl_path>
 
 | 項目 | キー | デフォルト値 | 値 | 説明 |
 |------|------|-------------|----|-----|
-| 読み上げキャラクター | `explanation_character` | `zundamon` | `characters/<name>.md` の `<name>` | 例: 「読み上げはめたんで」→ `metan` を保存 |
-| 読み上げの長さ | `explanation_length` | `medium` | `short` / `medium` / `long` | 上記の長さ表を参照 |
+| デフォルトキャラクター | `default_character` | `zundamon` | `characters/<name>.md` の `<name>` | `monologue` スキルと共用。例: 「読み上げはめたんで」→ `metan` を保存 |
+| 読み上げの長さ | `speak_length` | `medium` | `short` / `medium` / `long` | 上記の長さ表を参照 |
 
-`monologue` 側の `monologue_probability` とは衝突しない。
+`default_character` は `monologue` スキルと共有する。`speak_length` と `monologue_probability` はそれぞれのスキル固有で衝突しない。
 
 ## 前提条件
 
