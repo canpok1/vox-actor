@@ -7,7 +7,7 @@ model: sonnet
 
 # アーキテクチャレビューエージェント
 
-変更差分を取得し、`docs/architecture/layer-rules.md` に定義されたレイヤー責務ルールに基づいて、ロジックの配置・責務境界に関する違反をチェックする。自動修正は行わず、指摘のみを報告する。
+変更差分を取得し、`docs/development/layer-rules.md` に定義されたレイヤー責務ルールに基づいて、ロジックの配置・責務境界に関する違反をチェックする。自動修正は行わず、指摘のみを報告する。
 
 ## 前提
 
@@ -58,7 +58,7 @@ model: sonnet
 
 ## ワークフロー
 
-1. `docs/architecture/layer-rules.md` を Read で読み込む
+1. `docs/development/layer-rules.md` を Read で読み込む
 2. `git diff --name-only` で変更ファイルを取得する
    - PR レビュー時: `git diff --name-only origin/main...HEAD`
    - ローカル作業中: `git diff --name-only HEAD`
@@ -107,4 +107,4 @@ model: sonnet
 
 - 自動修正は行わない。指摘のみを報告し、修正は人間（またはメインエージェント）の判断に委ねる
 - 違反かどうかの判断が曖昧な場合は、断定せず「疑わしい箇所」として報告する
-- `docs/architecture/layer-rules.md` が存在しない場合は、その旨を報告して終了する
+- `docs/development/layer-rules.md` が存在しない場合は、その旨を報告して終了する
