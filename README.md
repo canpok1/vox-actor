@@ -277,6 +277,19 @@ vox-actor watch --dry-run /path/to/watch-dir
 
 claude code に `vox-actor-plugin` を導入すると、以下のスラッシュコマンドが利用できます。
 
+### 対応キャラクター一覧
+
+`monologue` / `speak` スキルで利用できるキャラクターは `plugins/vox-actor-plugin/characters/` に設定ファイルとして同梱されています。キャラクター名（`<name>`）は `/vox-actor-plugin:monologue <name>` の引数や `speak` スキルの `explanation_character` メモリ設定で指定します。
+
+| キャラクター名 | `<name>` | 分類 | 特徴 |
+|---|---|---|---|
+| ずんだもん（既定） | `zundamon` | — | 元気で明るい／語尾「〜のだ」 |
+| 四国めたん | `metan` | 女性 | お嬢様口調／ずんだもんの定番相方 |
+| 春日部つむぎ | `tsumugi` | 女性 | 元気な女子高生／親しみやすい |
+| 青山龍星 | `ryusei` | 男性 | 低音ボイス／落ち着いた口調 |
+| 玄野武宏 | `takehiro` | 男性 | 熱血系／感情バリエーション豊富 |
+| ナースロボ＿タイプＴ | `nurserobo_t` | 機械 | 無感情寄り／ロボット的 |
+
 ### `/vox-actor-plugin:monologue`
 
 作業開始／終了／想定外のことが起こった時など、節目のキャラクターの一言独り言を読み上げます。
