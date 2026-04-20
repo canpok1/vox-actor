@@ -17,9 +17,9 @@
 
 ## 🚀 クイックスタート
 
-claude code で作業の区切りごとに独り言を読み上げさせる最短手順です。
+手元で順に試して動作確認しながら、CLI単体〜claude code プラグインまで一通り体験できる手順です。
 
-1. **vox-actorをインストールする（Homebrew）**
+1. **CLIのセットアップ（Homebrew）**
 
    ```bash
    brew tap canpok1/tap
@@ -28,7 +28,15 @@ claude code で作業の区切りごとに独り言を読み上げさせる最�
 
    Homebrew以外のインストール方法は[インストール方法](#-インストール方法)を参照してください。
 
-2. **claude codeにプラグインを導入する**
+2. **CLIの実行で疎通確認**
+
+   ```bash
+   vox-actor say "こんにちは"
+   ```
+
+   VOICEVOXエンジンが起動していれば音声が再生されます。
+
+3. **claude code プラグインのインストール**
 
    ```
    # claude code上で実行
@@ -38,44 +46,81 @@ claude code で作業の区切りごとに独り言を読み上げさせる最�
    /plugin install auto-monologue-plugin@vox-actor-marketplace
    ```
 
-3. **作業の区切りで自動的に独り言が読み上げられる**
+4. **スキルの実行**
 
-   `auto-monologue-plugin` を導入していれば、claude code の作業の区切りごとに自動で独り言が生成・読み上げされます。手動で呼び出す場合は `/vox-actor-plugin:monologue` を、解説・朗読・作業結果の報告などを1キャラにまとまった長さで話させたい場合は `/vox-actor-plugin:speak <内容>` を、複数キャラが会話する形式で読み上げてほしい場合は `/vox-actor-plugin:talk <内容>` を実行します。
+   ```
+   # 作業の節目で1文の独り言
+   /vox-actor-plugin:monologue
 
-リモート環境での利用や複数セッションの音声を逐次再生したい場合は[高度な利用](#-高度な利用リモート環境監視モード)を参照してください。
+   # まとまった長さの解説・朗読・結果報告
+   /vox-actor-plugin:speak クロージャとは何か
 
-## 🎯 できること（概要）
+   # 複数キャラクターの掛け合い・対話
+   /vox-actor-plugin:talk クロージャとは何か
+   ```
 
-vox-actor は **CLI** と **claude code プラグイン／スキル** の 2 系統の使い方があります。
+   `auto-monologue-plugin` を導入していれば、claude code の作業の区切りごとに自動で独り言が生成・読み上げされます。
 
-### CLI
+## 🎯 できること
 
-`vox-actor` コマンドを直接呼び出してテキストや台本ファイルを読み上げる使い方です。
+vox-actor は **`vox-actor` CLI** と **claude code プラグイン／スキル** の2系統を提供しています。プラグイン／スキルも内部では `vox-actor` CLI を利用するため、CLIはどのパターンでも必須です。
 
-- `vox-actor say <text>`: コマンドライン引数のテキストを直接読み上げる
-- `vox-actor act <path>`: テキストファイル／JSON台本／JSONL台本／ディレクトリを読み上げる
-- `vox-actor watch <dir1> [<dir2> ...]`: 1つ以上のディレクトリを並列監視し、配置されたファイルを検知順に逐次再生する
+### 利用パターン
 
-詳細は [CLIリファレンス](#-cliリファレンス) を参照してください。
+| 利用パターン | 使うもの | 代表ユースケース |
+|---|---|---|
+| CLI単体 | CLI | テキスト即時読み上げ／台本ファイル再生／ディレクトリ監視 |
+| claude code経由での利用（音声デバイス利用可能環境） | CLI ＋ プラグイン／スキル | 作業区切りの独り言／解説・結果報告／複数キャラの会話読み上げ |
+| claude code経由での利用（音声デバイス利用不可環境） | ホスト: CLI（`watch`） ＋ コンテナ: プラグイン／スキル | 上記をコンテナ／リモート上の claude code から利用 |
 
-### claude code プラグイン／スキル
+### 各利用パターンの使い方
 
-claude code から `/vox-actor-plugin:<skill>` 形式で呼び出すスキルです。LLM が生成したセリフをキャラクターになりきって読み上げます。
+#### CLI単体
 
-- `/vox-actor-plugin:monologue`: 作業開始／終了／想定外のことが起こった時など、節目のキャラクターの一言独り言
-- `/vox-actor-plugin:speak <内容>`: 解説・朗読・結果報告・ストーリーテリングなど、渡した内容を冒頭→本題→まとめの流れで複数セリフのJSONL台本として1キャラに読み上げさせる
-- `/vox-actor-plugin:talk <内容>`: 複数キャラクターが会話する形式のJSONL台本を生成し、掛け合い・対話・漫才風などで読み上げさせる
+`vox-actor` コマンドを直接呼び出してテキストや台本ファイルを読み上げます。
 
-詳細は [プラグイン／スキルリファレンス](#-プラグインスキルリファレンス) を参照してください。
+```bash
+# 直接テキストを読み上げ
+vox-actor say "こんにちは"
 
-### 使い分け指針
+# テキスト／JSON／JSONL 台本ファイルを読み上げ
+vox-actor act script.jsonl
 
-| 用途 | 使うもの |
-|------|---------|
-| 手元のテキストや台本ファイルを即座に読み上げたい | CLI（`say` / `act`） |
-| 監視ディレクトリに配置されたファイルを逐次再生したい | CLI（`watch`） |
-| claude code の作業フローに読み上げを組み込みたい | プラグイン／スキル |
-| キャラクターになりきった独り言や解説を生成したい | プラグイン／スキル |
+# ディレクトリを並列監視し、配置されたファイルを検知順に読み上げ
+vox-actor watch /path/to/watch-dir
+```
+
+詳細は [CLIリファレンス](./docs/reference/cli.md) を参照してください。
+
+#### claude code経由での利用（音声デバイス利用可能環境）
+
+claude code と `vox-actor` CLI が同じ環境で動作するケースです。プラグインをインストールするだけで、スキルから CLI が直接呼び出されます。
+
+```
+/vox-actor-plugin:monologue                  # 1文の独り言
+/vox-actor-plugin:speak <内容>               # まとまった長さの解説・朗読・結果報告
+/vox-actor-plugin:talk <内容>                # 複数キャラクターの会話
+```
+
+セットアップ手順は上記 [クイックスタート](#-クイックスタート) を参照してください。スキルの詳細は [プラグイン／スキルリファレンス](./docs/reference/plugins.md) を参照してください。
+
+#### claude code経由での利用（音声デバイス利用不可環境）
+
+claude code がコンテナ／リモートで動作し、音声デバイスはホスト側のみにある構成です。ホスト側で `vox-actor watch` を常駐させ、claude code側は共有ディレクトリへ通知ファイルを書き出すことで、読み上げが逐次再生されます。
+
+```bash
+# ホスト側: 共有ディレクトリを監視
+export VOX_ACTOR_WORKSPACE=/path/to/shared/directory
+vox-actor watch "$VOX_ACTOR_WORKSPACE/queue"
+```
+
+```bash
+# claude code 側: 同じ共有ディレクトリを指定
+export VOX_ACTOR_WORKSPACE=/path/to/shared/directory
+export VOX_ACTOR_MONOLOGUE_MODE=file
+```
+
+詳細なセットアップ手順は [プラグイン／スキルリファレンス](./docs/reference/plugins.md) を参照してください。
 
 ## 📦 インストール方法
 
@@ -120,408 +165,11 @@ claude code から `/vox-actor-plugin:<skill>` 形式で呼び出すスキルで
    make build
    ```
 
-## 📖 CLIリファレンス
-
-オプションの優先順位: **オプション > 環境変数 > デフォルト値**
-
-### テキストの直接読み上げ
-
-```bash
-vox-actor say "こんにちは"
-```
-
-キャラクターや音声パラメータを指定する場合:
-
-```bash
-vox-actor say --speaker 3 --speed 1.2 "こんにちは"
-```
-
-### テキストファイルの読み上げ
-
-```bash
-vox-actor act script.txt
-```
-
-話速・音高・抑揚を調整する場合:
-
-```bash
-vox-actor act --speed 1.2 --pitch 0.1 --intonation 1.5 script.txt
-```
-
-### JSON台本モード（感情制御パラメータ付き）
-
-`.json` ファイルを使うと、セリフごとにキャラクターや感情パラメータを指定できます。
-
-```json
-{
-  "text": "こんにちは",
-  "speaker": 3,
-  "speedScale": 1.2,
-  "pitchScale": 0.1,
-  "intonationScale": 1.5
-}
-```
-
-```bash
-vox-actor act script.json
-```
-
-`text` のみ必須で、他のパラメータは省略可能です。省略した場合はCLIオプションのデフォルト値が使われます。
-
-ディレクトリを指定した場合、`.txt` / `.json` / `.jsonl` が辞書順で読み上げられます。
-
-### JSONL台本モード（複数セリフを1ファイルにまとめる）
-
-`.jsonl` ファイルを使うと、1行1JSONオブジェクトの形式で複数のセリフを1ファイルにまとめて記述できます。各行のスキーマは上記の JSON 台本と同一で、`text` のみ必須・その他のパラメータは省略可能です。
-
-```jsonl
-{"text": "こんにちは", "speaker": 3}
-{"text": "また会いましょう", "speaker": 3, "speedScale": 1.2}
-```
-
-```bash
-vox-actor act script.jsonl
-```
-
-### バージョン確認
-
-```bash
-vox-actor --version
-```
-
-### `say` サブコマンド
-
-```
-vox-actor say <text>
-```
-
-テキストを直接引数で渡して読み上げる。
-
-| オプション | 環境変数 | デフォルト値 | 説明 |
-|---|---|---|---|
-| `--engine-url` | `VOX_ENGINE_URL` | `http://localhost:50021` | VOICEVOXエンジンのURL |
-| `--speaker` | `VOX_SPEAKER` | `3` | キャラクターID |
-| `--speed` | — | `1.0` | 話速 |
-| `--pitch` | — | `0.0` | 音高 |
-| `--intonation` | — | `1.0` | 抑揚 |
-| `--verbose` | — | `false` | 詳細ログを出力 |
-| `--dry-run` | — | `false` | VOICEVOX・音声再生を行わず、読み上げ対象をログ出力（[詳細](#-dry-runモード)） |
-
-### `act` サブコマンド
-
-```
-vox-actor act <path>
-```
-
-テキストファイル／JSON台本／JSONL台本／ディレクトリを読み上げる。
-
-| オプション | 環境変数 | デフォルト値 | 説明 |
-|---|---|---|---|
-| `--engine-url` | `VOX_ENGINE_URL` | `http://localhost:50021` | VOICEVOXエンジンのURL |
-| `--speaker` | `VOX_SPEAKER` | `3` | キャラクターID |
-| `--speed` | — | `1.0` | 話速 |
-| `--pitch` | — | `0.0` | 音高 |
-| `--intonation` | — | `1.0` | 抑揚 |
-| `--watch` | — | `false` | ディレクトリ監視モードを有効化（後方互換。[高度な利用](#-高度な利用リモート環境監視モード)参照） |
-| `--watch-delete` | — | `false` | ディレクトリ監視モード（処理済みファイルを削除。後方互換） |
-| `--verbose` | — | `false` | 詳細ログを出力 |
-| `--dry-run` | — | `false` | VOICEVOX・音声再生を行わず、読み上げ対象をログ出力（[詳細](#-dry-runモード)） |
-
-### `watch` サブコマンド
-
-```
-vox-actor watch <dir1> [<dir2> ...]
-```
-
-1つ以上のディレクトリを並列監視し、配置されたファイルを検知順に逐次再生する。
-
-| オプション | 環境変数 | デフォルト値 | 説明 |
-|---|---|---|---|
-| `--engine-url` | `VOX_ENGINE_URL` | `http://localhost:50021` | VOICEVOXエンジンのURL |
-| `--speaker` | `VOX_SPEAKER` | `3` | キャラクターID |
-| `--speed` | — | `1.0` | 話速 |
-| `--pitch` | — | `0.0` | 音高 |
-| `--intonation` | — | `1.0` | 抑揚 |
-| `--delete` | — | `false` | 処理済みファイルを削除（未指定時は各ディレクトリの `done/` に移動） |
-| `--verbose` | — | `false` | 詳細ログを出力 |
-| `--dry-run` | — | `false` | VOICEVOX・音声再生を行わず、読み上げ対象をログ出力（[詳細](#-dry-runモード)） |
-
-### 🧪 dry-runモード
-
-`--dry-run` を付けると、VOICEVOXエンジンへの通信・音声再生を一切行わず、読み上げ対象の情報のみをログ出力します。VOICEVOXエンジン未起動の環境や音声出力不可の環境（CI・リモート・コンテナなど）での動作確認に利用できます。
-
-```bash
-# テキスト指定
-vox-actor say --dry-run "こんにちは"
-
-# ファイル指定
-vox-actor act --dry-run script.json
-
-# ディレクトリ監視（ディレクトリ監視・done/移動・削除は通常通り実施）
-vox-actor watch --dry-run /path/to/watch-dir
-```
-
-出力例（標準エラー出力）:
-
-```
-  [2026-04-19 15:04:05] [dry run] synthesis completed (wavSize=0)
-  [2026-04-19 15:04:05] [dry run] playback completed (text=こんにちは, speaker=3, speed=1.2, pitch=0.1, intonation=1.5)
-```
-
-- 非dry-run と同じメッセージ名（`synthesis completed` / `playback completed` 等）で、`[dry run]` プレフィックスが付与されます
-- `synthesis completed` の `wavSize` は `0`（実際には合成していないため）です
-- `playback completed` には dry-run 時のみ `text` / `speaker` / `speed` / `pitch` / `intonation` が属性として付与されます
-- 疎通確認（`HealthCheck`）も行いません
-- `watch` / `act --watch` ではディレクトリ監視・`done/` への移動／削除は通常通り実施されるため、監視フロー全体を検証できます
-
-## 🧩 プラグイン／スキルリファレンス
-
-claude code に `vox-actor-plugin` を導入すると、以下のスラッシュコマンドが利用できます。
-
-### 対応キャラクター一覧
-
-`monologue` / `speak` / `talk` スキルで利用できるキャラクターは `plugins/vox-actor-plugin/characters/` に設定ファイルとして同梱されています。キャラクター名（`<name>`）は `/vox-actor-plugin:monologue <name>` の引数や、`monologue` / `speak` 共通の `default_character`、`talk` 用の `talk_characters` メモリ設定で指定します。
-
-| キャラクター名 | `<name>` | 分類 | 特徴 |
-|---|---|---|---|
-| ずんだもん（既定） | `zundamon` | — | 元気で明るい／語尾「〜のだ」 |
-| 四国めたん | `metan` | 女性 | お嬢様口調／ずんだもんの定番相方 |
-| 春日部つむぎ | `tsumugi` | 女性 | 元気な女子高生／親しみやすい |
-| 青山龍星 | `ryusei` | 男性 | 低音ボイス／落ち着いた口調 |
-| 玄野武宏 | `takehiro` | 男性 | 熱血系／感情バリエーション豊富 |
-| ナースロボ＿タイプＴ | `nurserobo_t` | 機械 | 無感情寄り／ロボット的 |
-
-### `/vox-actor-plugin:monologue`
-
-作業開始／終了／想定外のことが起こった時など、節目のキャラクターの一言独り言を読み上げます。
-
-```
-/vox-actor-plugin:monologue [キャラクター名]
-```
-
-- 1文程度の短い独り言を生成し、キャラクターになりきって読み上げます
-- キャラクター設定ファイルの `speakers` からセリフの感情に合うスピーカーIDを選定します
-- 再生方式は `direct` / `file` モードで自動切替されます（[高度な利用](#-高度な利用リモート環境監視モード) を参照）
-
-#### メモリ設定
-
-| 項目 | キー | デフォルト値 | 説明 |
-|------|------|-------------|------|
-| デフォルトキャラクター | `default_character` | `zundamon` | `characters/<name>.md` の `<name>`。`speak` スキルと共用。引数指定があればそちらが優先 |
-| 通知確率 | `monologue_probability` | `100` | 1〜100の整数。通知する確率（%） |
-
-ユーザー指示（例: 「独り言の頻度を30%にして」）で更新すると、以降の実行に反映されます。
-
-### `/vox-actor-plugin:speak <内容>`
-
-渡した内容を冒頭→本題→まとめの流れで、複数セリフのJSONL台本としてキャラクターに読み上げさせます。解説・朗読・作業結果の報告・ストーリーテリングなど、まとまった長さの音声アウトプット全般に利用できます。`monologue` が1文の独り言用であるのに対し、本スキルはまとまった長さを扱います。
-
-```
-/vox-actor-plugin:speak <内容>
-```
-
-- `<内容>`: 読み上げてほしい概念・メモ・調査結果・文章などを自由記述で渡します
-- 生成されたJSONL台本は一時ファイルに書き出され、`vox-actor act` で再生されます
-- 再生方式は `direct` / `file` モードで自動切替されます（[高度な利用](#-高度な利用リモート環境監視モード) を参照）
-
-#### メモリ設定
-
-以下の設定を claude code のメモリに保存しておくと、次回以降の実行に反映されます。
-
-| 項目 | キー | デフォルト値 | 値 | 説明 |
-|------|------|-------------|----|-----|
-| デフォルトキャラクター | `default_character` | `zundamon` | `characters/<name>.md` の `<name>` | `monologue` スキルと共用。例: 「読み上げはめたんで」→ `metan` を保存 |
-| 読み上げの長さ | `speak_length` | `medium` | `short` / `medium` / `long` | 下記の長さ表を参照 |
-
-##### 読み上げの長さ
-
-| 設定 | セリフ数の目安 | 想定再生時間 |
-|------|---------------|------------|
-| `short` | 3〜5 | 〜十数秒 |
-| `medium`（既定） | 6〜10 | 30秒〜1分 |
-| `long` | 10+ | 数分 |
-
-#### 呼び出し例
-
-```
-/vox-actor-plugin:speak クロージャとは何か
-```
-
-#### JSONL出力例
-
-解説用途の例（ずんだもん）。朗読・結果報告・ストーリーテリングでも同じJSONL形式で台本が生成されます:
-
-```jsonl
-{"text": "クロージャって何なのだ？説明するのだ！", "speaker": 3, "speedScale": 1.1}
-{"text": "簡単に言うと、関数が作られた時の周りの変数を覚えておく仕組みなのだ", "speaker": 3, "speedScale": 1.0}
-{"text": "むむっ、ちょっと難しいけど…例えるならお弁当箱に具材を詰めて持ち歩く感じなのだ", "speaker": 3, "speedScale": 1.0}
-{"text": "後から開けても中身がそのまま残ってるみたいに、変数の値も残るのだ〜", "speaker": 1, "speedScale": 0.9}
-{"text": "わかったかな？お疲れ様なのだ！", "speaker": 1, "speedScale": 1.0}
-```
-
-### `/vox-actor-plugin:talk <内容>`
-
-渡した内容を、複数キャラクターが会話する形式のJSONL台本として生成し、掛け合い・対話・漫才風・ニュース番組風などの読み上げを行います。`speak` が1キャラでまとまった長さを語るのに対し、本スキルは2〜4人のキャラによる役割配分と会話の流れを構成します。
-
-```
-/vox-actor-plugin:talk <内容>
-```
-
-- `<内容>`: 会話のトピックにしたい概念・メモ・調査結果・文章などを自由記述で渡します
-- 生成されたJSONL台本は一時ファイルに書き出され、`vox-actor act` で再生されます
-- 再生方式は `direct` / `file` モードで自動切替されます（[高度な利用](#-高度な利用リモート環境監視モード) を参照）
-
-#### メモリ設定
-
-以下の設定を claude code のメモリに保存しておくと、次回以降の実行に反映されます。
-
-| 項目 | キー | デフォルト値 | 値 | 説明 |
-|------|------|-------------|----|-----|
-| 会話キャラクター | `talk_characters` | `[zundamon, metan]` | `characters/<name>.md` の `<name>` の配列（2〜4人） | 本スキル専用。`default_character` とは別に管理 |
-| 会話の長さ | `talk_length` | `medium` | `short` / `medium` / `long` | 下記の長さ表を参照 |
-
-##### 会話の長さ
-
-| 設定 | セリフ数の目安 | 想定再生時間 |
-|------|---------------|------------|
-| `short` | 4〜6 | 〜30秒 |
-| `medium`（既定） | 8〜12 | 1〜2分 |
-| `long` | 14+ | 数分 |
-
-#### 呼び出し例
-
-```
-/vox-actor-plugin:talk クロージャとは何か
-```
-
-#### JSONL出力例
-
-ずんだもん（`speakers.ノーマル: 3`、`あまあま: 1`）と四国めたん（`ノーマル: 2`、`ツンツン: 6`）の会話例:
-
-```jsonl
-{"text": "今日はクロージャについて解説するのだ！", "speaker": 3, "speedScale": 1.1}
-{"text": "あら、わたくしも勉強させてもらおうかしら", "speaker": 2, "speedScale": 1.0}
-{"text": "簡単に言うと、関数が作られた時の周りの変数を覚えておく仕組みなのだ", "speaker": 3, "speedScale": 1.0}
-{"text": "なるほど、お弁当箱みたいなものですわね", "speaker": 2, "speedScale": 1.0}
-{"text": "そう、そんな感じなのだー", "speaker": 1, "speedScale": 0.9}
-{"text": "よく分かりましたわ。ありがとう、ずんだもん", "speaker": 2, "speedScale": 1.0}
-```
-
-## 🔀 高度な利用（リモート環境・監視モード）
-
-以下のようなケースでは、`watch` コマンドを常駐させる `file` モードでの利用が適しています。
-
-- claude code がコンテナ／リモート環境で動作し、`vox-actor` コマンドはホスト側にしか存在しない
-- 複数セッションから同時に呼ばれても音声を逐次再生したい（`direct` モードは同一セッション内では逐次だが、セッション間では並列再生になる）
-
-### `direct` モードと `file` モードの違い
-
-| 観点 | `direct` モード | `file` モード |
-|---|---|---|
-| 読み上げ方式 | `vox-actor say` をその場で直接呼び出す | テキスト等をファイルに書き出し、別プロセスの `vox-actor watch` が読み上げる |
-| 監視プロセス | 不要 | `vox-actor watch` の常駐が必要 |
-| ファイル出力先 | エラーログのみ（`monologue` は `$VOX_ACTOR_WORKSPACE/monologue-errors.log`、`speak` / `talk` は `$VOX_ACTOR_WORKSPACE/play-script-errors.log`） | 通知ファイル（`$VOX_ACTOR_WORKSPACE/queue/monologue_*.json` / `speak_*.jsonl` / `talk_*.jsonl`）＋エラーログ |
-| 同時呼び出し時 | 同一セッション内は逐次再生、複数セッション間は並列再生 | 検知順に逐次再生 |
-| 前提 | `vox-actor` コマンドが `PATH` 上にある | claude code 側と `vox-actor watch` 側で `VOX_ACTOR_WORKSPACE` を共有 |
-
-> `VOX_ACTOR_WORKSPACE` は vox-actor 関連ファイルのルートディレクトリを指す（配下に `queue/` と `monologue-errors.log`、`speak` / `talk` 用の `play-script-errors.log` が置かれる）。未指定時のデフォルトは gitリポジトリ内なら `<gitリポジトリ直下>/.vox-actor`、gitリポジトリ外なら `$PWD/.vox-actor`。`file` モードでホストとLLM実行環境を分ける場合は、双方から参照可能な共有パスを明示的に指定する。
-
-モードは `VOX_ACTOR_MONOLOGUE_MODE` 環境変数で明示するか、未設定時は `vox-actor` コマンドの有無で自動判定されます（あり → `direct`、なし → `file`）。
-
-### `file` モードのセットアップ
-
-1. **ホスト側で監視プロセスを常駐させる**
-   ```bash
-   # vox-actor 関連ファイルのルートディレクトリを指定
-   export VOX_ACTOR_WORKSPACE=/path/to/shared/directory
-   # 通知ファイルは $VOX_ACTOR_WORKSPACE/queue/ に配置されるためそこを監視する
-   vox-actor watch "$VOX_ACTOR_WORKSPACE/queue"
-   ```
-
-2. **claude code 側で `file` モードを明示し、共有ディレクトリを指定する**
-   ```bash
-   export VOX_ACTOR_WORKSPACE=/path/to/shared/directory
-   # vox-actorコマンドがある環境で file モードを強制したい場合は以下も指定
-   export VOX_ACTOR_MONOLOGUE_MODE=file
-   ```
-
-3. **claude code にプラグインを導入する**（[クイックスタート](#-クイックスタート)と同じ手順）
-
-### ディレクトリ監視モードの詳細（`watch` コマンド）
-
-`vox-actor watch` は、配置されたテキストファイルや JSON 台本を自動で読み上げます。処理済みファイルは各監視ディレクトリ直下の `done/` サブディレクトリに移動されます（例: `./dir-a/foo.txt` → `./dir-a/done/foo.txt`）。
-
-```bash
-vox-actor watch /path/to/watch-dir
-```
-
-複数ディレクトリを同時に監視する場合はスペース区切りで指定します。各ディレクトリは並列で監視され、検知したファイルは検知順に1件ずつ再生されます。
-
-```bash
-vox-actor watch /path/to/dir-a /path/to/dir-b
-```
-
-処理済みファイルを `done/` に移動する代わりに削除する場合:
-
-```bash
-vox-actor watch --delete /path/to/watch-dir
-```
-
-別のターミナルからファイルを配置すると、自動的に読み上げられます。
-
-```bash
-echo "こんばんは" > /path/to/watch-dir/sample.txt
-```
-
-`watch` コマンドは `Ctrl+C`（SIGINT）または SIGTERM で停止できる。
-
-### `act --watch` / `act --watch-delete`（後方互換）
-
-従来どおり `act` コマンドでも単一ディレクトリの監視が可能です。
-
-```bash
-vox-actor act --watch /path/to/watch-dir
-vox-actor act --watch-delete /path/to/watch-dir
-```
-
-`--watch` と `--watch-delete` は同時に指定できません。複数ディレクトリを同時に監視したい場合は `watch` コマンドを使ってください。
-
-### エラーログ
-
-`direct` モードでの失敗は以下のログに追記されます（いずれも末尾200行でローテーション）。`tail -f` で確認できます。
-
-- `monologue` スキル: `$VOX_ACTOR_WORKSPACE/monologue-errors.log`
-- `speak` / `talk` スキル: `$VOX_ACTOR_WORKSPACE/play-script-errors.log`
-
-## 👩‍💻 開発者向け情報
-
-本リポジトリへのコントリビューター向けの情報です。
-
-```bash
-# セットアップ（linter等のインストール）
-make setup
-
-# ビルド
-make build
-
-# テスト
-make test
-
-# E2Eテスト
-make test-e2e
-
-# フォーマット
-make fmt
-
-# Lint
-make lint
-
-# 依存チェック
-make depcheck
-
-# ビルド成果物の削除
-make clean
-```
+## 📚 ドキュメント
+
+- [CLIリファレンス](./docs/reference/cli.md) — `say` / `act` / `watch` サブコマンドの詳細
+- [プラグイン／スキルリファレンス](./docs/reference/plugins.md) — 対応キャラクター、スキルごとの仕様、再生モード、音声デバイス利用不可環境のセットアップ
+- [開発者向け情報](./docs/development/contributing.md) — ビルド・テスト・Lint等のコマンド、レイヤー構成と責務ルール
 
 ## ライセンス
 
