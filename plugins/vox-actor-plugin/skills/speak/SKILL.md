@@ -1,35 +1,35 @@
 ---
-name: explain
-description: ユーザーから渡されたトピックや質問をキャラクター付きの複数セリフJSONL台本として生成し、vox-actor経由で音声説明するスキル。
-argument-hint: "<トピック>"
+name: speak
+description: 渡されたトピック・メモ・作業結果などをキャラクター付きの複数セリフJSONL台本として生成し、vox-actor経由で解説・朗読・結果報告を音声で届けるスキル。
+argument-hint: "<内容>"
 allowed-tools:
-  - "Bash(${CLAUDE_PLUGIN_ROOT}/skills/explain/scripts/explain.sh *)"
+  - "Bash(${CLAUDE_PLUGIN_ROOT}/skills/speak/scripts/speak.sh *)"
   - "Bash(mkdir -p *)"
   - "Read(${CLAUDE_PLUGIN_ROOT}/characters/*.md)"
   - "Write(${VOX_ACTOR_WORKSPACE}/tmp/*)"
 ---
 
-ユーザーから渡されたトピックを、キャラクターになりきった複数セリフのJSONL台本として生成し、音声で解説します。`monologue` が1文の独り言用であるのに対し、本スキルは冒頭→本題→まとめのまとまった長さの解説向けです。
+ユーザーから渡された内容を、キャラクターになりきった複数セリフのJSONL台本として生成し、音声で届けます。解説・朗読・作業の結果報告・ストーリーテリングなど、まとまった長さの音声アウトプット全般に利用できます。`monologue` が1文の独り言用であるのに対し、本スキルは冒頭→本題→まとめのまとまった長さを扱います。
 
-## 解説の実行フロー
+## 実行フロー
 
-1. `$ARGUMENTS` をトピックとして受け取る
+1. `$ARGUMENTS` を読み上げ内容として受け取る
 2. メモリから `explanation_character`（既定 `zundamon`）と `explanation_length`（既定 `medium`）を読み取る
 3. `${CLAUDE_PLUGIN_ROOT}/characters/<name>.md` を読み、`speakers` 一覧と性格を把握する
 4. 長さ設定に応じた **JSONL台本** を生成する（各行: `{"text":..., "speaker":..., "speedScale":...}`）
    - 冒頭の挨拶／つかみ → 本題 → まとめの流れを意識する
-   - セリフ毎にトピックの感情に合う `speaker` と `speedScale` を選定する
+   - セリフ毎に内容の感情に合う `speaker` と `speedScale` を選定する
 5. `mkdir -p "${VOX_ACTOR_WORKSPACE}/tmp"` で一時ディレクトリを作成する
-6. 一時ファイル `${VOX_ACTOR_WORKSPACE}/tmp/explain_<unix_ms>.jsonl` に Write する
-7. `explain.sh <path>` を呼び出す
+6. 一時ファイル `${VOX_ACTOR_WORKSPACE}/tmp/speak_<unix_ms>.jsonl` に Write する
+7. `speak.sh <path>` を呼び出す
 
 ```bash
-${CLAUDE_PLUGIN_ROOT}/skills/explain/scripts/explain.sh <jsonl_path>
+${CLAUDE_PLUGIN_ROOT}/skills/speak/scripts/speak.sh <jsonl_path>
 ```
 
 - `<jsonl_path>`（第1引数・必須）: 生成した JSONL 台本の絶対パス
 
-## 説明の長さ
+## 読み上げの長さ
 
 | 設定 | セリフ数の目安 | 想定再生時間 |
 |------|---------------|------------|
@@ -37,7 +37,7 @@ ${CLAUDE_PLUGIN_ROOT}/skills/explain/scripts/explain.sh <jsonl_path>
 | `medium`（既定） | 6〜10 | 30秒〜1分 |
 | `long` | 10+ | 数分 |
 
-ユーザー指示「説明を短めにして」等でメモリを更新すれば次回以降に反映される。
+ユーザー指示「読み上げを短めにして」等でメモリを更新すれば次回以降に反映される。
 
 ## 話速の目安
 
@@ -51,7 +51,7 @@ ${CLAUDE_PLUGIN_ROOT}/skills/explain/scripts/explain.sh <jsonl_path>
 
 ## キャラクター設定
 
-メモリで指定されたキャラクターの設定ファイルを読み込み、そのキャラクターになりきった解説台本を生成する。
+メモリで指定されたキャラクターの設定ファイルを読み込み、そのキャラクターになりきった台本を生成する。
 
 - メモリ未設定時のデフォルト: ずんだもん（`zundamon`）
 - キャラクター設定ファイル: `${CLAUDE_PLUGIN_ROOT}/characters/{キャラクター名}.md`（例: `${CLAUDE_PLUGIN_ROOT}/characters/zundamon.md`）
@@ -62,21 +62,21 @@ ${CLAUDE_PLUGIN_ROOT}/skills/explain/scripts/explain.sh <jsonl_path>
 
 | 項目 | キー | デフォルト値 | 値 | 説明 |
 |------|------|-------------|----|-----|
-| 説明キャラクター | `explanation_character` | `zundamon` | `characters/<name>.md` の `<name>` | 例: 「説明はめたんで」→ `metan` を保存 |
-| 説明の長さ | `explanation_length` | `medium` | `short` / `medium` / `long` | 上記の長さ表を参照 |
+| 読み上げキャラクター | `explanation_character` | `zundamon` | `characters/<name>.md` の `<name>` | 例: 「読み上げはめたんで」→ `metan` を保存 |
+| 読み上げの長さ | `explanation_length` | `medium` | `short` / `medium` / `long` | 上記の長さ表を参照 |
 
 `monologue` 側の `monologue_probability` とは衝突しない。
 
 ## 前提条件
 
-### explain.sh の依存関係
+### speak.sh の依存関係
 
-再生の実行に使用する `${CLAUDE_PLUGIN_ROOT}/skills/explain/scripts/explain.sh` は以下の前提条件を必要とする:
+再生の実行に使用する `${CLAUDE_PLUGIN_ROOT}/skills/speak/scripts/speak.sh` は以下の前提条件を必要とする:
 
-- **環境変数 `VOX_ACTOR_WORKSPACE`**: vox-actor関連ファイルのルートディレクトリを指定する。配下に `tmp/`（JSONL台本の一時格納先）、`queue/`（fileモードの通知ファイル出力先）、`explain-errors.log`（directモードのエラーログ）が置かれる。未設定の場合のデフォルト値は以下のとおり
+- **環境変数 `VOX_ACTOR_WORKSPACE`**: vox-actor関連ファイルのルートディレクトリを指定する。配下に `tmp/`（JSONL台本の一時格納先）、`queue/`（fileモードの通知ファイル出力先）、`speak-errors.log`（directモードのエラーログ）が置かれる。未設定の場合のデフォルト値は以下のとおり
   - gitリポジトリ内: `<gitリポジトリ直下>/.vox-actor`
   - gitリポジトリ外: `$PWD/.vox-actor`
-- **出力先ディレクトリ**: 上記のルートディレクトリおよび配下の `queue/` は `explain.sh` が必要に応じて自動作成する。`tmp/` ディレクトリは Claude が Write する前に `mkdir -p "${VOX_ACTOR_WORKSPACE}/tmp"` で作成する
+- **出力先ディレクトリ**: 上記のルートディレクトリおよび配下の `queue/` は `speak.sh` が必要に応じて自動作成する。`tmp/` ディレクトリは Claude が Write する前に `mkdir -p "${VOX_ACTOR_WORKSPACE}/tmp"` で作成する
 
 ### 通知モード
 
@@ -93,15 +93,15 @@ ${CLAUDE_PLUGIN_ROOT}/skills/explain/scripts/explain.sh <jsonl_path>
 - 監視プロセス（`vox-actor watch`）の常駐は不要
 - 再生完了後、渡された一時ファイルを `rm -f` で削除する
 - 同期実行のため、同一セッション内で連続して呼び出した場合は先の再生が完了してから次が再生される。ただし複数セッションから並列に呼ばれた場合はエンジンへの並列リクエストと音声再生の重なりが発生しうる。複数セッション間でも逐次再生したい場合は `VOX_ACTOR_MONOLOGUE_MODE=file` + 監視プロセス構成に切り替える
-- `vox-actor act` 失敗時もスクリプト本体はエラー終了せず、標準出力/標準エラーの内容を `${VOX_ACTOR_WORKSPACE}/explain-errors.log` にタイムスタンプ付きで追記する。ログは末尾200行でローテーションされる。失敗検知は `tail -f ${VOX_ACTOR_WORKSPACE}/explain-errors.log` で行える
+- `vox-actor act` 失敗時もスクリプト本体はエラー終了せず、標準出力/標準エラーの内容を `${VOX_ACTOR_WORKSPACE}/speak-errors.log` にタイムスタンプ付きで追記する。ログは末尾200行でローテーションされる。失敗検知は `tail -f ${VOX_ACTOR_WORKSPACE}/speak-errors.log` で行える
 
 #### `file` モード
 
-一時ファイルを `${VOX_ACTOR_WORKSPACE}/queue/explain_{ミリ秒タイムスタンプ}.jsonl` へ `mv` で移動する。外部の通知監視プロセス（`vox-actor watch` 等）はこの `queue/` ディレクトリを監視対象として検知・読み上げする。
+一時ファイルを `${VOX_ACTOR_WORKSPACE}/queue/speak_{ミリ秒タイムスタンプ}.jsonl` へ `mv` で移動する。外部の通知監視プロセス（`vox-actor watch` 等）はこの `queue/` ディレクトリを監視対象として検知・読み上げする。
 
 ## JSONL 出力例
 
-短めの説明（ずんだもん）:
+解説用途の例（ずんだもん）。朗読・結果報告・ストーリーテリングでも同じJSONL形式で台本を生成する:
 
 ```jsonl
 {"text": "クロージャって何なのだ？説明するのだ！", "speaker": 3, "speedScale": 1.1}
@@ -122,6 +122,6 @@ ${CLAUDE_PLUGIN_ROOT}/skills/explain/scripts/explain.sh <jsonl_path>
   - 拡張子も省略せず発音を表す日本語にすること
   - 例: `README.md` → 「リードミードットエムディー」、`config.json` → 「コンフィグドットジェイソン」、`merge` → 「マージ」、`build` → 「ビルド」
 - ファイルパス、URL、UUIDなど長い文字情報は発音しても分かりづらいため、セリフに含めないこと
-- トピックがコード断片や仕様文書の場合も、識別子は「読める形」に変換すること
+- 内容にコード断片や仕様文書が含まれる場合も、識別子は「読める形」に変換すること
 - セリフ内のダブルクォート・バックスラッシュ等は JSONL 仕様に従って適切にエスケープすること
 - 同じ `speaker` を連続で使ってもよいが、感情に合わせて切り替えるとキャラクターらしさが出る
