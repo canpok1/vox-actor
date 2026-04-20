@@ -88,7 +88,7 @@ case "$MODE" in
     QUEUE_DIR="${VOX_ACTOR_WORKSPACE}/queue"
     mkdir -p "$QUEUE_DIR"
     jq -cn --argjson speaker "$SPEAKER" --arg text "$TEXT" --argjson speedScale "$SPEED_SCALE" \
-      '{speaker: $speaker, text: $text, speedScale: $speedScale}' > "${QUEUE_DIR}/notify_$(($(date +%s%N)/1000000)).json"
+      '{speaker: $speaker, text: $text, speedScale: $speedScale}' > "${QUEUE_DIR}/monologue_$(($(date +%s%N)/1000000)).json"
     ;;
   *)
     echo "[ERROR] VOX_ACTOR_MONOLOGUE_MODE は 'direct' または 'file' で指定してください: '$MODE'"
