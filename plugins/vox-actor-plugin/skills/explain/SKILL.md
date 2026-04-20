@@ -87,12 +87,12 @@ ${CLAUDE_PLUGIN_ROOT}/skills/explain/scripts/explain.sh <jsonl_path>
 
 #### `direct` モード
 
-`vox-actor act <jsonl_path>` をバックグラウンドで起動し、スクリプトは即座に戻る。
+`vox-actor act <jsonl_path>` を同期実行し、再生の完了を待ってスクリプトが戻る。
 
 - VOICEVOXエンジンのURLは `vox-actor` 側の環境変数 `VOX_ENGINE_URL` で解決する（非デフォルトポート時はユーザーが設定）
 - 監視プロセス（`vox-actor watch`）の常駐は不要
-- 再生プロセス終了後、渡された一時ファイルを `rm -f` で削除する
-- 複数セッションから並列に呼ばれても許容する（エンジンへの並列リクエストと音声再生の重なりは発生するがエラーにはならない）。逐次再生が必要な場合は `VOX_ACTOR_MONOLOGUE_MODE=file` + 監視プロセス構成に切り替えれば対応可能
+- 再生完了後、渡された一時ファイルを `rm -f` で削除する
+- 同期実行のため、同一セッション内で連続して呼び出した場合は先の再生が完了してから次が再生される。ただし複数セッションから並列に呼ばれた場合はエンジンへの並列リクエストと音声再生の重なりが発生しうる。複数セッション間でも逐次再生したい場合は `VOX_ACTOR_MONOLOGUE_MODE=file` + 監視プロセス構成に切り替える
 - `vox-actor act` 失敗時もスクリプト本体はエラー終了せず、標準出力/標準エラーの内容を `${VOX_ACTOR_WORKSPACE}/explain-errors.log` にタイムスタンプ付きで追記する。ログは末尾200行でローテーションされる。失敗検知は `tail -f ${VOX_ACTOR_WORKSPACE}/explain-errors.log` で行える
 
 #### `file` モード

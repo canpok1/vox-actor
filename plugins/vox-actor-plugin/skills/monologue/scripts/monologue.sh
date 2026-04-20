@@ -68,24 +68,21 @@ case "$MODE" in
   direct)
     ERROR_LOG="${VOX_ACTOR_WORKSPACE}/monologue-errors.log"
     MAX_LOG_LINES=200
-    (
-      OUTPUT=$(vox-actor say --speaker "$SPEAKER" --speed "$SPEED_SCALE" "$TEXT" 2>&1)
-      STATUS=$?
-      if [ "$STATUS" -ne 0 ]; then
-        TS=$(date '+%Y-%m-%d %H:%M:%S')
-        {
-          echo "[$TS] exit=$STATUS speaker=$SPEAKER speed=$SPEED_SCALE text=$TEXT"
-          printf '%s\n' "$OUTPUT" | sed 's/^/  /'
-        } >> "$ERROR_LOG"
-        LINES=$(wc -l < "$ERROR_LOG")
-        if [ "$LINES" -gt "$MAX_LOG_LINES" ]; then
-          TMP_LOG=$(mktemp "${ERROR_LOG}.XXXXXX")
-          tail -n "$MAX_LOG_LINES" "$ERROR_LOG" > "$TMP_LOG"
-          mv "$TMP_LOG" "$ERROR_LOG"
-        fi
+    OUTPUT=$(vox-actor say --speaker "$SPEAKER" --speed "$SPEED_SCALE" "$TEXT" 2>&1)
+    STATUS=$?
+    if [ "$STATUS" -ne 0 ]; then
+      TS=$(date '+%Y-%m-%d %H:%M:%S')
+      {
+        echo "[$TS] exit=$STATUS speaker=$SPEAKER speed=$SPEED_SCALE text=$TEXT"
+        printf '%s\n' "$OUTPUT" | sed 's/^/  /'
+      } >> "$ERROR_LOG"
+      LINES=$(wc -l < "$ERROR_LOG")
+      if [ "$LINES" -gt "$MAX_LOG_LINES" ]; then
+        TMP_LOG=$(mktemp "${ERROR_LOG}.XXXXXX")
+        tail -n "$MAX_LOG_LINES" "$ERROR_LOG" > "$TMP_LOG"
+        mv "$TMP_LOG" "$ERROR_LOG"
       fi
-    ) </dev/null >/dev/null 2>&1 &
-    disown 2>/dev/null
+    fi
     ;;
   file)
     QUEUE_DIR="${VOX_ACTOR_WORKSPACE}/queue"

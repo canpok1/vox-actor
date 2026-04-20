@@ -35,25 +35,22 @@ case "$MODE" in
   direct)
     ERROR_LOG="${VOX_ACTOR_WORKSPACE}/explain-errors.log"
     MAX_LOG_LINES=200
-    (
-      OUTPUT=$(vox-actor act "$JSONL_PATH" 2>&1)
-      STATUS=$?
-      if [ "$STATUS" -ne 0 ]; then
-        TS=$(date '+%Y-%m-%d %H:%M:%S')
-        {
-          echo "[$TS] exit=$STATUS path=$JSONL_PATH"
-          printf '%s\n' "$OUTPUT" | sed 's/^/  /'
-        } >> "$ERROR_LOG"
-        LINES=$(wc -l < "$ERROR_LOG")
-        if [ "$LINES" -gt "$MAX_LOG_LINES" ]; then
-          TMP_LOG=$(mktemp "${ERROR_LOG}.XXXXXX")
-          tail -n "$MAX_LOG_LINES" "$ERROR_LOG" > "$TMP_LOG"
-          mv "$TMP_LOG" "$ERROR_LOG"
-        fi
+    OUTPUT=$(vox-actor act "$JSONL_PATH" 2>&1)
+    STATUS=$?
+    if [ "$STATUS" -ne 0 ]; then
+      TS=$(date '+%Y-%m-%d %H:%M:%S')
+      {
+        echo "[$TS] exit=$STATUS path=$JSONL_PATH"
+        printf '%s\n' "$OUTPUT" | sed 's/^/  /'
+      } >> "$ERROR_LOG"
+      LINES=$(wc -l < "$ERROR_LOG")
+      if [ "$LINES" -gt "$MAX_LOG_LINES" ]; then
+        TMP_LOG=$(mktemp "${ERROR_LOG}.XXXXXX")
+        tail -n "$MAX_LOG_LINES" "$ERROR_LOG" > "$TMP_LOG"
+        mv "$TMP_LOG" "$ERROR_LOG"
       fi
-      rm -f "$JSONL_PATH"
-    ) </dev/null >/dev/null 2>&1 &
-    disown 2>/dev/null
+    fi
+    rm -f "$JSONL_PATH"
     ;;
   file)
     QUEUE_DIR="${VOX_ACTOR_WORKSPACE}/queue"
