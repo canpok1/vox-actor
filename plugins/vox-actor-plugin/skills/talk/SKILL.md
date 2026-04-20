@@ -1,6 +1,6 @@
 ---
-name: speak
-description: 渡されたトピック・メモ・作業結果などをキャラクター付きの複数セリフJSONL台本として生成し、vox-actor経由で解説・朗読・結果報告を音声で届けるスキル。
+name: talk
+description: 渡されたトピックを複数キャラクターの会話形式JSONL台本として生成し、vox-actor経由で掛け合い・対話・漫才風の読み上げを届けるスキル。
 argument-hint: "<内容>"
 allowed-tools:
   - "Bash(${CLAUDE_PLUGIN_ROOT}/scripts/play-script.sh *)"
@@ -9,19 +9,21 @@ allowed-tools:
   - "Write(${VOX_ACTOR_WORKSPACE}/tmp/*)"
 ---
 
-ユーザーから渡された内容を、キャラクターになりきった複数セリフのJSONL台本として生成し、音声で届けます。解説・朗読・作業の結果報告・ストーリーテリングなど、まとまった長さの音声アウトプット全般に利用できます。`monologue` が1文の独り言用であるのに対し、本スキルは冒頭→本題→まとめのまとまった長さを扱います。
+ユーザーから渡された内容を、複数キャラクターが会話する形式のJSONL台本として生成し、音声で届けます。掛け合いや対話、漫才、ニュース番組風の読み上げなど、複数人の語りが求められる音声アウトプットに利用できます。`speak` スキルが1キャラで冒頭→本題→まとめを語るのに対し、本スキルは複数キャラの役割配分と会話の流れを構成します。
 
 ## 実行フロー
 
 1. `$ARGUMENTS` を読み上げ内容として受け取る
-2. メモリから `default_character`（既定 `zundamon`、`monologue` スキルと共用）と `speak_length`（既定 `medium`）を読み取る
-3. `${CLAUDE_PLUGIN_ROOT}/characters/<name>.md` を読み、`speakers` 一覧と性格を把握する
-4. 長さ設定に応じた **JSONL台本** を生成する（各行: `{"text":..., "speaker":..., "speedScale":...}`）
-   - 冒頭の挨拶／つかみ → 本題 → まとめの流れを意識する
-   - セリフ毎に内容の感情に合う `speaker` と `speedScale` を選定する
-5. `mkdir -p "${VOX_ACTOR_WORKSPACE}/tmp"` で一時ディレクトリを作成する
-6. 一時ファイル `${VOX_ACTOR_WORKSPACE}/tmp/speak_<unix_ms>.jsonl` に Write する
-7. `play-script.sh <path>` を呼び出す
+2. メモリから `talk_characters`（既定 `[zundamon, metan]`）と `talk_length`（既定 `medium`）を読み取る
+3. `talk_characters` の各キャラについて `${CLAUDE_PLUGIN_ROOT}/characters/<name>.md` を読み、`speakers` 一覧と性格を把握する
+4. 内容に応じて役割配分（例: 解説役／聞き役／ツッコミ役 など）をその場で組み立てる
+5. 長さ設定に応じた **JSONL台本** を生成する（各行: `{"text":..., "speaker":..., "speedScale":...}`）
+   - 冒頭で全キャラが登場する（自己紹介・挨拶など）よう意識する
+   - 本題ではキャラ同士の掛け合い・質問応答・補足などで会話を展開する
+   - セリフ毎に担当キャラの `speakers` から感情に合うIDを選定し、`speedScale` も感情に合わせる
+6. `mkdir -p "${VOX_ACTOR_WORKSPACE}/tmp"` で一時ディレクトリを作成する
+7. 一時ファイル `${VOX_ACTOR_WORKSPACE}/tmp/talk_<unix_ms>.jsonl` に Write する
+8. `play-script.sh <path>` を呼び出す
 
 ```bash
 ${CLAUDE_PLUGIN_ROOT}/scripts/play-script.sh <jsonl_path>
@@ -33,11 +35,11 @@ ${CLAUDE_PLUGIN_ROOT}/scripts/play-script.sh <jsonl_path>
 
 | 設定 | セリフ数の目安 | 想定再生時間 |
 |------|---------------|------------|
-| `short` | 3〜5 | 〜十数秒 |
-| `medium`（既定） | 6〜10 | 30秒〜1分 |
-| `long` | 10+ | 数分 |
+| `short` | 4〜6 | 〜30秒 |
+| `medium`（既定） | 8〜12 | 1〜2分 |
+| `long` | 14+ | 数分 |
 
-ユーザー指示「読み上げを短めにして」等でメモリを更新すれば次回以降に反映される。
+ユーザー指示「会話を短めにして」等でメモリを更新すれば次回以降に反映される。
 
 ## 話速の目安
 
@@ -51,9 +53,9 @@ ${CLAUDE_PLUGIN_ROOT}/scripts/play-script.sh <jsonl_path>
 
 ## キャラクター設定
 
-メモリで指定されたキャラクターの設定ファイルを読み込み、そのキャラクターになりきった台本を生成する。
+メモリ `talk_characters` に指定された2〜4人のキャラクター設定ファイルを読み込み、それぞれになりきった台本を生成する。
 
-- メモリ未設定時のデフォルト: ずんだもん（`zundamon`）
+- メモリ未設定時のデフォルト: ずんだもん（`zundamon`）と四国めたん（`metan`）の2人
 - キャラクター設定ファイル: `${CLAUDE_PLUGIN_ROOT}/characters/{キャラクター名}.md`（例: `${CLAUDE_PLUGIN_ROOT}/characters/zundamon.md`）
 
 ## メモリに保存する設定項目
@@ -62,10 +64,10 @@ ${CLAUDE_PLUGIN_ROOT}/scripts/play-script.sh <jsonl_path>
 
 | 項目 | キー | デフォルト値 | 値 | 説明 |
 |------|------|-------------|----|-----|
-| デフォルトキャラクター | `default_character` | `zundamon` | `characters/<name>.md` の `<name>` | `monologue` スキルと共用。例: 「読み上げはめたんで」→ `metan` を保存 |
-| 読み上げの長さ | `speak_length` | `medium` | `short` / `medium` / `long` | 上記の長さ表を参照 |
+| 会話キャラクター | `talk_characters` | `[zundamon, metan]` | `characters/<name>.md` の `<name>` の配列（2〜4人） | 本スキル専用。`default_character` とは別に管理 |
+| 会話の長さ | `talk_length` | `medium` | `short` / `medium` / `long` | 上記の長さ表を参照 |
 
-`default_character` は `monologue` スキルと共有する。`speak_length` と `monologue_probability` はそれぞれのスキル固有で衝突しない。
+`talk_characters` は本スキル固有の設定で、`monologue` / `speak` の `default_character` とは独立している。
 
 ## 前提条件
 
@@ -97,23 +99,24 @@ ${CLAUDE_PLUGIN_ROOT}/scripts/play-script.sh <jsonl_path>
 
 #### `file` モード
 
-一時ファイルを `${VOX_ACTOR_WORKSPACE}/queue/$(basename <jsonl_path>)` へ `mv` で移動する（渡された一時ファイル名がそのまま使われるため、`speak_<ms>.jsonl` なら `queue/speak_<ms>.jsonl` となる）。外部の通知監視プロセス（`vox-actor watch` 等）はこの `queue/` ディレクトリを監視対象として検知・読み上げする。
+一時ファイルを `${VOX_ACTOR_WORKSPACE}/queue/$(basename <jsonl_path>)` へ `mv` で移動する（渡された一時ファイル名がそのまま使われるため、`talk_<ms>.jsonl` なら `queue/talk_<ms>.jsonl` となる）。外部の通知監視プロセス（`vox-actor watch` 等）はこの `queue/` ディレクトリを監視対象として検知・読み上げする。
 
 ## JSONL 出力例
 
-解説用途の例（ずんだもん）。朗読・結果報告・ストーリーテリングでも同じJSONL形式で台本を生成する:
+ずんだもん（`speakers.ノーマル: 3`、`あまあま: 1`）と四国めたん（`ノーマル: 2`、`ツンツン: 6`）の会話例:
 
 ```jsonl
-{"text": "クロージャって何なのだ？説明するのだ！", "speaker": 3, "speedScale": 1.1}
+{"text": "今日はクロージャについて解説するのだ！", "speaker": 3, "speedScale": 1.1}
+{"text": "あら、わたくしも勉強させてもらおうかしら", "speaker": 2, "speedScale": 1.0}
 {"text": "簡単に言うと、関数が作られた時の周りの変数を覚えておく仕組みなのだ", "speaker": 3, "speedScale": 1.0}
-{"text": "むむっ、ちょっと難しいけど…例えるならお弁当箱に具材を詰めて持ち歩く感じなのだ", "speaker": 3, "speedScale": 1.0}
-{"text": "後から開けても中身がそのまま残ってるみたいに、変数の値も残るのだ〜", "speaker": 1, "speedScale": 0.9}
-{"text": "わかったかな？お疲れ様なのだ！", "speaker": 1, "speedScale": 1.0}
+{"text": "なるほど、お弁当箱みたいなものですわね", "speaker": 2, "speedScale": 1.0}
+{"text": "そう、そんな感じなのだー", "speaker": 1, "speedScale": 0.9}
+{"text": "よく分かりましたわ。ありがとう、ずんだもん", "speaker": 2, "speedScale": 1.0}
 ```
 
 ## キャラクター設定ファイルについて
 
-`characters/` 配下のキャラクター設定ファイルはClaude向けの自然言語テキストとして消費される。キャラクター名や口調特徴などの主要メタデータはYAML frontmatterに構造化されており、本文にはClaude向けの詳細な性格・口調の説明やセリフ例が記載されている。`monologue` スキルと共用する。
+`characters/` 配下のキャラクター設定ファイルはClaude向けの自然言語テキストとして消費される。キャラクター名や口調特徴などの主要メタデータはYAML frontmatterに構造化されており、本文にはClaude向けの詳細な性格・口調の説明やセリフ例が記載されている。`monologue` / `speak` スキルと同一のファイルを共用する。
 
 ## 制約
 
@@ -124,4 +127,5 @@ ${CLAUDE_PLUGIN_ROOT}/scripts/play-script.sh <jsonl_path>
 - ファイルパス、URL、UUIDなど長い文字情報は発音しても分かりづらいため、セリフに含めないこと
 - 内容にコード断片や仕様文書が含まれる場合も、識別子は「読める形」に変換すること
 - セリフ内のダブルクォート・バックスラッシュ等は JSONL 仕様に従って適切にエスケープすること
-- 同じ `speaker` を連続で使ってもよいが、感情に合わせて切り替えるとキャラクターらしさが出る
+- 同一キャラが連続で話してもよいが、会話らしさを保つため役割配分とターン交代を意識する
+- 冒頭では全キャラが1回以上登場するよう配慮する（自己紹介・挨拶・呼びかけなど）

@@ -40,7 +40,7 @@ claude code で作業の区切りごとに独り言を読み上げさせる最�
 
 3. **作業の区切りで自動的に独り言が読み上げられる**
 
-   `auto-monologue-plugin` を導入していれば、claude code の作業の区切りごとに自動で独り言が生成・読み上げされます。手動で呼び出す場合は `/vox-actor-plugin:monologue` を、解説・朗読・作業結果の報告などをキャラクターにまとまった長さで話させたい場合は `/vox-actor-plugin:speak <内容>` を実行します。
+   `auto-monologue-plugin` を導入していれば、claude code の作業の区切りごとに自動で独り言が生成・読み上げされます。手動で呼び出す場合は `/vox-actor-plugin:monologue` を、解説・朗読・作業結果の報告などを1キャラにまとまった長さで話させたい場合は `/vox-actor-plugin:speak <内容>` を、複数キャラが会話する形式で読み上げてほしい場合は `/vox-actor-plugin:talk <内容>` を実行します。
 
 リモート環境での利用や複数セッションの音声を逐次再生したい場合は[高度な利用](#-高度な利用リモート環境監視モード)を参照してください。
 
@@ -63,7 +63,8 @@ vox-actor は **CLI** と **claude code プラグイン／スキル** の 2 系�
 claude code から `/vox-actor-plugin:<skill>` 形式で呼び出すスキルです。LLM が生成したセリフをキャラクターになりきって読み上げます。
 
 - `/vox-actor-plugin:monologue`: 作業開始／終了／想定外のことが起こった時など、節目のキャラクターの一言独り言
-- `/vox-actor-plugin:speak <内容>`: 解説・朗読・結果報告・ストーリーテリングなど、渡した内容を冒頭→本題→まとめの流れで複数セリフのJSONL台本としてキャラクターに読み上げさせる
+- `/vox-actor-plugin:speak <内容>`: 解説・朗読・結果報告・ストーリーテリングなど、渡した内容を冒頭→本題→まとめの流れで複数セリフのJSONL台本として1キャラに読み上げさせる
+- `/vox-actor-plugin:talk <内容>`: 複数キャラクターが会話する形式のJSONL台本を生成し、掛け合い・対話・漫才風などで読み上げさせる
 
 詳細は [プラグイン／スキルリファレンス](#-プラグインスキルリファレンス) を参照してください。
 
@@ -279,7 +280,7 @@ claude code に `vox-actor-plugin` を導入すると、以下のスラッシュ
 
 ### 対応キャラクター一覧
 
-`monologue` / `speak` スキルで利用できるキャラクターは `plugins/vox-actor-plugin/characters/` に設定ファイルとして同梱されています。キャラクター名（`<name>`）は `/vox-actor-plugin:monologue <name>` の引数や、両スキル共通の `default_character` メモリ設定で指定します。
+`monologue` / `speak` / `talk` スキルで利用できるキャラクターは `plugins/vox-actor-plugin/characters/` に設定ファイルとして同梱されています。キャラクター名（`<name>`）は `/vox-actor-plugin:monologue <name>` の引数や、`monologue` / `speak` 共通の `default_character`、`talk` 用の `talk_characters` メモリ設定で指定します。
 
 | キャラクター名 | `<name>` | 分類 | 特徴 |
 |---|---|---|---|
@@ -358,6 +359,54 @@ claude code に `vox-actor-plugin` を導入すると、以下のスラッシュ
 {"text": "わかったかな？お疲れ様なのだ！", "speaker": 1, "speedScale": 1.0}
 ```
 
+### `/vox-actor-plugin:talk <内容>`
+
+渡した内容を、複数キャラクターが会話する形式のJSONL台本として生成し、掛け合い・対話・漫才風・ニュース番組風などの読み上げを行います。`speak` が1キャラでまとまった長さを語るのに対し、本スキルは2〜4人のキャラによる役割配分と会話の流れを構成します。
+
+```
+/vox-actor-plugin:talk <内容>
+```
+
+- `<内容>`: 会話のトピックにしたい概念・メモ・調査結果・文章などを自由記述で渡します
+- 生成されたJSONL台本は一時ファイルに書き出され、`vox-actor act` で再生されます
+- 再生方式は `direct` / `file` モードで自動切替されます（[高度な利用](#-高度な利用リモート環境監視モード) を参照）
+
+#### メモリ設定
+
+以下の設定を claude code のメモリに保存しておくと、次回以降の実行に反映されます。
+
+| 項目 | キー | デフォルト値 | 値 | 説明 |
+|------|------|-------------|----|-----|
+| 会話キャラクター | `talk_characters` | `[zundamon, metan]` | `characters/<name>.md` の `<name>` の配列（2〜4人） | 本スキル専用。`default_character` とは別に管理 |
+| 会話の長さ | `talk_length` | `medium` | `short` / `medium` / `long` | 下記の長さ表を参照 |
+
+##### 会話の長さ
+
+| 設定 | セリフ数の目安 | 想定再生時間 |
+|------|---------------|------------|
+| `short` | 4〜6 | 〜30秒 |
+| `medium`（既定） | 8〜12 | 1〜2分 |
+| `long` | 14+ | 数分 |
+
+#### 呼び出し例
+
+```
+/vox-actor-plugin:talk クロージャとは何か
+```
+
+#### JSONL出力例
+
+ずんだもん（`speakers.ノーマル: 3`、`あまあま: 1`）と四国めたん（`ノーマル: 2`、`ツンツン: 6`）の会話例:
+
+```jsonl
+{"text": "今日はクロージャについて解説するのだ！", "speaker": 3, "speedScale": 1.1}
+{"text": "あら、わたくしも勉強させてもらおうかしら", "speaker": 2, "speedScale": 1.0}
+{"text": "簡単に言うと、関数が作られた時の周りの変数を覚えておく仕組みなのだ", "speaker": 3, "speedScale": 1.0}
+{"text": "なるほど、お弁当箱みたいなものですわね", "speaker": 2, "speedScale": 1.0}
+{"text": "そう、そんな感じなのだー", "speaker": 1, "speedScale": 0.9}
+{"text": "よく分かりましたわ。ありがとう、ずんだもん", "speaker": 2, "speedScale": 1.0}
+```
+
 ## 🔀 高度な利用（リモート環境・監視モード）
 
 以下のようなケースでは、`watch` コマンドを常駐させる `file` モードでの利用が適しています。
@@ -371,11 +420,11 @@ claude code に `vox-actor-plugin` を導入すると、以下のスラッシュ
 |---|---|---|
 | 読み上げ方式 | `vox-actor say` をその場で直接呼び出す | テキスト等をファイルに書き出し、別プロセスの `vox-actor watch` が読み上げる |
 | 監視プロセス | 不要 | `vox-actor watch` の常駐が必要 |
-| ファイル出力先 | エラーログのみ（`$VOX_ACTOR_WORKSPACE/monologue-errors.log`） | 通知ファイル（`$VOX_ACTOR_WORKSPACE/queue/monologue_*.json`）＋エラーログ |
+| ファイル出力先 | エラーログのみ（`monologue` は `$VOX_ACTOR_WORKSPACE/monologue-errors.log`、`speak` / `talk` は `$VOX_ACTOR_WORKSPACE/play-script-errors.log`） | 通知ファイル（`$VOX_ACTOR_WORKSPACE/queue/monologue_*.json` / `speak_*.jsonl` / `talk_*.jsonl`）＋エラーログ |
 | 同時呼び出し時 | 同一セッション内は逐次再生、複数セッション間は並列再生 | 検知順に逐次再生 |
 | 前提 | `vox-actor` コマンドが `PATH` 上にある | claude code 側と `vox-actor watch` 側で `VOX_ACTOR_WORKSPACE` を共有 |
 
-> `VOX_ACTOR_WORKSPACE` は vox-actor 関連ファイルのルートディレクトリを指す（配下に `queue/` と `monologue-errors.log` が置かれる）。未指定時のデフォルトは gitリポジトリ内なら `<gitリポジトリ直下>/.vox-actor`、gitリポジトリ外なら `$PWD/.vox-actor`。`file` モードでホストとLLM実行環境を分ける場合は、双方から参照可能な共有パスを明示的に指定する。
+> `VOX_ACTOR_WORKSPACE` は vox-actor 関連ファイルのルートディレクトリを指す（配下に `queue/` と `monologue-errors.log`、`speak` / `talk` 用の `play-script-errors.log` が置かれる）。未指定時のデフォルトは gitリポジトリ内なら `<gitリポジトリ直下>/.vox-actor`、gitリポジトリ外なら `$PWD/.vox-actor`。`file` モードでホストとLLM実行環境を分ける場合は、双方から参照可能な共有パスを明示的に指定する。
 
 モードは `VOX_ACTOR_MONOLOGUE_MODE` 環境変数で明示するか、未設定時は `vox-actor` コマンドの有無で自動判定されます（あり → `direct`、なし → `file`）。
 
@@ -439,7 +488,10 @@ vox-actor act --watch-delete /path/to/watch-dir
 
 ### エラーログ
 
-`direct` モードでの `vox-actor say` 失敗は `$VOX_ACTOR_WORKSPACE/monologue-errors.log` に追記されます（ログは末尾200行でローテーション）。`tail -f` で確認できます。
+`direct` モードでの失敗は以下のログに追記されます（いずれも末尾200行でローテーション）。`tail -f` で確認できます。
+
+- `monologue` スキル: `$VOX_ACTOR_WORKSPACE/monologue-errors.log`
+- `speak` / `talk` スキル: `$VOX_ACTOR_WORKSPACE/play-script-errors.log`
 
 ## 👩‍💻 開発者向け情報
 
