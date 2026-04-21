@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 
 	"github.com/canpok1/vox-actor/cmd"
@@ -42,6 +43,9 @@ func main() {
 			Player:            player,
 			Mover:             mover,
 			DirWatcherFactory: dirWatcherFactory,
+			StreamPlayerFactory: func(addr string, logger *slog.Logger) (app.StreamPlayer, error) {
+				return infra.NewHTTPStreamPlayer(addr, infra.WithHTTPStreamLogger(logger))
+			},
 		},
 		Say: &cmd.SayDeps{
 			ClientFactory: clientFactory,
