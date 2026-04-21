@@ -1,5 +1,5 @@
 (() => {
-  const statusEl = document.getElementById("status");
+  const statusBadge = document.getElementById("status-badge");
   const volumeEl = document.getElementById("volume");
   const volumeIcon = document.getElementById("volume-icon");
   const muteEl = document.getElementById("mute");
@@ -9,11 +9,22 @@
   const showStyleNameEl = document.getElementById("show-style-name");
   const showTimestampEl = document.getElementById("show-timestamp");
   const player = document.getElementById("player");
+  const tabStreamEl = document.getElementById("tab-stream");
+  const tabTestEl = document.getElementById("tab-test");
+  const panelStreamEl = document.getElementById("panel-stream");
+  const panelTestEl = document.getElementById("panel-test");
+  const testSpeakerEl = document.getElementById("test-speaker");
+  const testPlayEl = document.getElementById("test-play");
+  const testErrorEl = document.getElementById("test-error");
 
   const historySizeStorageKey = "vox-actor.stream.historySize";
   const defaultHistorySize = 20;
   const volumeStorageKey = "vox-actor.stream.volume";
   const defaultVolume = 50;
+  const activeTabStorageKey = "vox-actor.stream.activeTab";
+  const testSpeakerStorageKey = "vox-actor.stream.testSpeakerId";
+  const defaultActiveTab = "stream";
+  const testErrorDisplayMs = 4000;
 
   const toggles = [
     { el: showSpeakerNameEl, storageKey: "vox-actor.stream.showSpeakerName", bodyClass: "hide-speaker-name" },
@@ -24,6 +35,8 @@
   const queue = [];
   let playingItem = null;
   let historySize = initHistorySize();
+  let activeTab = defaultActiveTab;
+  let testErrorTimer = null;
 
   function initHistorySize() {
     const stored = parseInt(localStorage.getItem(historySizeStorageKey), 10);
@@ -93,8 +106,6 @@
     trimTimeline();
   });
 
-  // formatTimestamp は Unix ms を 24 時間表記 HH:MM:SS に整形する。
-  // サーバーが timestamp を送らない/0 を送る古いペイロードでも空文字を返す。
   const formatTimestamp = (ms) => {
     if (typeof ms !== "number" || !Number.isFinite(ms) || ms <= 0) return "";
     return new Date(ms).toLocaleTimeString("ja-JP", { hour12: false });
@@ -143,7 +154,16 @@
     }
   };
 
+  const stopPlayback = () => {
+    player.pause();
+    player.removeAttribute("src");
+    player.load();
+    queue.length = 0;
+    clearPlayingHighlight();
+  };
+
   const playNext = () => {
+    if (activeTab !== "stream") return;
     if (playingItem || queue.length === 0) return;
     const { clip, item } = queue.shift();
     playingItem = item;
@@ -162,23 +182,113 @@
     playNext();
   });
 
+  const applyTab = (tab) => {
+    activeTab = tab === "test" ? "test" : "stream";
+    const isStream = activeTab === "stream";
+    tabStreamEl.classList.toggle("active", isStream);
+    tabStreamEl.setAttribute("aria-selected", String(isStream));
+    tabTestEl.classList.toggle("active", !isStream);
+    tabTestEl.setAttribute("aria-selected", String(!isStream));
+    panelStreamEl.classList.toggle("hidden", !isStream);
+    panelTestEl.classList.toggle("hidden", isStream);
+    stopPlayback();
+    if (isStream) {
+      playNext();
+    }
+  };
+
+  const setActiveTab = (tab) => {
+    applyTab(tab);
+    localStorage.setItem(activeTabStorageKey, activeTab);
+  };
+
+  tabStreamEl.addEventListener("click", () => setActiveTab("stream"));
+  tabTestEl.addEventListener("click", () => setActiveTab("test"));
+
+  const showTestError = (msg) => {
+    testErrorEl.textContent = msg;
+    if (testErrorTimer) {
+      clearTimeout(testErrorTimer);
+    }
+    testErrorTimer = setTimeout(() => {
+      testErrorEl.textContent = "";
+      testErrorTimer = null;
+    }, testErrorDisplayMs);
+  };
+
+  const loadSpeakers = async () => {
+    try {
+      const resp = await fetch("/speakers.json");
+      if (!resp.ok) throw new Error(`status ${resp.status}`);
+      const speakers = await resp.json();
+      testSpeakerEl.innerHTML = "";
+      speakers.forEach((s) => {
+        const opt = document.createElement("option");
+        opt.value = String(s.id);
+        const style = s.styleName ? `(${s.styleName})` : "";
+        opt.textContent = `${s.speakerName}${style}`;
+        testSpeakerEl.appendChild(opt);
+      });
+      const stored = localStorage.getItem(testSpeakerStorageKey);
+      if (stored && Array.from(testSpeakerEl.options).some((o) => o.value === stored)) {
+        testSpeakerEl.value = stored;
+      }
+    } catch (err) {
+      console.error("failed to load speakers", err);
+      showTestError("話者一覧の取得に失敗しました");
+    }
+  };
+
+  testSpeakerEl.addEventListener("change", () => {
+    localStorage.setItem(testSpeakerStorageKey, testSpeakerEl.value);
+  });
+
+  testPlayEl.addEventListener("click", () => {
+    const speakerId = testSpeakerEl.value;
+    if (!speakerId) {
+      showTestError("話者が選択されていません");
+      return;
+    }
+    testErrorEl.textContent = "";
+    player.pause();
+    player.src = `/test-clip?speaker=${encodeURIComponent(speakerId)}`;
+    player.play().catch((err) => {
+      console.error("test play failed", err);
+      showTestError("合成に失敗しました");
+    });
+  });
+
+  const setBadge = (connected) => {
+    if (connected) {
+      statusBadge.textContent = "● 接続中";
+      statusBadge.classList.add("badge-connected");
+      statusBadge.classList.remove("badge-disconnected");
+    } else {
+      statusBadge.textContent = "● 切断";
+      statusBadge.classList.add("badge-disconnected");
+      statusBadge.classList.remove("badge-connected");
+    }
+  };
+
   const connect = () => {
     const es = new EventSource("/events");
     es.addEventListener("open", () => {
-      statusEl.textContent = "接続中";
+      setBadge(true);
     });
     es.addEventListener("clip", (event) => {
       try {
         const clip = JSON.parse(event.data);
         const item = appendTimelineItem(clip);
-        queue.push({ clip, item });
-        playNext();
+        if (activeTab === "stream") {
+          queue.push({ clip, item });
+          playNext();
+        }
       } catch (err) {
         console.error("invalid clip payload", err);
       }
     });
     es.addEventListener("error", () => {
-      statusEl.textContent = "切断";
+      setBadge(false);
       es.close();
       setTimeout(connect, 2000);
     });
@@ -188,5 +298,8 @@
   initVolume();
   player.muted = muteEl.checked;
   setVolumeIcon();
+  const storedTab = localStorage.getItem(activeTabStorageKey);
+  applyTab(storedTab === "test" ? "test" : "stream");
+  loadSpeakers();
   connect();
 })();

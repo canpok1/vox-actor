@@ -44,10 +44,11 @@ func main() {
 			Player:            player,
 			Mover:             mover,
 			DirWatcherFactory: dirWatcherFactory,
-			StreamPlayerFactory: func(addr string, logger *slog.Logger, speakerLookup map[int]entity.SpeakerStyleInfo) (app.StreamPlayer, error) {
+			StreamPlayerFactory: func(addr string, logger *slog.Logger, speakerLookup map[int]entity.SpeakerStyleInfo, client app.VoicevoxClient) (app.StreamPlayer, error) {
 				return infra.NewHTTPStreamPlayer(addr,
 					infra.WithHTTPStreamLogger(logger),
 					infra.WithSpeakerLookup(speakerLookup),
+					infra.WithVoicevoxClient(client),
 				)
 			},
 		},

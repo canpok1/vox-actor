@@ -24,7 +24,8 @@ type WatchDeps struct {
 	// StreamPlayerFactory は --stream 指定時にストリーム配信用の AudioPlayer を生成する。
 	// speakerLookup は /speakers 取得結果から構築されたマップで、配信時に話者名/スタイル名を解決する。
 	// マップが空でも factory はエラーにせず player を返してよい（フォールバック表示が使われる）。
-	StreamPlayerFactory func(addr string, logger *slog.Logger, speakerLookup map[int]entity.SpeakerStyleInfo) (app.StreamPlayer, error)
+	// client はブラウザ側の /test-clip エンドポイントから音声合成を呼ぶために渡す。
+	StreamPlayerFactory func(addr string, logger *slog.Logger, speakerLookup map[int]entity.SpeakerStyleInfo, client app.VoicevoxClient) (app.StreamPlayer, error)
 }
 
 func makeWatchCmd(deps *WatchDeps) *cobra.Command {
@@ -108,7 +109,7 @@ func runWatch(cmd *cobra.Command, args []string, deps *WatchDeps) error {
 		lookup := entity.BuildSpeakerStyleLookup(speakers)
 		logger.Info("speakers loaded", "speakerCount", len(speakers), "styleCount", len(lookup))
 
-		sp, err := deps.StreamPlayerFactory(streamAddr, logger, lookup)
+		sp, err := deps.StreamPlayerFactory(streamAddr, logger, lookup, client)
 		if err != nil {
 			return fmt.Errorf("failed to create stream player: %w", err)
 		}

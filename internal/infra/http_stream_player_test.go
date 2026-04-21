@@ -45,11 +45,25 @@ package infra
 //
 // #229 音量localStorage保存 / 消音チェックボックス:
 // DONE: index.html に音量スライダー初期値 50 と消音チェックボックス(checked) が含まれる
+//
+// #237 音声テストタブ / 接続バッジ / speakers.json / test-clip:
+// DONE: index.html に配信/音声テストのタブ要素と接続バッジ要素が含まれる
+// DONE: index.html から `.status` 行が削除されている
+// DONE: /speakers.json が speakerLookup を id 昇順で配列化して返す
+// DONE: /speakers.json は lookup 未設定時に空配列を返す
+// DONE: /test-clip が VoicevoxClient 未注入時に 503 を返す
+// DONE: /test-clip が speaker パラメータ欠落・不正・未登録IDで 400 を返す
+// DONE: /test-clip が成功時に 200 WAV を返す
+// DONE: /test-clip が 2 回目の呼び出しで VoicevoxClient を呼ばずキャッシュから返す
+// DONE: /test-clip が VOICEVOX 合成失敗時に 502 を返す
+// DONE: /test-clip は WithTestPhrase のフレーズを CreateQuery に渡す
 
 import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -728,5 +742,308 @@ func TestHTTPStreamPlayer_RingBuffer_FixedSize(t *testing.T) {
 	_ = resp21.Body.Close()
 	if resp21.StatusCode != http.StatusOK {
 		t.Errorf("expected 200 for clip 21, got %d", resp21.StatusCode)
+	}
+}
+
+// --- #237 音声テストタブ / 接続バッジ / speakers.json / test-clip ---
+
+func TestHTTPStreamPlayer_Index_ContainsTabElements(t *testing.T) {
+	t.Parallel()
+	p := newStartedPlayer(t)
+	resp, err := http.Get("http://" + p.Addr() + "/")
+	if err != nil {
+		t.Fatalf("GET /: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read body: %v", err)
+	}
+	html := string(body)
+	for _, needle := range []string{
+		`id="tab-stream"`,
+		`id="tab-test"`,
+		`id="panel-stream"`,
+		`id="panel-test"`,
+		`id="test-speaker"`,
+		`id="test-play"`,
+		"配信",
+		"音声テスト",
+	} {
+		if !strings.Contains(html, needle) {
+			t.Errorf("expected index.html to contain %q", needle)
+		}
+	}
+}
+
+func TestHTTPStreamPlayer_Index_ContainsConnectionBadge(t *testing.T) {
+	t.Parallel()
+	p := newStartedPlayer(t)
+	resp, err := http.Get("http://" + p.Addr() + "/")
+	if err != nil {
+		t.Fatalf("GET /: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read body: %v", err)
+	}
+	html := string(body)
+	if !strings.Contains(html, `id="status-badge"`) {
+		t.Errorf("expected index.html to contain status-badge element")
+	}
+}
+
+func TestHTTPStreamPlayer_Index_NoStatusRow(t *testing.T) {
+	t.Parallel()
+	p := newStartedPlayer(t)
+	resp, err := http.Get("http://" + p.Addr() + "/")
+	if err != nil {
+		t.Fatalf("GET /: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read body: %v", err)
+	}
+	html := string(body)
+	if strings.Contains(html, `class="status"`) {
+		t.Errorf("expected index.html to not contain class=\"status\", got: %s", html)
+	}
+}
+
+func TestHTTPStreamPlayer_Speakers_ReturnsSortedByID(t *testing.T) {
+	t.Parallel()
+	lookup := map[int]entity.SpeakerStyleInfo{
+		7: {SpeakerName: "四国めたん", StyleName: "ノーマル"},
+		3: {SpeakerName: "ずんだもん", StyleName: "ノーマル"},
+		1: {SpeakerName: "四国めたん", StyleName: "あまあま"},
+	}
+	p := newStartedPlayerWithOpts(t, WithSpeakerLookup(lookup))
+	resp, err := http.Get("http://" + p.Addr() + "/speakers.json")
+	if err != nil {
+		t.Fatalf("GET /speakers.json: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status: %d", resp.StatusCode)
+	}
+	if ct := resp.Header.Get("Content-Type"); !strings.Contains(ct, "application/json") {
+		t.Errorf("unexpected Content-Type: %s", ct)
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	var got []struct {
+		ID          int    `json:"id"`
+		SpeakerName string `json:"speakerName"`
+		StyleName   string `json:"styleName"`
+	}
+	if err := json.Unmarshal(body, &got); err != nil {
+		t.Fatalf("unmarshal: %v body=%s", err, string(body))
+	}
+	if len(got) != 3 {
+		t.Fatalf("expected 3 entries, got %d: %s", len(got), string(body))
+	}
+	wantIDs := []int{1, 3, 7}
+	for i, w := range wantIDs {
+		if got[i].ID != w {
+			t.Errorf("entry %d: expected id=%d, got %d", i, w, got[i].ID)
+		}
+	}
+	if got[0].SpeakerName != "四国めたん" || got[0].StyleName != "あまあま" {
+		t.Errorf("entry 0: %+v", got[0])
+	}
+	if got[1].SpeakerName != "ずんだもん" || got[1].StyleName != "ノーマル" {
+		t.Errorf("entry 1: %+v", got[1])
+	}
+}
+
+func TestHTTPStreamPlayer_Speakers_NoLookupReturnsEmptyArray(t *testing.T) {
+	t.Parallel()
+	p := newStartedPlayer(t)
+	resp, err := http.Get("http://" + p.Addr() + "/speakers.json")
+	if err != nil {
+		t.Fatalf("GET /speakers.json: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status: %d", resp.StatusCode)
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	trimmed := strings.TrimSpace(string(body))
+	if trimmed != "[]" {
+		t.Errorf("expected empty array, got %s", trimmed)
+	}
+}
+
+// testVoicevoxClient is a minimal stub implementing app.VoicevoxClient for /test-clip tests.
+type testVoicevoxClient struct {
+	createQueryCall int
+	synthesizeCall  int
+	createQueryErr  error
+	synthesizeErr   error
+	wav             []byte
+	capturedText    string
+	capturedSpeaker int
+}
+
+func (c *testVoicevoxClient) HealthCheck(_ context.Context) error { return nil }
+func (c *testVoicevoxClient) CreateQuery(_ context.Context, text string, speakerID int) (*entity.AudioQuery, error) {
+	c.createQueryCall++
+	c.capturedText = text
+	c.capturedSpeaker = speakerID
+	if c.createQueryErr != nil {
+		return nil, c.createQueryErr
+	}
+	return &entity.AudioQuery{}, nil
+}
+func (c *testVoicevoxClient) Synthesize(_ context.Context, _ *entity.AudioQuery, _ int) ([]byte, error) {
+	c.synthesizeCall++
+	if c.synthesizeErr != nil {
+		return nil, c.synthesizeErr
+	}
+	return c.wav, nil
+}
+func (c *testVoicevoxClient) GetSpeakers(_ context.Context) ([]entity.Speaker, error) {
+	return nil, nil
+}
+
+func TestHTTPStreamPlayer_TestClip_NoClientReturns503(t *testing.T) {
+	t.Parallel()
+	lookup := map[int]entity.SpeakerStyleInfo{3: {SpeakerName: "ずんだもん", StyleName: "ノーマル"}}
+	p := newStartedPlayerWithOpts(t, WithSpeakerLookup(lookup))
+	resp, err := http.Get("http://" + p.Addr() + "/test-clip?speaker=3")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503, got %d", resp.StatusCode)
+	}
+}
+
+func TestHTTPStreamPlayer_TestClip_BadRequest(t *testing.T) {
+	t.Parallel()
+	lookup := map[int]entity.SpeakerStyleInfo{3: {SpeakerName: "ずんだもん", StyleName: "ノーマル"}}
+	stub := &testVoicevoxClient{wav: []byte("RIFFxxx")}
+	p := newStartedPlayerWithOpts(t, WithSpeakerLookup(lookup), WithVoicevoxClient(stub))
+	baseURL := "http://" + p.Addr()
+
+	cases := []struct {
+		name string
+		url  string
+	}{
+		{"missing", baseURL + "/test-clip"},
+		{"empty", baseURL + "/test-clip?speaker="},
+		{"non-numeric", baseURL + "/test-clip?speaker=abc"},
+		{"unknown-id", baseURL + "/test-clip?speaker=999"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			resp, err := http.Get(tc.url)
+			if err != nil {
+				t.Fatalf("GET: %v", err)
+			}
+			_ = resp.Body.Close()
+			if resp.StatusCode != http.StatusBadRequest {
+				t.Errorf("expected 400, got %d", resp.StatusCode)
+			}
+		})
+	}
+	if stub.createQueryCall != 0 || stub.synthesizeCall != 0 {
+		t.Errorf("expected VoicevoxClient not called on bad requests, got createQuery=%d synth=%d",
+			stub.createQueryCall, stub.synthesizeCall)
+	}
+}
+
+func TestHTTPStreamPlayer_TestClip_SuccessAndCached(t *testing.T) {
+	t.Parallel()
+	lookup := map[int]entity.SpeakerStyleInfo{3: {SpeakerName: "ずんだもん", StyleName: "ノーマル"}}
+	stub := &testVoicevoxClient{wav: []byte("RIFFtestwav")}
+	p := newStartedPlayerWithOpts(t,
+		WithSpeakerLookup(lookup),
+		WithVoicevoxClient(stub),
+		WithTestPhrase("テスト発話"),
+	)
+	baseURL := "http://" + p.Addr()
+
+	// 1回目: VoicevoxClient を呼び WAV を返す
+	resp1, err := http.Get(baseURL + "/test-clip?speaker=3")
+	if err != nil {
+		t.Fatalf("first GET: %v", err)
+	}
+	body1, _ := io.ReadAll(resp1.Body)
+	_ = resp1.Body.Close()
+	if resp1.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp1.StatusCode)
+	}
+	if ct := resp1.Header.Get("Content-Type"); !strings.Contains(ct, "audio/wav") {
+		t.Errorf("unexpected Content-Type: %s", ct)
+	}
+	if !bytes.Equal(body1, []byte("RIFFtestwav")) {
+		t.Errorf("unexpected body: %q", body1)
+	}
+	if stub.capturedText != "テスト発話" {
+		t.Errorf("expected captured text=テスト発話, got %q", stub.capturedText)
+	}
+	if stub.capturedSpeaker != 3 {
+		t.Errorf("expected captured speaker=3, got %d", stub.capturedSpeaker)
+	}
+	if stub.createQueryCall != 1 || stub.synthesizeCall != 1 {
+		t.Errorf("expected single synth on first call: createQuery=%d synth=%d",
+			stub.createQueryCall, stub.synthesizeCall)
+	}
+
+	// 2回目: キャッシュから返る
+	resp2, err := http.Get(baseURL + "/test-clip?speaker=3")
+	if err != nil {
+		t.Fatalf("second GET: %v", err)
+	}
+	body2, _ := io.ReadAll(resp2.Body)
+	_ = resp2.Body.Close()
+	if resp2.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp2.StatusCode)
+	}
+	if !bytes.Equal(body2, []byte("RIFFtestwav")) {
+		t.Errorf("cached body mismatch: %q", body2)
+	}
+	if stub.createQueryCall != 1 || stub.synthesizeCall != 1 {
+		t.Errorf("expected cache hit, VoicevoxClient should not be called again: createQuery=%d synth=%d",
+			stub.createQueryCall, stub.synthesizeCall)
+	}
+}
+
+func TestHTTPStreamPlayer_TestClip_SynthesizeFailureReturns502(t *testing.T) {
+	t.Parallel()
+	lookup := map[int]entity.SpeakerStyleInfo{3: {SpeakerName: "ずんだもん", StyleName: "ノーマル"}}
+	stub := &testVoicevoxClient{synthesizeErr: errors.New("engine down")}
+	p := newStartedPlayerWithOpts(t, WithSpeakerLookup(lookup), WithVoicevoxClient(stub))
+	resp, err := http.Get("http://" + p.Addr() + "/test-clip?speaker=3")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusBadGateway {
+		t.Errorf("expected 502, got %d", resp.StatusCode)
+	}
+}
+
+func TestHTTPStreamPlayer_TestClip_CreateQueryFailureReturns502(t *testing.T) {
+	t.Parallel()
+	lookup := map[int]entity.SpeakerStyleInfo{3: {SpeakerName: "ずんだもん", StyleName: "ノーマル"}}
+	stub := &testVoicevoxClient{createQueryErr: errors.New("bad")}
+	p := newStartedPlayerWithOpts(t, WithSpeakerLookup(lookup), WithVoicevoxClient(stub))
+	resp, err := http.Get("http://" + p.Addr() + "/test-clip?speaker=3")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusBadGateway {
+		t.Errorf("expected 502, got %d", resp.StatusCode)
 	}
 }
