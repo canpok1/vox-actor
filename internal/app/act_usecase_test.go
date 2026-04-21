@@ -118,6 +118,41 @@ func TestActUsecase_Run_PlayReceivesScriptText(t *testing.T) {
 	if player.playMetas[0].Text != "おはようなのだ" || player.playMetas[1].Text != "さようならなのだ" {
 		t.Errorf("expected PlayMeta.Text in script order, got: %+v", player.playMetas)
 	}
+	if player.playMetas[0].SpeakerID != 3 || player.playMetas[1].SpeakerID != 3 {
+		t.Errorf("expected PlayMeta.SpeakerID=3 for both calls (default), got: %+v", player.playMetas)
+	}
+}
+
+func TestActUsecase_Run_PlayReceivesScriptResolvedSpeakerID(t *testing.T) {
+	overrideID := 7
+	reader := &mockScriptReader{
+		scripts: []entity.Script{
+			{Path: "a.txt", Text: "default", IsEmpty: false},
+			{Path: "b.txt", Text: "override", IsEmpty: false, SpeakerID: &overrideID},
+		},
+	}
+	client := &mockVoicevoxClient{
+		query:   &entity.AudioQuery{},
+		wavData: []byte("fake-wav"),
+	}
+	player := &mockAudioPlayer{}
+
+	uc := app.NewActUsecase(reader, client, player)
+	params := app.ActParams{Path: "scripts/", SpeakerID: 3}
+
+	if err := uc.Run(context.Background(), params); err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	if len(player.playMetas) != 2 {
+		t.Fatalf("expected 2 Play calls, got: %d", len(player.playMetas))
+	}
+	if player.playMetas[0].SpeakerID != 3 {
+		t.Errorf("expected first PlayMeta.SpeakerID=3 (default), got: %d", player.playMetas[0].SpeakerID)
+	}
+	if player.playMetas[1].SpeakerID != 7 {
+		t.Errorf("expected second PlayMeta.SpeakerID=7 (script override), got: %d", player.playMetas[1].SpeakerID)
+	}
 }
 
 func TestActUsecase_Run_SingleScript_Success(t *testing.T) {

@@ -88,7 +88,7 @@ func (u *SayUsecase) Run(ctx context.Context, params SayParams) error {
 	}
 	u.logger.Info("synthesis completed", "wavSize", len(wavData))
 
-	if err := u.player.Play(ctx, wavData, PlayMeta{Text: params.Text}); err != nil {
+	if err := u.player.Play(ctx, wavData, PlayMeta{Text: params.Text, SpeakerID: params.SpeakerID}); err != nil {
 		if ctx.Err() != nil {
 			return nil
 		}

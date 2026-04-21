@@ -69,6 +69,9 @@ func TestSayUsecase_Run_PlayReceivesText(t *testing.T) {
 	if len(player.playMetas) != 1 || player.playMetas[0].Text != "こんにちはなのだ" {
 		t.Errorf("expected PlayMeta.Text=%q, got: %+v", "こんにちはなのだ", player.playMetas)
 	}
+	if player.playMetas[0].SpeakerID != 3 {
+		t.Errorf("expected PlayMeta.SpeakerID=3, got: %d", player.playMetas[0].SpeakerID)
+	}
 }
 
 func TestSayUsecase_Run_WithParams(t *testing.T) {
