@@ -48,6 +48,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -504,6 +505,34 @@ func TestHTTPStreamPlayer_Play_ClipEventFallbackForUnknownSpeaker(t *testing.T) 
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("timeout waiting for clip event")
+	}
+}
+
+func TestHTTPStreamPlayer_Index_ContainsToggleControls(t *testing.T) {
+	t.Parallel()
+	p := newStartedPlayer(t)
+	resp, err := http.Get("http://" + p.Addr() + "/")
+	if err != nil {
+		t.Fatalf("GET /: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read body: %v", err)
+	}
+	html := string(body)
+	for _, needle := range []string{
+		`id="show-speaker-name"`,
+		`id="show-style-name"`,
+		`id="show-timestamp"`,
+		"話者名",
+		"スタイル",
+		"時刻",
+	} {
+		if !strings.Contains(html, needle) {
+			t.Errorf("expected index.html to contain %q", needle)
+		}
 	}
 }
 
