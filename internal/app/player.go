@@ -7,6 +7,9 @@ import "context"
 type PlayMeta struct {
 	// Text は再生対象のセリフ本文。ブラウザUI等での表示に使用される。
 	Text string
+	// SpeakerID は再生に使ったVOICEVOXのスタイルID（解決後の値）。
+	// HTTPStreamPlayer では話者名/スタイル名の解決キーとして利用される。
+	SpeakerID int
 }
 
 // AudioPlayer はWAVバイト列を再生するインターフェース。

@@ -321,3 +321,89 @@ func TestSynthesize_Non200(t *testing.T) {
 		t.Fatal("expected nil wav on error")
 	}
 }
+
+func TestGetSpeakers_Success(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/speakers" {
+			t.Errorf("unexpected path: %s", r.URL.Path)
+		}
+		if r.Method != http.MethodGet {
+			t.Errorf("unexpected method: %s", r.Method)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `[
+			{
+				"name": "ずんだもん",
+				"speaker_uuid": "388f246b-8c41-4ac1-8e2d-5d79f3ff56d9",
+				"styles": [
+					{"name": "ノーマル", "id": 3, "type": "talk"},
+					{"name": "あまあま", "id": 1, "type": "talk"}
+				],
+				"version": "0.16.0"
+			},
+			{
+				"name": "四国めたん",
+				"speaker_uuid": "7ffcb7ce-00ec-4bdc-82cd-45a8889e43ff",
+				"styles": [
+					{"name": "ノーマル", "id": 2, "type": "talk"}
+				],
+				"version": "0.16.0"
+			}
+		]`)
+	}))
+	defer server.Close()
+
+	client := infra.NewVoicevoxClient(server.URL)
+	speakers, err := client.GetSpeakers(context.Background())
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if len(speakers) != 2 {
+		t.Fatalf("expected 2 speakers, got %d", len(speakers))
+	}
+	if speakers[0].Name != "ずんだもん" {
+		t.Errorf("expected first speaker name 'ずんだもん', got %s", speakers[0].Name)
+	}
+	if len(speakers[0].Styles) != 2 {
+		t.Fatalf("expected ずんだもん to have 2 styles, got %d", len(speakers[0].Styles))
+	}
+	if speakers[0].Styles[0].ID != 3 || speakers[0].Styles[0].Name != "ノーマル" {
+		t.Errorf("unexpected first style: %+v", speakers[0].Styles[0])
+	}
+	if speakers[1].Name != "四国めたん" || speakers[1].Styles[0].ID != 2 {
+		t.Errorf("unexpected second speaker: %+v", speakers[1])
+	}
+}
+
+func TestGetSpeakers_Non200(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer server.Close()
+
+	client := infra.NewVoicevoxClient(server.URL)
+	speakers, err := client.GetSpeakers(context.Background())
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if speakers != nil {
+		t.Fatal("expected nil speakers on error")
+	}
+}
+
+func TestGetSpeakers_InvalidJSON(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte("not-json"))
+	}))
+	defer server.Close()
+
+	client := infra.NewVoicevoxClient(server.URL)
+	speakers, err := client.GetSpeakers(context.Background())
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if speakers != nil {
+		t.Fatal("expected nil speakers on error")
+	}
+}

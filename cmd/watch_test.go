@@ -2,11 +2,15 @@ package cmd
 
 import (
 	"bytes"
+	"context"
 	"errors"
+	"log/slog"
 	"os"
 	"strings"
 	"testing"
 
+	"github.com/canpok1/vox-actor/internal/app"
+	"github.com/canpok1/vox-actor/internal/domain/entity"
 	"github.com/spf13/cobra"
 )
 
@@ -199,6 +203,149 @@ func TestWatchCmd_StreamAndDryRun_ReturnsUsageError(t *testing.T) {
 	}
 	if !errors.Is(err, ErrUsage) {
 		t.Errorf("expected ErrUsage, got: %v", err)
+	}
+}
+
+// --- #228 /speakers 取得 ---
+
+// stubVoicevoxClient は GetSpeakers/HealthCheck の振る舞いをカスタマイズできるテスト用クライアント。
+type stubVoicevoxClient struct {
+	healthCheckErr  error
+	getSpeakersErr  error
+	speakers        []entity.Speaker
+	getSpeakersCall int
+}
+
+func (c *stubVoicevoxClient) HealthCheck(_ context.Context) error { return c.healthCheckErr }
+func (c *stubVoicevoxClient) CreateQuery(_ context.Context, _ string, _ int) (*entity.AudioQuery, error) {
+	return nil, nil
+}
+func (c *stubVoicevoxClient) Synthesize(_ context.Context, _ *entity.AudioQuery, _ int) ([]byte, error) {
+	return nil, nil
+}
+func (c *stubVoicevoxClient) GetSpeakers(_ context.Context) ([]entity.Speaker, error) {
+	c.getSpeakersCall++
+	return c.speakers, c.getSpeakersErr
+}
+
+type stubScriptReader struct{}
+
+func (stubScriptReader) Read(_ string) ([]entity.Script, error) { return nil, nil }
+
+type stubFileMover struct{}
+
+func (stubFileMover) MoveToDone(_ string) error { return nil }
+func (stubFileMover) Delete(_ string) error     { return nil }
+
+type stubDirWatcher struct{}
+
+func (stubDirWatcher) Watch(ctx context.Context, _ string) (<-chan string, <-chan error) {
+	fileCh := make(chan string)
+	errCh := make(chan error)
+	go func() {
+		<-ctx.Done()
+		close(fileCh)
+		close(errCh)
+	}()
+	return fileCh, errCh
+}
+
+type stubAudioPlayer struct{}
+
+func (stubAudioPlayer) Play(_ context.Context, _ []byte, _ app.PlayMeta) error { return nil }
+
+type stubStreamPlayer struct{}
+
+func (stubStreamPlayer) Start(_ context.Context) error                          { return nil }
+func (stubStreamPlayer) Shutdown(_ context.Context) error                       { return nil }
+func (stubStreamPlayer) Addr() string                                           { return "127.0.0.1:0" }
+func (stubStreamPlayer) Play(_ context.Context, _ []byte, _ app.PlayMeta) error { return nil }
+
+func TestWatchCmd_Stream_GetSpeakersFailure_ReturnsError(t *testing.T) {
+	dir := t.TempDir()
+
+	stubClient := &stubVoicevoxClient{
+		getSpeakersErr: errors.New("speakers endpoint down"),
+	}
+	deps := &Deps{
+		Watch: &WatchDeps{
+			Reader:            stubScriptReader{},
+			ClientFactory:     func(_ string) app.VoicevoxClient { return stubClient },
+			Player:            stubAudioPlayer{},
+			Mover:             stubFileMover{},
+			DirWatcherFactory: func() app.DirWatcher { return stubDirWatcher{} },
+			StreamPlayerFactory: func(_ string, _ *slog.Logger, _ map[int]entity.SpeakerStyleInfo) (app.StreamPlayer, error) {
+				t.Error("StreamPlayerFactory should not be called when GetSpeakers fails")
+				return stubStreamPlayer{}, nil
+			},
+		},
+	}
+	rootCmd := makeRootCmd(deps)
+	buf := new(bytes.Buffer)
+	rootCmd.SetOut(buf)
+	rootCmd.SetErr(buf)
+	rootCmd.SetArgs([]string{"watch", "--stream", dir})
+
+	err := rootCmd.Execute()
+	if err == nil {
+		t.Fatal("expected error when GetSpeakers fails")
+	}
+	if !strings.Contains(err.Error(), "failed to get speakers") {
+		t.Errorf("expected wrapped 'failed to get speakers', got: %v", err)
+	}
+	if stubClient.getSpeakersCall != 1 {
+		t.Errorf("expected GetSpeakers to be called once, got %d", stubClient.getSpeakersCall)
+	}
+}
+
+func TestWatchCmd_Stream_PassesSpeakerLookupToFactory(t *testing.T) {
+	dir := t.TempDir()
+
+	stubClient := &stubVoicevoxClient{
+		speakers: []entity.Speaker{
+			{Name: "ずんだもん", Styles: []entity.SpeakerStyle{{ID: 3, Name: "ノーマル"}}},
+		},
+	}
+
+	var captured map[int]entity.SpeakerStyleInfo
+	deps := &Deps{
+		Watch: &WatchDeps{
+			Reader:            stubScriptReader{},
+			ClientFactory:     func(_ string) app.VoicevoxClient { return stubClient },
+			Player:            stubAudioPlayer{},
+			Mover:             stubFileMover{},
+			DirWatcherFactory: func() app.DirWatcher { return stubDirWatcher{} },
+			StreamPlayerFactory: func(_ string, _ *slog.Logger, lookup map[int]entity.SpeakerStyleInfo) (app.StreamPlayer, error) {
+				captured = lookup
+				// usecase.Run まで進ませず、watch loop から確実に抜けるためにキャンセルを返す。
+				return stubStreamPlayer{}, nil
+			},
+		},
+	}
+	rootCmd := makeRootCmd(deps)
+	buf := new(bytes.Buffer)
+	rootCmd.SetOut(buf)
+	rootCmd.SetErr(buf)
+	// usecase.Run 内のディレクトリ監視は stubDirWatcher が ctx.Done() を待つだけなので、
+	// 短い timeout を持つ context を作って即座に抜ける。
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	rootCmd.SetContext(ctx)
+	rootCmd.SetArgs([]string{"watch", "--stream", dir})
+
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if captured == nil {
+		t.Fatal("StreamPlayerFactory was not called with a lookup")
+	}
+	info, ok := captured[3]
+	if !ok {
+		t.Fatalf("lookup missing key 3, got: %+v", captured)
+	}
+	if info.SpeakerName != "ずんだもん" || info.StyleName != "ノーマル" {
+		t.Errorf("unexpected lookup[3]=%+v", info)
 	}
 }
 

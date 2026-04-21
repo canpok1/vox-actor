@@ -36,12 +36,19 @@ package infra
 // DONE: Play() が WAV 推定再生時間ぶんブロックしてから return する
 // DONE: ctx キャンセル時は sleep を中断し ctx.Err() を返す
 // DONE: WAVヘッダ不正時は warning を出して sleep をスキップしつつ正常 return する
+//
+// #228 話者名/スタイル名/timestamp:
+// DONE: clipEvent に speakerName / styleName / timestamp フィールドが含まれる
+// DONE: SpeakerLookup にヒットすれば speakerName / styleName が解決値で配信される
+// DONE: SpeakerLookup に未ヒットの ID は speakerName が `話者#<ID>` にフォールバックする
+// DONE: timestamp は nowFunc の戻り値の Unix ms で配信される
 
 import (
 	"bufio"
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -49,6 +56,7 @@ import (
 	"time"
 
 	"github.com/canpok1/vox-actor/internal/app"
+	"github.com/canpok1/vox-actor/internal/domain/entity"
 )
 
 func newStartedPlayer(t *testing.T) *HTTPStreamPlayer {
@@ -410,6 +418,141 @@ func TestHTTPStreamPlayer_Play_ClipEventEmptyText(t *testing.T) {
 	case data := <-events:
 		if !strings.Contains(data, `"text":""`) {
 			t.Errorf("expected empty text field, got: %s", data)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timeout waiting for clip event")
+	}
+}
+
+// --- #228 話者名/スタイル名/timestamp ---
+
+func newStartedPlayerWithOpts(t *testing.T, opts ...HTTPStreamOption) *HTTPStreamPlayer {
+	t.Helper()
+	allOpts := append([]HTTPStreamOption{}, opts...)
+	p, err := NewHTTPStreamPlayer("127.0.0.1:0", allOpts...)
+	if err != nil {
+		t.Fatalf("NewHTTPStreamPlayer: %v", err)
+	}
+	if err := p.Start(context.Background()); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	t.Cleanup(func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		_ = p.Shutdown(shutdownCtx)
+	})
+	return p
+}
+
+func TestHTTPStreamPlayer_Play_ClipEventResolvesSpeakerName(t *testing.T) {
+	t.Parallel()
+	lookup := map[int]entity.SpeakerStyleInfo{
+		3: {SpeakerName: "ずんだもん", StyleName: "ノーマル"},
+	}
+	fixed := time.Date(2026, 4, 21, 12, 0, 0, 123_000_000, time.UTC)
+	p := newStartedPlayerWithOpts(t,
+		WithSpeakerLookup(lookup),
+		withNowFunc(func() time.Time { return fixed }),
+	)
+	baseURL := "http://" + p.Addr()
+
+	events := subscribeSSE(t, baseURL)
+	time.Sleep(50 * time.Millisecond)
+
+	if err := p.Play(context.Background(), []byte("RIFFx"), app.PlayMeta{Text: "やっほー", SpeakerID: 3}); err != nil {
+		t.Fatalf("Play: %v", err)
+	}
+
+	select {
+	case data := <-events:
+		if !strings.Contains(data, `"speakerName":"ずんだもん"`) {
+			t.Errorf("expected speakerName=ずんだもん, got: %s", data)
+		}
+		if !strings.Contains(data, `"styleName":"ノーマル"`) {
+			t.Errorf("expected styleName=ノーマル, got: %s", data)
+		}
+		expectedTS := fmt.Sprintf(`"timestamp":%d`, fixed.UnixMilli())
+		if !strings.Contains(data, expectedTS) {
+			t.Errorf("expected %s, got: %s", expectedTS, data)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timeout waiting for clip event")
+	}
+}
+
+func TestHTTPStreamPlayer_Play_ClipEventFallbackForUnknownSpeaker(t *testing.T) {
+	t.Parallel()
+	lookup := map[int]entity.SpeakerStyleInfo{
+		3: {SpeakerName: "ずんだもん", StyleName: "ノーマル"},
+	}
+	p := newStartedPlayerWithOpts(t, WithSpeakerLookup(lookup))
+	baseURL := "http://" + p.Addr()
+
+	events := subscribeSSE(t, baseURL)
+	time.Sleep(50 * time.Millisecond)
+
+	if err := p.Play(context.Background(), []byte("RIFFx"), app.PlayMeta{Text: "未知", SpeakerID: 999}); err != nil {
+		t.Fatalf("Play: %v", err)
+	}
+
+	select {
+	case data := <-events:
+		if !strings.Contains(data, `"speakerName":"話者#999"`) {
+			t.Errorf("expected speakerName fallback to 話者#999, got: %s", data)
+		}
+		if !strings.Contains(data, `"styleName":""`) {
+			t.Errorf("expected styleName='' for unknown id, got: %s", data)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timeout waiting for clip event")
+	}
+}
+
+func TestHTTPStreamPlayer_Index_ContainsToggleControls(t *testing.T) {
+	t.Parallel()
+	p := newStartedPlayer(t)
+	resp, err := http.Get("http://" + p.Addr() + "/")
+	if err != nil {
+		t.Fatalf("GET /: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read body: %v", err)
+	}
+	html := string(body)
+	for _, needle := range []string{
+		`id="show-speaker-name"`,
+		`id="show-style-name"`,
+		`id="show-timestamp"`,
+		"話者名",
+		"スタイル",
+		"時刻",
+	} {
+		if !strings.Contains(html, needle) {
+			t.Errorf("expected index.html to contain %q", needle)
+		}
+	}
+}
+
+func TestHTTPStreamPlayer_Play_ClipEventNoLookup(t *testing.T) {
+	t.Parallel()
+	// lookup を設定しない場合、すべての SpeakerID が fallback される。
+	p := newStartedPlayer(t)
+	baseURL := "http://" + p.Addr()
+
+	events := subscribeSSE(t, baseURL)
+	time.Sleep(50 * time.Millisecond)
+
+	if err := p.Play(context.Background(), []byte("RIFFx"), app.PlayMeta{SpeakerID: 3}); err != nil {
+		t.Fatalf("Play: %v", err)
+	}
+
+	select {
+	case data := <-events:
+		if !strings.Contains(data, `"speakerName":"話者#3"`) {
+			t.Errorf("expected speakerName fallback when no lookup, got: %s", data)
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("timeout waiting for clip event")

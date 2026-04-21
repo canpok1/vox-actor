@@ -71,6 +71,10 @@ func (m *pipelineMockClient) Synthesize(_ context.Context, query *entity.AudioQu
 	return []byte("wav"), nil
 }
 
+func (m *pipelineMockClient) GetSpeakers(_ context.Context) ([]entity.Speaker, error) {
+	return nil, nil
+}
+
 func TestStartSynthPipeline_ForwardsScriptsInOrder(t *testing.T) {
 	client := &pipelineMockClient{}
 	scripts := []entity.Script{

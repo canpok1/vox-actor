@@ -96,6 +96,45 @@ func TestWatchUsecase_Run_ProcessesFilesFromWatcher(t *testing.T) {
 	if player.playCalls != 1 {
 		t.Errorf("expected 1 Play call, got: %d", player.playCalls)
 	}
+	if len(player.playMetas) != 1 || player.playMetas[0].SpeakerID != 3 {
+		t.Errorf("expected PlayMeta.SpeakerID=3 (default), got: %+v", player.playMetas)
+	}
+}
+
+func TestWatchUsecase_Run_PlayReceivesScriptResolvedSpeakerID(t *testing.T) {
+	overrideID := 11
+	reader := &mockScriptReader{
+		scripts: []entity.Script{
+			{Path: "a.txt", Text: "default", IsEmpty: false},
+			{Path: "b.txt", Text: "override", IsEmpty: false, SpeakerID: &overrideID},
+		},
+	}
+	client := &mockVoicevoxClient{
+		query:   &entity.AudioQuery{},
+		wavData: []byte("fake-wav"),
+	}
+	player := &mockAudioPlayer{}
+	mover := &mockFileMover{}
+	watcher := &mockDirWatcher{
+		files: []string{"/tmp/watch/a.txt"},
+	}
+
+	uc := app.NewWatchUsecase(reader, client, player, mover, watcher)
+	params := app.WatchParams{Paths: []string{"/tmp/watch"}, SpeakerID: 3}
+
+	if err := uc.Run(context.Background(), params); err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	if len(player.playMetas) != 2 {
+		t.Fatalf("expected 2 Play calls, got: %d", len(player.playMetas))
+	}
+	if player.playMetas[0].SpeakerID != 3 {
+		t.Errorf("expected first PlayMeta.SpeakerID=3 (default), got: %d", player.playMetas[0].SpeakerID)
+	}
+	if player.playMetas[1].SpeakerID != 11 {
+		t.Errorf("expected second PlayMeta.SpeakerID=11 (script override), got: %d", player.playMetas[1].SpeakerID)
+	}
 }
 
 func TestWatchUsecase_Run_MovesFileToDoneAfterProcessing(t *testing.T) {
