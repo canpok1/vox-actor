@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -35,6 +36,8 @@ type HTTPStreamPlayer struct {
 	indexHTML []byte
 	appJS     []byte
 	appCSS    []byte
+	// speakersJSON は Start 時に speakerLookup から一度だけマーシャルしたレスポンス。
+	speakersJSON []byte
 
 	// speakerLookup は SpeakerID → 話者名/スタイル名 の解決マップ。
 	// nil または未ヒットの場合は `話者#<ID>` / 空文字 にフォールバックする。
@@ -42,6 +45,16 @@ type HTTPStreamPlayer struct {
 
 	// nowFunc は clipEvent の timestamp 生成に使う時刻取得関数（テスト差し替え用）。
 	nowFunc func() time.Time
+
+	// voicevoxClient はテスト再生 (/test-clip) で合成に使うクライアント。
+	// 未注入時は /test-clip が 503 を返す。
+	voicevoxClient app.VoicevoxClient
+	// testPhrase はテスト再生で合成するフレーズ。既定は defaultTestPhrase。
+	testPhrase string
+
+	// testClipCache は SpeakerID → WAV のキャッシュ。初回合成時に書き込まれ Shutdown まで保持される。
+	testClipCacheMu sync.Mutex
+	testClipCache   map[int][]byte
 
 	mu          sync.Mutex
 	started     bool
@@ -61,6 +74,8 @@ const (
 	clipPathSuffix      = ".wav"
 	sseEventClip        = "clip"
 	sseSubscriberBuffer = 16
+	// defaultTestPhrase は /test-clip で合成するデフォルトフレーズ。
+	defaultTestPhrase = "音量テストです"
 )
 
 // clipEvent は SSE で配信する clip イベントのペイロード。
@@ -95,6 +110,26 @@ func WithSpeakerLookup(lookup map[int]entity.SpeakerStyleInfo) HTTPStreamOption 
 	}
 }
 
+// WithVoicevoxClient は /test-clip エンドポイントで使う音声合成クライアントを設定するオプション。
+// 未注入時は /test-clip が 503 を返す。
+func WithVoicevoxClient(client app.VoicevoxClient) HTTPStreamOption {
+	return func(p *HTTPStreamPlayer) {
+		if client != nil {
+			p.voicevoxClient = client
+		}
+	}
+}
+
+// WithTestPhrase は /test-clip でテスト合成に使うフレーズを設定するオプション。
+// 既定は defaultTestPhrase。
+func WithTestPhrase(phrase string) HTTPStreamOption {
+	return func(p *HTTPStreamPlayer) {
+		if phrase != "" {
+			p.testPhrase = phrase
+		}
+	}
+}
+
 // withNowFunc は clipEvent の timestamp 取得に使う関数を設定する（テスト用）。
 func withNowFunc(now func() time.Time) HTTPStreamOption {
 	return func(p *HTTPStreamPlayer) {
@@ -111,10 +146,12 @@ func NewHTTPStreamPlayer(addr string, opts ...HTTPStreamOption) (*HTTPStreamPlay
 		return nil, fmt.Errorf("stream addr must not be empty")
 	}
 	p := &HTTPStreamPlayer{
-		addr:        addr,
-		logger:      slog.New(slog.DiscardHandler),
-		subscribers: newSubscriberRegistry(),
-		nowFunc:     time.Now,
+		addr:          addr,
+		logger:        slog.New(slog.DiscardHandler),
+		subscribers:   newSubscriberRegistry(),
+		nowFunc:       time.Now,
+		testPhrase:    defaultTestPhrase,
+		testClipCache: make(map[int][]byte),
 	}
 	for _, opt := range opts {
 		opt(p)
@@ -135,6 +172,9 @@ func (p *HTTPStreamPlayer) Start(_ context.Context) error {
 	if err := p.loadAssets(); err != nil {
 		return err
 	}
+	if err := p.buildSpeakersJSON(); err != nil {
+		return err
+	}
 
 	lis, err := net.Listen("tcp", p.addr)
 	if err != nil {
@@ -147,6 +187,8 @@ func (p *HTTPStreamPlayer) Start(_ context.Context) error {
 	mux.HandleFunc("/app.js", p.handleStaticAsset(p.appJS, "application/javascript; charset=utf-8"))
 	mux.HandleFunc("/app.css", p.handleStaticAsset(p.appCSS, "text/css; charset=utf-8"))
 	mux.HandleFunc("/events", p.handleEvents)
+	mux.HandleFunc("/speakers.json", p.handleSpeakers)
+	mux.HandleFunc("/test-clip", p.handleTestClip)
 	mux.HandleFunc(clipPathPrefix, p.handleClip)
 
 	p.server = &http.Server{
@@ -313,9 +355,7 @@ func (p *HTTPStreamPlayer) handleClip(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	w.Header().Set("Content-Type", "audio/wav")
-	w.Header().Set("Content-Length", strconv.Itoa(len(data)))
-	_, _ = w.Write(data)
+	writeWAV(w, data)
 }
 
 func parseClipID(path string) (uint64, bool) {
@@ -328,6 +368,97 @@ func parseClipID(path string) (uint64, bool) {
 		return 0, false
 	}
 	return id, true
+}
+
+// speakerJSON は /speakers.json のレスポンス1要素分のペイロード。
+type speakerJSON struct {
+	ID          int    `json:"id"`
+	SpeakerName string `json:"speakerName"`
+	StyleName   string `json:"styleName"`
+}
+
+// buildSpeakersJSON は speakerLookup を id 昇順で配列化し Start 時に一度だけマーシャルする。
+func (p *HTTPStreamPlayer) buildSpeakersJSON() error {
+	ids := make([]int, 0, len(p.speakerLookup))
+	for id := range p.speakerLookup {
+		ids = append(ids, id)
+	}
+	sort.Ints(ids)
+	items := make([]speakerJSON, 0, len(ids))
+	for _, id := range ids {
+		info := p.speakerLookup[id]
+		items = append(items, speakerJSON{
+			ID:          id,
+			SpeakerName: info.SpeakerName,
+			StyleName:   info.StyleName,
+		})
+	}
+	payload, err := json.Marshal(items)
+	if err != nil {
+		return fmt.Errorf("failed to marshal speakers.json: %w", err)
+	}
+	p.speakersJSON = payload
+	return nil
+}
+
+func (p *HTTPStreamPlayer) handleSpeakers(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	_, _ = w.Write(p.speakersJSON)
+}
+
+func (p *HTTPStreamPlayer) handleTestClip(w http.ResponseWriter, r *http.Request) {
+	if p.voicevoxClient == nil {
+		http.Error(w, "voicevox client is not configured", http.StatusServiceUnavailable)
+		return
+	}
+	speakerStr := r.URL.Query().Get("speaker")
+	if speakerStr == "" {
+		http.Error(w, "speaker parameter is required", http.StatusBadRequest)
+		return
+	}
+	speakerID, err := strconv.Atoi(speakerStr)
+	if err != nil {
+		http.Error(w, "speaker parameter must be an integer", http.StatusBadRequest)
+		return
+	}
+	if _, ok := p.speakerLookup[speakerID]; !ok {
+		http.Error(w, "speaker not found", http.StatusBadRequest)
+		return
+	}
+
+	p.testClipCacheMu.Lock()
+	cached, ok := p.testClipCache[speakerID]
+	p.testClipCacheMu.Unlock()
+	if ok {
+		writeWAV(w, cached)
+		return
+	}
+
+	ctx := r.Context()
+	query, err := p.voicevoxClient.CreateQuery(ctx, p.testPhrase, speakerID)
+	if err != nil {
+		p.logger.Error("test-clip CreateQuery failed", "speakerID", speakerID, "error", err)
+		http.Error(w, "failed to create audio query", http.StatusBadGateway)
+		return
+	}
+	wav, err := p.voicevoxClient.Synthesize(ctx, query, speakerID)
+	if err != nil {
+		p.logger.Error("test-clip Synthesize failed", "speakerID", speakerID, "error", err)
+		http.Error(w, "failed to synthesize", http.StatusBadGateway)
+		return
+	}
+
+	p.testClipCacheMu.Lock()
+	p.testClipCache[speakerID] = wav
+	p.testClipCacheMu.Unlock()
+
+	writeWAV(w, wav)
+}
+
+func writeWAV(w http.ResponseWriter, data []byte) {
+	w.Header().Set("Content-Type", "audio/wav")
+	w.Header().Set("Content-Length", strconv.Itoa(len(data)))
+	_, _ = w.Write(data)
 }
 
 func (p *HTTPStreamPlayer) handleEvents(w http.ResponseWriter, r *http.Request) {

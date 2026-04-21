@@ -274,7 +274,7 @@ func TestWatchCmd_Stream_GetSpeakersFailure_ReturnsError(t *testing.T) {
 			Player:            stubAudioPlayer{},
 			Mover:             stubFileMover{},
 			DirWatcherFactory: func() app.DirWatcher { return stubDirWatcher{} },
-			StreamPlayerFactory: func(_ string, _ *slog.Logger, _ map[int]entity.SpeakerStyleInfo) (app.StreamPlayer, error) {
+			StreamPlayerFactory: func(_ string, _ *slog.Logger, _ map[int]entity.SpeakerStyleInfo, _ app.VoicevoxClient) (app.StreamPlayer, error) {
 				t.Error("StreamPlayerFactory should not be called when GetSpeakers fails")
 				return stubStreamPlayer{}, nil
 			},
@@ -315,7 +315,7 @@ func TestWatchCmd_Stream_PassesSpeakerLookupToFactory(t *testing.T) {
 			Player:            stubAudioPlayer{},
 			Mover:             stubFileMover{},
 			DirWatcherFactory: func() app.DirWatcher { return stubDirWatcher{} },
-			StreamPlayerFactory: func(_ string, _ *slog.Logger, lookup map[int]entity.SpeakerStyleInfo) (app.StreamPlayer, error) {
+			StreamPlayerFactory: func(_ string, _ *slog.Logger, lookup map[int]entity.SpeakerStyleInfo, _ app.VoicevoxClient) (app.StreamPlayer, error) {
 				captured = lookup
 				// usecase.Run まで進ませず、watch loop から確実に抜けるためにキャンセルを返す。
 				return stubStreamPlayer{}, nil

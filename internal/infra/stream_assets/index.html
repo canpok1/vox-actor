@@ -8,8 +8,10 @@
 </head>
 <body>
 <main class="container">
-  <h1>vox-actor stream</h1>
-  <p class="status">状態: <span id="status">接続中</span></p>
+  <div class="header">
+    <h1>vox-actor stream</h1>
+    <span id="status-badge" class="badge badge-connected">● 接続中</span>
+  </div>
   <div class="volume-row">
     <label class="volume-slider">
       音量
@@ -18,22 +20,36 @@
     </label>
     <label class="toggle"><input type="checkbox" id="mute" checked>消音</label>
   </div>
-  <div class="timeline-controls">
-    <label for="history-size">履歴上限</label>
-    <select id="history-size">
-      <option value="10">10</option>
-      <option value="20" selected>20</option>
-      <option value="30">30</option>
-      <option value="50">50</option>
-      <option value="100">100</option>
-      <option value="200">200</option>
-    </select>
-    <label class="toggle"><input type="checkbox" id="show-speaker-name" checked>話者名</label>
-    <label class="toggle"><input type="checkbox" id="show-style-name" checked>スタイル</label>
-    <label class="toggle"><input type="checkbox" id="show-timestamp" checked>時刻</label>
+  <div class="tabs" role="tablist">
+    <button type="button" id="tab-stream" class="tab active" role="tab" aria-selected="true" aria-controls="panel-stream">配信</button>
+    <button type="button" id="tab-test" class="tab" role="tab" aria-selected="false" aria-controls="panel-test">音声テスト</button>
   </div>
-  <section class="timeline-section">
-    <ol id="timeline" class="timeline" aria-live="polite"></ol>
+  <section id="panel-stream" class="panel" role="tabpanel" aria-labelledby="tab-stream">
+    <div class="timeline-controls">
+      <label for="history-size">履歴上限</label>
+      <select id="history-size">
+        <option value="10">10</option>
+        <option value="20" selected>20</option>
+        <option value="30">30</option>
+        <option value="50">50</option>
+        <option value="100">100</option>
+        <option value="200">200</option>
+      </select>
+      <label class="toggle"><input type="checkbox" id="show-speaker-name" checked>話者名</label>
+      <label class="toggle"><input type="checkbox" id="show-style-name" checked>スタイル</label>
+      <label class="toggle"><input type="checkbox" id="show-timestamp" checked>時刻</label>
+    </div>
+    <div class="timeline-section">
+      <ol id="timeline" class="timeline" aria-live="polite"></ol>
+    </div>
+  </section>
+  <section id="panel-test" class="panel hidden" role="tabpanel" aria-labelledby="tab-test">
+    <div class="test-controls">
+      <label for="test-speaker">話者</label>
+      <select id="test-speaker"></select>
+      <button type="button" id="test-play">▶ テスト再生</button>
+      <span id="test-error" class="test-error" role="status" aria-live="polite"></span>
+    </div>
   </section>
   <audio id="player" muted></audio>
 </main>
