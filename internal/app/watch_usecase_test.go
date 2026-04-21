@@ -777,6 +777,40 @@ func TestWatchUsecase_Run_SynthesisCompletedSuppressedAtInfoLevel(t *testing.T) 
 	}
 }
 
+func TestWatchUsecase_Run_PlayReceivesScriptText(t *testing.T) {
+	reader := &mockScriptReader{
+		scripts: []entity.Script{
+			{Path: "a.txt", Text: "こんにちはなのだ", IsEmpty: false},
+		},
+	}
+	client := &mockVoicevoxClient{
+		query:   &entity.AudioQuery{},
+		wavData: []byte("fake-wav"),
+	}
+	player := &mockAudioPlayer{}
+	mover := &mockFileMover{}
+	watcher := &mockDirWatcher{
+		files: []string{"/tmp/watch/a.txt"},
+	}
+
+	uc := app.NewWatchUsecase(reader, client, player, mover, watcher)
+	params := app.WatchParams{
+		Paths:     []string{"/tmp/watch"},
+		SpeakerID: 3,
+	}
+
+	if err := uc.Run(context.Background(), params); err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	if len(player.playMetas) != 1 {
+		t.Fatalf("expected 1 Play call, got: %d", len(player.playMetas))
+	}
+	if player.playMetas[0].Text != "こんにちはなのだ" {
+		t.Errorf("expected PlayMeta.Text=%q, got: %q", "こんにちはなのだ", player.playMetas[0].Text)
+	}
+}
+
 func TestWatchUsecase_Run_PlaybackCompletedAtInfoIncludesProgressAndText(t *testing.T) {
 	reader := &mockScriptReader{
 		scripts: []entity.Script{

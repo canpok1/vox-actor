@@ -228,7 +228,7 @@ func (u *WatchUsecase) processFile(ctx context.Context, path string, params Watc
 
 		u.logger.Debug("processing script", "path", result.script.Path)
 
-		if err := u.player.Play(ctx, result.wav); err != nil {
+		if err := u.player.Play(ctx, result.wav, PlayMeta{Text: result.script.Text}); err != nil {
 			u.logger.Error("play error (skipping script)", "path", result.script.Path, "error", err)
 			continue
 		}

@@ -5,7 +5,7 @@
 <title>vox-actor stream</title>
 <link rel="stylesheet" href="/app.css">
 </head>
-<body>
+<body data-history-size="__STREAM_HISTORY_SIZE__">
 <main class="container">
   <h1>vox-actor stream</h1>
   <p class="status">状態: <span id="status">接続中</span></p>
@@ -15,9 +15,8 @@
     <span id="volume-icon">🔇</span>
   </label>
   <p class="hint">音量を上げると再生が始まります</p>
-  <section class="now-playing">
-    <h2>再生中</h2>
-    <p id="now-playing">―</p>
+  <section class="timeline-section">
+    <ol id="timeline" class="timeline" aria-live="polite"></ol>
   </section>
   <audio id="player" muted></audio>
 </main>

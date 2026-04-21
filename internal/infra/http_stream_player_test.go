@@ -27,11 +27,18 @@ package infra
 // DONE: 複数 SSE 購読者に同じイベントが届く
 // DONE: 空 WAV で Play() するとエラー
 // DONE: キャンセル済みコンテキストで Play() するとエラー
+//
+// #222 タイムラインUI / 履歴サイズ:
+// DONE: clipEvent の JSON に text フィールドが含まれる
+// DONE: PlayMeta.Text が空文字の場合も text フィールドが空文字で含まれる
+// DONE: WithHTTPStreamHistorySize でリングバッファ容量を変更できる
+// DONE: index.html の __STREAM_HISTORY_SIZE__ プレースホルダが設定値に置換される
 
 import (
 	"bufio"
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"testing"
@@ -96,7 +103,7 @@ func TestHTTPStreamPlayer_Play_BeforeStart(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewHTTPStreamPlayer: %v", err)
 	}
-	if err := p.Play(context.Background(), []byte("wav")); err == nil {
+	if err := p.Play(context.Background(), []byte("wav"), app.PlayMeta{}); err == nil {
 		t.Fatal("expected error when Play() is called before Start()")
 	}
 }
@@ -191,7 +198,7 @@ func TestHTTPStreamPlayer_Clip_NotFound(t *testing.T) {
 func TestHTTPStreamPlayer_Play_EmptyWAV(t *testing.T) {
 	t.Parallel()
 	p := newStartedPlayer(t)
-	if err := p.Play(context.Background(), []byte{}); err == nil {
+	if err := p.Play(context.Background(), []byte{}, app.PlayMeta{}); err == nil {
 		t.Fatal("expected error for empty WAV")
 	}
 }
@@ -201,7 +208,7 @@ func TestHTTPStreamPlayer_Play_CancelledContext(t *testing.T) {
 	p := newStartedPlayer(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if err := p.Play(ctx, []byte("RIFFdummy")); err == nil {
+	if err := p.Play(ctx, []byte("RIFFdummy"), app.PlayMeta{}); err == nil {
 		t.Fatal("expected error for cancelled context")
 	}
 }
@@ -272,7 +279,7 @@ func TestHTTPStreamPlayer_Play_DeliversSSEAndWAV(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 
 	wav := []byte("RIFFwavdata")
-	if err := p.Play(context.Background(), wav); err != nil {
+	if err := p.Play(context.Background(), wav, app.PlayMeta{}); err != nil {
 		t.Fatalf("Play: %v", err)
 	}
 
@@ -313,7 +320,7 @@ func TestHTTPStreamPlayer_ClipIDMonotonicallyIncreasing(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 
 	for range 3 {
-		if err := p.Play(context.Background(), []byte("RIFFx")); err != nil {
+		if err := p.Play(context.Background(), []byte("RIFFx"), app.PlayMeta{}); err != nil {
 			t.Fatalf("Play: %v", err)
 		}
 	}
@@ -337,7 +344,7 @@ func TestHTTPStreamPlayer_RingBufferEvictsOldest(t *testing.T) {
 	baseURL := "http://" + p.Addr()
 
 	for range 11 {
-		if err := p.Play(context.Background(), []byte("RIFFx")); err != nil {
+		if err := p.Play(context.Background(), []byte("RIFFx"), app.PlayMeta{}); err != nil {
 			t.Fatalf("Play: %v", err)
 		}
 	}
@@ -375,7 +382,7 @@ func TestHTTPStreamPlayer_MultipleSubscribers(t *testing.T) {
 	}
 	time.Sleep(80 * time.Millisecond)
 
-	if err := p.Play(context.Background(), []byte("RIFFx")); err != nil {
+	if err := p.Play(context.Background(), []byte("RIFFx"), app.PlayMeta{}); err != nil {
 		t.Fatalf("Play: %v", err)
 	}
 
@@ -388,5 +395,128 @@ func TestHTTPStreamPlayer_MultipleSubscribers(t *testing.T) {
 		case <-time.After(2 * time.Second):
 			t.Errorf("subscriber %d timeout", i)
 		}
+	}
+}
+
+// --- #222 タイムラインUI / 履歴サイズ ---
+
+func TestHTTPStreamPlayer_Play_ClipEventIncludesText(t *testing.T) {
+	t.Parallel()
+	p := newStartedPlayer(t)
+	baseURL := "http://" + p.Addr()
+
+	events := subscribeSSE(t, baseURL)
+	time.Sleep(50 * time.Millisecond)
+
+	if err := p.Play(context.Background(), []byte("RIFFx"), app.PlayMeta{Text: "こんにちは、ずんだもんなのだ"}); err != nil {
+		t.Fatalf("Play: %v", err)
+	}
+
+	select {
+	case data := <-events:
+		if !strings.Contains(data, `"text":"こんにちは、ずんだもんなのだ"`) {
+			t.Errorf("expected clip payload to contain text field, got: %s", data)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timeout waiting for clip event")
+	}
+}
+
+func TestHTTPStreamPlayer_Play_ClipEventEmptyText(t *testing.T) {
+	t.Parallel()
+	p := newStartedPlayer(t)
+	baseURL := "http://" + p.Addr()
+
+	events := subscribeSSE(t, baseURL)
+	time.Sleep(50 * time.Millisecond)
+
+	if err := p.Play(context.Background(), []byte("RIFFx"), app.PlayMeta{}); err != nil {
+		t.Fatalf("Play: %v", err)
+	}
+
+	select {
+	case data := <-events:
+		if !strings.Contains(data, `"text":""`) {
+			t.Errorf("expected empty text field, got: %s", data)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timeout waiting for clip event")
+	}
+}
+
+func TestHTTPStreamPlayer_WithHistorySize_AppliesToRingBuffer(t *testing.T) {
+	t.Parallel()
+	p, err := NewHTTPStreamPlayer("127.0.0.1:0", WithHTTPStreamHistorySize(3))
+	if err != nil {
+		t.Fatalf("NewHTTPStreamPlayer: %v", err)
+	}
+	if err := p.Start(context.Background()); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	t.Cleanup(func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		_ = p.Shutdown(shutdownCtx)
+	})
+
+	baseURL := "http://" + p.Addr()
+
+	// 容量3のバッファに4件積むと1件目が破棄される。
+	for range 4 {
+		if err := p.Play(context.Background(), []byte("RIFFx"), app.PlayMeta{}); err != nil {
+			t.Fatalf("Play: %v", err)
+		}
+	}
+
+	resp1, err := http.Get(baseURL + "/clips/1.wav")
+	if err != nil {
+		t.Fatalf("GET clip1: %v", err)
+	}
+	_ = resp1.Body.Close()
+	if resp1.StatusCode != http.StatusNotFound {
+		t.Errorf("expected 404 for evicted clip 1, got %d", resp1.StatusCode)
+	}
+
+	resp4, err := http.Get(baseURL + "/clips/4.wav")
+	if err != nil {
+		t.Fatalf("GET clip4: %v", err)
+	}
+	_ = resp4.Body.Close()
+	if resp4.StatusCode != http.StatusOK {
+		t.Errorf("expected 200 for clip 4, got %d", resp4.StatusCode)
+	}
+}
+
+func TestHTTPStreamPlayer_IndexHTML_ReplacesHistorySizePlaceholder(t *testing.T) {
+	t.Parallel()
+	p, err := NewHTTPStreamPlayer("127.0.0.1:0", WithHTTPStreamHistorySize(25))
+	if err != nil {
+		t.Fatalf("NewHTTPStreamPlayer: %v", err)
+	}
+	if err := p.Start(context.Background()); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	t.Cleanup(func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		_ = p.Shutdown(shutdownCtx)
+	})
+
+	resp, err := http.Get("http://" + p.Addr() + "/")
+	if err != nil {
+		t.Fatalf("GET /: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	buf := new(strings.Builder)
+	if _, err := io.Copy(buf, resp.Body); err != nil {
+		t.Fatalf("copy body: %v", err)
+	}
+	body := buf.String()
+	if strings.Contains(body, "__STREAM_HISTORY_SIZE__") {
+		t.Errorf("expected placeholder to be replaced, got raw placeholder in body")
+	}
+	if !strings.Contains(body, `data-history-size="25"`) {
+		t.Errorf("expected data-history-size=\"25\" in body, got: %s", body)
 	}
 }

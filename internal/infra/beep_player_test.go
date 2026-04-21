@@ -66,7 +66,7 @@ func TestBeepPlayer_Play_NilData(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	err = player.Play(context.Background(), nil)
+	err = player.Play(context.Background(), nil, app.PlayMeta{})
 	if err == nil {
 		t.Fatal("expected error for nil WAV data, got nil")
 	}
@@ -79,7 +79,7 @@ func TestBeepPlayer_Play_EmptyData(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	err = player.Play(context.Background(), []byte{})
+	err = player.Play(context.Background(), []byte{}, app.PlayMeta{})
 	if err == nil {
 		t.Fatal("expected error for empty WAV data, got nil")
 	}
@@ -93,7 +93,7 @@ func TestBeepPlayer_Play_InvalidWAVData(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	invalidData := []byte("this is not a WAV file")
-	err = player.Play(context.Background(), invalidData)
+	err = player.Play(context.Background(), invalidData, app.PlayMeta{})
 	if err == nil {
 		t.Fatal("expected error for invalid WAV data, got nil")
 	}
@@ -109,7 +109,7 @@ func TestBeepPlayer_Play_ValidWAV(t *testing.T) {
 	}
 
 	wavData := createMinimalWAV(t)
-	err = player.Play(context.Background(), wavData)
+	err = player.Play(context.Background(), wavData, app.PlayMeta{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -134,7 +134,7 @@ func TestBeepPlayer_Play_CancelledContext(t *testing.T) {
 	cancel() // 即キャンセル
 
 	wavData := createMinimalWAV(t)
-	err = player.Play(ctx, wavData)
+	err = player.Play(ctx, wavData, app.PlayMeta{})
 	if err == nil {
 		t.Fatal("expected error for cancelled context, got nil")
 	}
@@ -154,7 +154,7 @@ func TestBeepPlayer_Play_PlayAndWaitReceivesContext(t *testing.T) {
 
 	ctx := context.Background()
 	wavData := createMinimalWAV(t)
-	err = player.Play(ctx, wavData)
+	err = player.Play(ctx, wavData, app.PlayMeta{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -174,7 +174,7 @@ func TestBeepPlayer_Play_PlayAndWaitCancelledDuringPlay(t *testing.T) {
 	}
 
 	wavData := createMinimalWAV(t)
-	err = player.Play(context.Background(), wavData)
+	err = player.Play(context.Background(), wavData, app.PlayMeta{})
 	if err == nil {
 		t.Fatal("expected error when PlayAndWait returns context.Canceled, got nil")
 	}
@@ -194,7 +194,7 @@ func TestBeepPlayer_Play_PlayAndWaitReturnsError(t *testing.T) {
 	}
 
 	wavData := createMinimalWAV(t)
-	err = player.Play(context.Background(), wavData)
+	err = player.Play(context.Background(), wavData, app.PlayMeta{})
 	if err == nil {
 		t.Fatal("expected error when PlayAndWait fails, got nil")
 	}

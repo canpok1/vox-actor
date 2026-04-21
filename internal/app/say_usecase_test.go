@@ -52,6 +52,25 @@ func TestSayUsecase_Run_Success(t *testing.T) {
 	}
 }
 
+func TestSayUsecase_Run_PlayReceivesText(t *testing.T) {
+	client := &mockVoicevoxClient{
+		query:   &entity.AudioQuery{},
+		wavData: []byte("fake-wav"),
+	}
+	player := &mockAudioPlayer{}
+
+	uc := app.NewSayUsecase(client, player)
+	params := app.SayParams{Text: "こんにちはなのだ", SpeakerID: 3}
+
+	if err := uc.Run(context.Background(), params); err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	if len(player.playMetas) != 1 || player.playMetas[0].Text != "こんにちはなのだ" {
+		t.Errorf("expected PlayMeta.Text=%q, got: %+v", "こんにちはなのだ", player.playMetas)
+	}
+}
+
 func TestSayUsecase_Run_WithParams(t *testing.T) {
 	client := &mockVoicevoxClient{
 		query:   &entity.AudioQuery{},
