@@ -164,3 +164,9 @@ func (c *RetryableVoicevoxClient) Synthesize(ctx context.Context, query *entity.
 	})
 	return result, err
 }
+
+// GetSpeakers は話者一覧を取得する。リトライは行わない。
+// watch起動時の1回限りで使われる前提のため、HealthCheckと同様に失敗即エラーを意図する。
+func (c *RetryableVoicevoxClient) GetSpeakers(ctx context.Context) ([]entity.Speaker, error) {
+	return c.inner.GetSpeakers(ctx)
+}

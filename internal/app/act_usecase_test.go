@@ -47,6 +47,9 @@ type mockVoicevoxClient struct {
 	createQueryCallArgs []createQueryCallArgs
 	synthesizeCalls     int
 	synthesizeArgs      []synthesizeCallArgs
+	speakers            []entity.Speaker
+	getSpeakersErr      error
+	getSpeakersCalls    int
 }
 
 type synthesizeCallArgs struct {
@@ -68,6 +71,11 @@ func (m *mockVoicevoxClient) Synthesize(_ context.Context, query *entity.AudioQu
 	m.synthesizeCalls++
 	m.synthesizeArgs = append(m.synthesizeArgs, synthesizeCallArgs{query: query, speakerID: speakerID})
 	return m.wavData, m.synthesizeErr
+}
+
+func (m *mockVoicevoxClient) GetSpeakers(_ context.Context) ([]entity.Speaker, error) {
+	m.getSpeakersCalls++
+	return m.speakers, m.getSpeakersErr
 }
 
 type mockAudioPlayer struct {
@@ -475,6 +483,10 @@ func (m *cancellingVoicevoxClient) CreateQuery(_ context.Context, _ string, _ in
 
 func (m *cancellingVoicevoxClient) Synthesize(_ context.Context, _ *entity.AudioQuery, _ int) ([]byte, error) {
 	return m.wavData, nil
+}
+
+func (m *cancellingVoicevoxClient) GetSpeakers(_ context.Context) ([]entity.Speaker, error) {
+	return nil, nil
 }
 
 // cancellingAudioPlayer は指定回数再生後にcontextをキャンセルするモック。

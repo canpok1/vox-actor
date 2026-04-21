@@ -39,4 +39,7 @@ type VoicevoxClient interface {
 
 	// Synthesize は音声合成を実行し、WAV形式のバイト列を返す。
 	Synthesize(ctx context.Context, query *entity.AudioQuery, speakerID int) ([]byte, error)
+
+	// GetSpeakers はエンジンに登録された話者一覧（話者名・スタイルID・スタイル名）を取得する。
+	GetSpeakers(ctx context.Context) ([]entity.Speaker, error)
 }

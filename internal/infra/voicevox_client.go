@@ -144,3 +144,53 @@ func (c *VoicevoxClient) Synthesize(ctx context.Context, query *entity.AudioQuer
 
 	return wav, nil
 }
+
+// speakersResponse は /speakers エンドポイントのレスポンス1要素分。
+// VOICEVOX固有のフィールド（speaker_uuid, version, type 等）はここでは保持しない。
+type speakersResponse struct {
+	Name   string                  `json:"name"`
+	Styles []speakersStyleResponse `json:"styles"`
+}
+
+type speakersStyleResponse struct {
+	Name string `json:"name"`
+	ID   int    `json:"id"`
+}
+
+// GetSpeakers はエンジンに登録された話者一覧を取得する。
+func (c *VoicevoxClient) GetSpeakers(ctx context.Context) ([]entity.Speaker, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/speakers", nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to send request: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("get speakers failed: status %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	var raw []speakersResponse
+	if err := json.Unmarshal(body, &raw); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
+	}
+
+	speakers := make([]entity.Speaker, 0, len(raw))
+	for _, r := range raw {
+		styles := make([]entity.SpeakerStyle, 0, len(r.Styles))
+		for _, s := range r.Styles {
+			styles = append(styles, entity.SpeakerStyle{ID: s.ID, Name: s.Name})
+		}
+		speakers = append(speakers, entity.Speaker{Name: r.Name, Styles: styles})
+	}
+	return speakers, nil
+}

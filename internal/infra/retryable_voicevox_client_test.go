@@ -24,6 +24,7 @@ type mockVoicevoxClient struct {
 	healthCheckFunc func(ctx context.Context) error
 	createQueryFunc func(ctx context.Context, text string, speakerID int) (*entity.AudioQuery, error)
 	synthesizeFunc  func(ctx context.Context, query *entity.AudioQuery, speakerID int) ([]byte, error)
+	getSpeakersFunc func(ctx context.Context) ([]entity.Speaker, error)
 	callCounts      map[string]int
 }
 
@@ -57,6 +58,14 @@ func (m *mockVoicevoxClient) Synthesize(ctx context.Context, query *entity.Audio
 	return []byte("wav"), nil
 }
 
+func (m *mockVoicevoxClient) GetSpeakers(ctx context.Context) ([]entity.Speaker, error) {
+	m.callCounts["GetSpeakers"]++
+	if m.getSpeakersFunc != nil {
+		return m.getSpeakersFunc(ctx)
+	}
+	return nil, nil
+}
+
 // DONE: デフォルト設定: リトライ設定のデフォルト値が仕様通りである（最大3回、初期1秒、上限30秒）
 func TestRetryableVoicevoxClient_DefaultConfig(t *testing.T) {
 	inner := infra.NewVoicevoxClient("http://localhost")
@@ -88,6 +97,45 @@ func TestRetryableVoicevoxClient_HealthCheck_NoRetry(t *testing.T) {
 	}
 	if mock.callCounts["HealthCheck"] != 1 {
 		t.Errorf("expected HealthCheck to be called 1 time, got %d", mock.callCounts["HealthCheck"])
+	}
+}
+
+// GetSpeakersはリトライ対象外: GetSpeakersが失敗してもリトライせずエラーを返す
+func TestRetryableVoicevoxClient_GetSpeakers_NoRetry(t *testing.T) {
+	mock := newMockVoicevoxClient()
+	mock.getSpeakersFunc = func(_ context.Context) ([]entity.Speaker, error) {
+		return nil, &mockNetError{msg: "connection refused"}
+	}
+	client := infra.NewRetryableVoicevoxClient(mock)
+
+	speakers, err := client.GetSpeakers(context.Background())
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if speakers != nil {
+		t.Errorf("expected nil speakers on error, got %+v", speakers)
+	}
+	if mock.callCounts["GetSpeakers"] != 1 {
+		t.Errorf("expected GetSpeakers to be called 1 time, got %d", mock.callCounts["GetSpeakers"])
+	}
+}
+
+func TestRetryableVoicevoxClient_GetSpeakers_PassesThrough(t *testing.T) {
+	expected := []entity.Speaker{
+		{Name: "ずんだもん", Styles: []entity.SpeakerStyle{{ID: 3, Name: "ノーマル"}}},
+	}
+	mock := newMockVoicevoxClient()
+	mock.getSpeakersFunc = func(_ context.Context) ([]entity.Speaker, error) {
+		return expected, nil
+	}
+	client := infra.NewRetryableVoicevoxClient(mock)
+
+	got, err := client.GetSpeakers(context.Background())
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if len(got) != 1 || got[0].Name != "ずんだもん" || got[0].Styles[0].ID != 3 {
+		t.Errorf("unexpected speakers: %+v", got)
 	}
 }
 
