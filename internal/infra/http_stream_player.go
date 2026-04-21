@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/canpok1/vox-actor/internal/app"
+	"github.com/canpok1/vox-actor/internal/domain/entity"
 )
 
 //go:embed stream_assets
@@ -34,6 +35,13 @@ type HTTPStreamPlayer struct {
 	indexHTML []byte
 	appJS     []byte
 	appCSS    []byte
+
+	// speakerLookup は SpeakerID → 話者名/スタイル名 の解決マップ。
+	// nil または未ヒットの場合は `話者#<ID>` / 空文字 にフォールバックする。
+	speakerLookup map[int]entity.SpeakerStyleInfo
+
+	// nowFunc は clipEvent の timestamp 生成に使う時刻取得関数（テスト差し替え用）。
+	nowFunc func() time.Time
 
 	mu          sync.Mutex
 	started     bool
@@ -57,9 +65,13 @@ const (
 
 // clipEvent は SSE で配信する clip イベントのペイロード。
 type clipEvent struct {
-	ID   uint64 `json:"id"`
-	URL  string `json:"url"`
-	Text string `json:"text"`
+	ID          uint64 `json:"id"`
+	URL         string `json:"url"`
+	Text        string `json:"text"`
+	SpeakerName string `json:"speakerName"`
+	StyleName   string `json:"styleName"`
+	// Timestamp は配信時刻の Unix ms（UTC）。ブラウザ側で HH:MM:SS に整形する。
+	Timestamp int64 `json:"timestamp"`
 }
 
 // HTTPStreamOption は HTTPStreamPlayer の生成時に指定するオプション。
@@ -74,6 +86,25 @@ func WithHTTPStreamLogger(logger *slog.Logger) HTTPStreamOption {
 	}
 }
 
+// WithSpeakerLookup は clipEvent の speakerName/styleName 解決に使うマップを設定するオプション。
+// nil を渡した場合は何もしない（既存の lookup を維持する）。
+func WithSpeakerLookup(lookup map[int]entity.SpeakerStyleInfo) HTTPStreamOption {
+	return func(p *HTTPStreamPlayer) {
+		if lookup != nil {
+			p.speakerLookup = lookup
+		}
+	}
+}
+
+// withNowFunc は clipEvent の timestamp 取得に使う関数を設定するオプション（テスト用）。
+func withNowFunc(now func() time.Time) HTTPStreamOption {
+	return func(p *HTTPStreamPlayer) {
+		if now != nil {
+			p.nowFunc = now
+		}
+	}
+}
+
 // NewHTTPStreamPlayer は新しい HTTPStreamPlayer を生成する。
 // addr はバインドアドレス（例: "127.0.0.1:8080"）。":0" で動的ポート割当。
 func NewHTTPStreamPlayer(addr string, opts ...HTTPStreamOption) (*HTTPStreamPlayer, error) {
@@ -84,6 +115,7 @@ func NewHTTPStreamPlayer(addr string, opts ...HTTPStreamOption) (*HTTPStreamPlay
 		addr:        addr,
 		logger:      slog.New(slog.DiscardHandler),
 		subscribers: newSubscriberRegistry(),
+		nowFunc:     time.Now,
 	}
 	for _, opt := range opts {
 		opt(p)
@@ -171,6 +203,15 @@ func (p *HTTPStreamPlayer) Shutdown(ctx context.Context) error {
 	return server.Shutdown(ctx)
 }
 
+// resolveSpeaker は SpeakerID から (話者名, スタイル名) を解決する。
+// lookup に存在しない場合は SpeakerName を `話者#<ID>`、StyleName を空文字にフォールバックする。
+func (p *HTTPStreamPlayer) resolveSpeaker(id int) (string, string) {
+	if info, ok := p.speakerLookup[id]; ok {
+		return info.SpeakerName, info.StyleName
+	}
+	return fmt.Sprintf("話者#%d", id), ""
+}
+
 // Addr はサーバーがリッスン中のアドレスを返す。Start 前は空文字を返す。
 func (p *HTTPStreamPlayer) Addr() string {
 	p.mu.Lock()
@@ -209,10 +250,14 @@ func (p *HTTPStreamPlayer) Play(ctx context.Context, wavData []byte, meta app.Pl
 	copy(buf, wavData)
 	p.clips.put(id, buf)
 
+	speakerName, styleName := p.resolveSpeaker(meta.SpeakerID)
 	payload, err := json.Marshal(clipEvent{
-		ID:   id,
-		URL:  clipPathPrefix + strconv.FormatUint(id, 10) + clipPathSuffix,
-		Text: meta.Text,
+		ID:          id,
+		URL:         clipPathPrefix + strconv.FormatUint(id, 10) + clipPathSuffix,
+		Text:        meta.Text,
+		SpeakerName: speakerName,
+		StyleName:   styleName,
+		Timestamp:   p.nowFunc().UnixMilli(),
 	})
 	if err != nil {
 		return fmt.Errorf("failed to marshal clip payload: %w", err)

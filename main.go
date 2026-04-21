@@ -8,6 +8,7 @@ import (
 
 	"github.com/canpok1/vox-actor/cmd"
 	"github.com/canpok1/vox-actor/internal/app"
+	"github.com/canpok1/vox-actor/internal/domain/entity"
 	"github.com/canpok1/vox-actor/internal/infra"
 )
 
@@ -43,9 +44,10 @@ func main() {
 			Player:            player,
 			Mover:             mover,
 			DirWatcherFactory: dirWatcherFactory,
-			StreamPlayerFactory: func(addr string, logger *slog.Logger) (app.StreamPlayer, error) {
+			StreamPlayerFactory: func(addr string, logger *slog.Logger, speakerLookup map[int]entity.SpeakerStyleInfo) (app.StreamPlayer, error) {
 				return infra.NewHTTPStreamPlayer(addr,
 					infra.WithHTTPStreamLogger(logger),
+					infra.WithSpeakerLookup(speakerLookup),
 				)
 			},
 		},

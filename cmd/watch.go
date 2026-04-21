@@ -10,17 +10,21 @@ import (
 	"time"
 
 	"github.com/canpok1/vox-actor/internal/app"
+	"github.com/canpok1/vox-actor/internal/domain/entity"
 	"github.com/spf13/cobra"
 )
 
 // WatchDeps はwatchコマンドの依存を保持する。
 type WatchDeps struct {
-	Reader              app.ScriptReader
-	ClientFactory       func(engineURL string) app.VoicevoxClient
-	Player              app.AudioPlayer
-	Mover               app.FileMover
-	DirWatcherFactory   func() app.DirWatcher
-	StreamPlayerFactory func(addr string, logger *slog.Logger) (app.StreamPlayer, error)
+	Reader            app.ScriptReader
+	ClientFactory     func(engineURL string) app.VoicevoxClient
+	Player            app.AudioPlayer
+	Mover             app.FileMover
+	DirWatcherFactory func() app.DirWatcher
+	// StreamPlayerFactory は --stream 指定時にストリーム配信用の AudioPlayer を生成する。
+	// speakerLookup は /speakers 取得結果から構築されたマップで、配信時に話者名/スタイル名を解決する。
+	// マップが空でも factory はエラーにせず player を返してよい（フォールバック表示が使われる）。
+	StreamPlayerFactory func(addr string, logger *slog.Logger, speakerLookup map[int]entity.SpeakerStyleInfo) (app.StreamPlayer, error)
 }
 
 func makeWatchCmd(deps *WatchDeps) *cobra.Command {
@@ -91,7 +95,20 @@ func runWatch(cmd *cobra.Command, args []string, deps *WatchDeps) error {
 		if deps.StreamPlayerFactory == nil {
 			return fmt.Errorf("stream player factory is not initialized")
 		}
-		sp, err := deps.StreamPlayerFactory(streamAddr, logger)
+
+		// HealthCheck → /speakers 取得 → lookup を組み立ててから stream player を起動する。
+		// /speakers の失敗は watch 起動エラーとして即終了する。
+		if err := client.HealthCheck(ctx); err != nil {
+			return fmt.Errorf("engine health check failed: %w", err)
+		}
+		speakers, err := client.GetSpeakers(ctx)
+		if err != nil {
+			return fmt.Errorf("failed to get speakers: %w", err)
+		}
+		lookup := entity.BuildSpeakerStyleLookup(speakers)
+		logger.Info("speakers loaded", "count", len(lookup))
+
+		sp, err := deps.StreamPlayerFactory(streamAddr, logger, lookup)
 		if err != nil {
 			return fmt.Errorf("failed to create stream player: %w", err)
 		}
