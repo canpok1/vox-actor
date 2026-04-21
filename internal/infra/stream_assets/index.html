@@ -5,7 +5,7 @@
 <title>vox-actor stream</title>
 <link rel="stylesheet" href="/app.css">
 </head>
-<body data-history-size="__STREAM_HISTORY_SIZE__">
+<body>
 <main class="container">
   <h1>vox-actor stream</h1>
   <p class="status">状態: <span id="status">接続中</span></p>
@@ -14,7 +14,17 @@
     <input type="range" id="volume" min="0" max="100" value="0">
     <span id="volume-icon">🔇</span>
   </label>
-  <p class="hint">音量を上げると再生が始まります</p>
+  <div class="timeline-controls">
+    <label for="history-size">履歴上限</label>
+    <select id="history-size">
+      <option value="10">10</option>
+      <option value="20" selected>20</option>
+      <option value="30">30</option>
+      <option value="50">50</option>
+      <option value="100">100</option>
+      <option value="200">200</option>
+    </select>
+  </div>
   <section class="timeline-section">
     <ol id="timeline" class="timeline" aria-live="polite"></ol>
   </section>
