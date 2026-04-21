@@ -81,11 +81,6 @@ func TestWatchCmd_DefaultOptionValues(t *testing.T) {
 		t.Errorf("expected default stream-addr '127.0.0.1:8080', got: %s", streamAddr)
 	}
 
-	streamHistorySize, _ := watchCmd.Flags().GetInt("stream-history-size")
-	if streamHistorySize != 10 {
-		t.Errorf("expected default stream-history-size 10, got: %d", streamHistorySize)
-	}
-
 	verbose, _ := watchCmd.Flags().GetBool("verbose")
 	if verbose {
 		t.Error("expected --verbose default to be false")
@@ -176,29 +171,16 @@ func TestWatchCmd_HelpContainsFlags(t *testing.T) {
 	}
 
 	output := buf.String()
-	flags := []string{"--engine-url", "--speaker", "--speed", "--pitch", "--intonation", "--delete", "--stream", "--stream-addr", "--stream-history-size", "--verbose", "--dry-run"}
+	flags := []string{"--engine-url", "--speaker", "--speed", "--pitch", "--intonation", "--delete", "--stream", "--stream-addr", "--verbose", "--dry-run"}
 	for _, flag := range flags {
 		if !strings.Contains(output, flag) {
 			t.Errorf("expected help output to contain '%s'", flag)
 		}
 	}
-}
 
-func TestWatchCmd_StreamHistorySize_InvalidValue_ReturnsUsageError(t *testing.T) {
-	dir := t.TempDir()
-
-	rootCmd := makeRootCmd()
-	buf := new(bytes.Buffer)
-	rootCmd.SetOut(buf)
-	rootCmd.SetErr(buf)
-	rootCmd.SetArgs([]string{"watch", "--stream-history-size", "0", dir})
-
-	err := rootCmd.Execute()
-	if err == nil {
-		t.Fatal("expected error when --stream-history-size is 0")
-	}
-	if !errors.Is(err, ErrUsage) {
-		t.Errorf("expected ErrUsage, got: %v", err)
+	// --stream-history-size は #226 で廃止された
+	if strings.Contains(output, "--stream-history-size") {
+		t.Error("expected help output NOT to contain '--stream-history-size'")
 	}
 }
 

@@ -22,7 +22,7 @@ package infra
 // Play / キュー / SSE:
 // DONE: Play() で WAV がキューに登録され GET /clips/{id}.wav で配信される
 // DONE: クリップID は 1 から単調増加
-// DONE: 11 件目を Play() すると 1 件目が破棄されて 404 になる
+// DONE: 容量を超えて Play() すると古いクリップが破棄されて 404 になる
 // DONE: SSE 購読者に clip イベントがブロードキャストされる
 // DONE: 複数 SSE 購読者に同じイベントが届く
 // DONE: 空 WAV で Play() するとエラー
@@ -31,12 +31,18 @@ package infra
 // #222 タイムラインUI / 履歴サイズ:
 // DONE: clipEvent の JSON に text フィールドが含まれる
 // DONE: PlayMeta.Text が空文字の場合も text フィールドが空文字で含まれる
-// DONE: WithHTTPStreamHistorySize でリングバッファ容量を変更できる
+//
+// #226 backpressure:
+// DONE: Play() が WAV 推定再生時間ぶんブロックしてから return する
+// DONE: ctx キャンセル時は sleep を中断し ctx.Err() を返す
+// DONE: WAVヘッダ不正時は warning を出して sleep をスキップしつつ正常 return する
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strings"
 	"testing"
@@ -336,38 +342,6 @@ func TestHTTPStreamPlayer_ClipIDMonotonicallyIncreasing(t *testing.T) {
 	}
 }
 
-func TestHTTPStreamPlayer_RingBufferEvictsOldest(t *testing.T) {
-	t.Parallel()
-	p := newStartedPlayer(t)
-	baseURL := "http://" + p.Addr()
-
-	for range 11 {
-		if err := p.Play(context.Background(), []byte("RIFFx"), app.PlayMeta{}); err != nil {
-			t.Fatalf("Play: %v", err)
-		}
-	}
-
-	// 1件目は破棄されているはず
-	resp1, err := http.Get(baseURL + "/clips/1.wav")
-	if err != nil {
-		t.Fatalf("GET clip1: %v", err)
-	}
-	_ = resp1.Body.Close()
-	if resp1.StatusCode != http.StatusNotFound {
-		t.Errorf("expected 404 for evicted clip 1, got %d", resp1.StatusCode)
-	}
-
-	// 11件目は取得可能
-	resp11, err := http.Get(baseURL + "/clips/11.wav")
-	if err != nil {
-		t.Fatalf("GET clip11: %v", err)
-	}
-	_ = resp11.Body.Close()
-	if resp11.StatusCode != http.StatusOK {
-		t.Errorf("expected 200 for clip 11, got %d", resp11.StatusCode)
-	}
-}
-
 func TestHTTPStreamPlayer_MultipleSubscribers(t *testing.T) {
 	t.Parallel()
 	p := newStartedPlayer(t)
@@ -442,9 +416,61 @@ func TestHTTPStreamPlayer_Play_ClipEventEmptyText(t *testing.T) {
 	}
 }
 
-func TestHTTPStreamPlayer_WithHistorySize_AppliesToRingBuffer(t *testing.T) {
+// --- #226 backpressure ---
+
+func TestHTTPStreamPlayer_Play_BlocksForEstimatedDuration(t *testing.T) {
 	t.Parallel()
-	p, err := NewHTTPStreamPlayer("127.0.0.1:0", WithHTTPStreamHistorySize(3))
+	p := newStartedPlayer(t)
+
+	// byteRate=48000, dataSize=4800 → 100ms
+	wavData := buildWAV(48000, 4800)
+
+	start := time.Now()
+	if err := p.Play(context.Background(), wavData, app.PlayMeta{}); err != nil {
+		t.Fatalf("Play: %v", err)
+	}
+	elapsed := time.Since(start)
+
+	const expected = 100 * time.Millisecond
+	if elapsed < expected {
+		t.Errorf("Play returned too quickly: elapsed=%v, expected at least %v", elapsed, expected)
+	}
+	if elapsed > expected+200*time.Millisecond {
+		t.Errorf("Play blocked too long: elapsed=%v, expected ~%v", elapsed, expected)
+	}
+}
+
+func TestHTTPStreamPlayer_Play_ContextCancelInterruptsSleep(t *testing.T) {
+	t.Parallel()
+	p := newStartedPlayer(t)
+
+	// byteRate=48000, dataSize=480000 → 10秒
+	wavData := buildWAV(48000, 480000)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		time.Sleep(50 * time.Millisecond)
+		cancel()
+	}()
+
+	start := time.Now()
+	err := p.Play(ctx, wavData, app.PlayMeta{})
+	elapsed := time.Since(start)
+
+	if err == nil {
+		t.Fatal("expected ctx.Err() to be returned, got nil")
+	}
+	if elapsed > 1*time.Second {
+		t.Errorf("Play should have been interrupted quickly: elapsed=%v", elapsed)
+	}
+}
+
+func TestHTTPStreamPlayer_Play_InvalidWAVHeaderReturnsWithoutSleep(t *testing.T) {
+	t.Parallel()
+
+	var logBuf bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&logBuf, &slog.HandlerOptions{Level: slog.LevelWarn}))
+	p, err := NewHTTPStreamPlayer("127.0.0.1:0", WithHTTPStreamLogger(logger))
 	if err != nil {
 		t.Fatalf("NewHTTPStreamPlayer: %v", err)
 	}
@@ -457,10 +483,48 @@ func TestHTTPStreamPlayer_WithHistorySize_AppliesToRingBuffer(t *testing.T) {
 		_ = p.Shutdown(shutdownCtx)
 	})
 
+	// 不正な WAV (RIFFヘッダなし) でも Play 自体はエラーにならず即 return する。
+	start := time.Now()
+	if err := p.Play(context.Background(), []byte("not-a-valid-wav-data"), app.PlayMeta{}); err != nil {
+		t.Fatalf("Play: %v", err)
+	}
+	elapsed := time.Since(start)
+
+	if elapsed > 100*time.Millisecond {
+		t.Errorf("Play should return quickly when WAV header is invalid: elapsed=%v", elapsed)
+	}
+
+	// 警告ログが出ていることを確認する。
+	warnLine := findLogLine(logBuf.String(), "failed to estimate WAV duration")
+	if warnLine == "" {
+		t.Errorf("expected warning log for invalid WAV header, got: %s", logBuf.String())
+	}
+	if !strings.Contains(warnLine, "level=WARN") {
+		t.Errorf("expected WARN level log, got: %s", warnLine)
+	}
+}
+
+// findLogLine は logs に含まれる行のうち needle を含む最初の行を返す。
+// 見つからない場合は空文字を返す。
+func findLogLine(logs, needle string) string {
+	for line := range strings.SplitSeq(logs, "\n") {
+		if strings.Contains(line, needle) {
+			return line
+		}
+	}
+	return ""
+}
+
+// --- #226 履歴サイズ固定値（20）の検証 ---
+
+func TestHTTPStreamPlayer_RingBuffer_FixedSize(t *testing.T) {
+	t.Parallel()
+	p := newStartedPlayer(t)
 	baseURL := "http://" + p.Addr()
 
-	// 容量3のバッファに4件積むと1件目が破棄される。
-	for range 4 {
+	// 21件積むと1件目だけが押し出される（容量20）
+	const total = 21
+	for range total {
 		if err := p.Play(context.Background(), []byte("RIFFx"), app.PlayMeta{}); err != nil {
 			t.Fatalf("Play: %v", err)
 		}
@@ -475,12 +539,22 @@ func TestHTTPStreamPlayer_WithHistorySize_AppliesToRingBuffer(t *testing.T) {
 		t.Errorf("expected 404 for evicted clip 1, got %d", resp1.StatusCode)
 	}
 
-	resp4, err := http.Get(baseURL + "/clips/4.wav")
+	// 2件目（最古の生存クリップ）と21件目（最新）は取得できる
+	resp2, err := http.Get(baseURL + "/clips/2.wav")
 	if err != nil {
-		t.Fatalf("GET clip4: %v", err)
+		t.Fatalf("GET clip2: %v", err)
 	}
-	_ = resp4.Body.Close()
-	if resp4.StatusCode != http.StatusOK {
-		t.Errorf("expected 200 for clip 4, got %d", resp4.StatusCode)
+	_ = resp2.Body.Close()
+	if resp2.StatusCode != http.StatusOK {
+		t.Errorf("expected 200 for clip 2 (oldest surviving), got %d", resp2.StatusCode)
+	}
+
+	resp21, err := http.Get(baseURL + "/clips/21.wav")
+	if err != nil {
+		t.Fatalf("GET clip21: %v", err)
+	}
+	_ = resp21.Body.Close()
+	if resp21.StatusCode != http.StatusOK {
+		t.Errorf("expected 200 for clip 21, got %d", resp21.StatusCode)
 	}
 }

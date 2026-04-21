@@ -43,10 +43,9 @@ func main() {
 			Player:            player,
 			Mover:             mover,
 			DirWatcherFactory: dirWatcherFactory,
-			StreamPlayerFactory: func(addr string, logger *slog.Logger, opts cmd.StreamPlayerOptions) (app.StreamPlayer, error) {
+			StreamPlayerFactory: func(addr string, logger *slog.Logger) (app.StreamPlayer, error) {
 				return infra.NewHTTPStreamPlayer(addr,
 					infra.WithHTTPStreamLogger(logger),
-					infra.WithHTTPStreamHistorySize(opts.HistorySize),
 				)
 			},
 		},

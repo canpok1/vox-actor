@@ -24,9 +24,8 @@ var streamAssets embed.FS
 
 // HTTPStreamPlayer はWAVをHTTP/SSEでブラウザに配信する AudioPlayer 実装。
 type HTTPStreamPlayer struct {
-	addr        string
-	logger      *slog.Logger
-	historySize int
+	addr   string
+	logger *slog.Logger
 
 	server   *http.Server
 	listener net.Listener
@@ -47,8 +46,9 @@ type HTTPStreamPlayer struct {
 var _ app.StreamPlayer = (*HTTPStreamPlayer)(nil)
 
 const (
-	// defaultHistorySize はサーバー側 WAV リングバッファの既定上限。
-	defaultHistorySize  = 10
+	// streamHistorySize はサーバー側 WAV リングバッファの容量（固定値）。
+	// バースト耐性を持たせた保守的な値。
+	streamHistorySize   = 20
 	clipPathPrefix      = "/clips/"
 	clipPathSuffix      = ".wav"
 	sseEventClip        = "clip"
@@ -74,17 +74,6 @@ func WithHTTPStreamLogger(logger *slog.Logger) HTTPStreamOption {
 	}
 }
 
-// WithHTTPStreamHistorySize は履歴の上限件数を設定するオプション。
-// UI のタイムラインに保持する最大件数と、サーバー側 WAV リングバッファの容量の両方に適用される。
-// 1 未満の値は無視される。
-func WithHTTPStreamHistorySize(size int) HTTPStreamOption {
-	return func(p *HTTPStreamPlayer) {
-		if size > 0 {
-			p.historySize = size
-		}
-	}
-}
-
 // NewHTTPStreamPlayer は新しい HTTPStreamPlayer を生成する。
 // addr はバインドアドレス（例: "127.0.0.1:8080"）。":0" で動的ポート割当。
 func NewHTTPStreamPlayer(addr string, opts ...HTTPStreamOption) (*HTTPStreamPlayer, error) {
@@ -94,13 +83,12 @@ func NewHTTPStreamPlayer(addr string, opts ...HTTPStreamOption) (*HTTPStreamPlay
 	p := &HTTPStreamPlayer{
 		addr:        addr,
 		logger:      slog.New(slog.DiscardHandler),
-		historySize: defaultHistorySize,
 		subscribers: newSubscriberRegistry(),
 	}
 	for _, opt := range opts {
 		opt(p)
 	}
-	p.clips = newClipRingBuffer(p.historySize)
+	p.clips = newClipRingBuffer(streamHistorySize)
 	return p, nil
 }
 
@@ -194,6 +182,8 @@ func (p *HTTPStreamPlayer) Addr() string {
 }
 
 // Play はWAVバイト列をキューに積み、SSE購読者にブロードキャストする。
+// 配信後はWAV推定再生時間ぶん同期的にブロックして、合成パイプラインに対する
+// 自然な backpressure として働く（ローカル再生モードと挙動を揃えるため）。
 // meta.Text はブラウザのタイムライン表示に利用される。
 func (p *HTTPStreamPlayer) Play(ctx context.Context, wavData []byte, meta app.PlayMeta) error {
 	select {
@@ -233,7 +223,23 @@ func (p *HTTPStreamPlayer) Play(ctx context.Context, wavData []byte, meta app.Pl
 		p.logger.Warn("stream clip dropped for slow subscribers", "clipId", id, "dropped", dropped)
 	}
 	p.logger.Info("stream clip delivered", "clipId", id, "subscribers", n)
-	return nil
+
+	duration, err := estimateWAVDuration(wavData)
+	if err != nil {
+		p.logger.Warn("failed to estimate WAV duration, skipping playback backpressure", "clipId", id, "error", err)
+		return nil
+	}
+	if duration <= 0 {
+		return nil
+	}
+	timer := time.NewTimer(duration)
+	defer timer.Stop()
+	select {
+	case <-timer.C:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 func (p *HTTPStreamPlayer) handleRoot(w http.ResponseWriter, r *http.Request) {
