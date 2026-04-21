@@ -3,15 +3,23 @@
   const volumeEl = document.getElementById("volume");
   const volumeIcon = document.getElementById("volume-icon");
   const timelineEl = document.getElementById("timeline");
+  const historySizeEl = document.getElementById("history-size");
   const player = document.getElementById("player");
 
-  const parsedSize = parseInt(document.body.dataset.historySize, 10);
-  const historySize = Number.isFinite(parsedSize) && parsedSize > 0 ? parsedSize : 10;
-  // スクロール追従判定のしきい値（px）。最下部からこの範囲内なら新着時に自動スクロールする。
-  const autoScrollThresholdPx = 32;
+  const historySizeStorageKey = "vox-actor.stream.historySize";
+  const defaultHistorySize = 20;
 
   const queue = [];
   let playingItem = null;
+  let historySize = initHistorySize();
+
+  function initHistorySize() {
+    const stored = parseInt(localStorage.getItem(historySizeStorageKey), 10);
+    const allowed = Array.from(historySizeEl.options).map((o) => parseInt(o.value, 10));
+    const value = allowed.includes(stored) ? stored : defaultHistorySize;
+    historySizeEl.value = String(value);
+    return value;
+  }
 
   const setVolumeIcon = () => {
     volumeIcon.textContent = player.muted || player.volume === 0 ? "🔇" : "🔊";
@@ -32,15 +40,23 @@
 
   document.body.addEventListener("click", unlockAudio, { once: true });
 
-  const isNearBottom = () => {
-    const { scrollTop, scrollHeight, clientHeight } = timelineEl;
-    return scrollHeight - scrollTop - clientHeight <= autoScrollThresholdPx;
+  const trimTimeline = () => {
+    while (timelineEl.children.length > historySize) {
+      const first = timelineEl.firstElementChild;
+      if (!first || first === playingItem) break;
+      timelineEl.removeChild(first);
+    }
   };
 
-  const appendTimelineItem = (clip) => {
-    // 新着追加前の位置で「既に最下部近辺だったか」を判定し、追従するかを決める。
-    const shouldAutoScroll = isNearBottom();
+  historySizeEl.addEventListener("change", () => {
+    const next = parseInt(historySizeEl.value, 10);
+    if (!Number.isFinite(next) || next <= 0) return;
+    historySize = next;
+    localStorage.setItem(historySizeStorageKey, String(next));
+    trimTimeline();
+  });
 
+  const appendTimelineItem = (clip) => {
     const li = document.createElement("li");
     li.className = "timeline-item";
     li.dataset.clipId = String(clip.id);
@@ -50,16 +66,7 @@
     li.appendChild(body);
     timelineEl.appendChild(li);
 
-    // 上限を超えた分を先頭から削除（再生中は残す）。
-    while (timelineEl.children.length > historySize) {
-      const first = timelineEl.firstElementChild;
-      if (!first || first === playingItem) break;
-      timelineEl.removeChild(first);
-    }
-
-    if (shouldAutoScroll) {
-      timelineEl.scrollTop = timelineEl.scrollHeight;
-    }
+    trimTimeline();
     return li;
   };
 
@@ -75,6 +82,7 @@
     const { clip, item } = queue.shift();
     playingItem = item;
     item.classList.add("playing");
+    item.scrollIntoView({ block: "nearest" });
     player.src = clip.url;
     player.play().catch((err) => {
       console.error("play failed", err);

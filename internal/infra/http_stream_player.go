@@ -1,7 +1,6 @@
 package infra
 
 import (
-	"bytes"
 	"context"
 	"embed"
 	"encoding/json"
@@ -48,14 +47,12 @@ type HTTPStreamPlayer struct {
 var _ app.StreamPlayer = (*HTTPStreamPlayer)(nil)
 
 const (
-	// defaultHistorySize はタイムライン履歴とWAVリングバッファの既定上限。
-	defaultHistorySize = 10
-	clipPathPrefix     = "/clips/"
-	clipPathSuffix     = ".wav"
-	sseEventClip       = "clip"
-	// historySizePlaceholder は index.html 内で履歴上限値に置換されるプレースホルダ。
-	historySizePlaceholder = "__STREAM_HISTORY_SIZE__"
-	sseSubscriberBuffer    = 16
+	// defaultHistorySize はサーバー側 WAV リングバッファの既定上限。
+	defaultHistorySize  = 10
+	clipPathPrefix      = "/clips/"
+	clipPathSuffix      = ".wav"
+	sseEventClip        = "clip"
+	sseSubscriberBuffer = 16
 )
 
 // clipEvent は SSE で配信する clip イベントのペイロード。
@@ -165,12 +162,6 @@ func (p *HTTPStreamPlayer) loadAssets() error {
 		}
 		*entry.dst = data
 	}
-	// index.html 内のプレースホルダを実値に置換してキャッシュする。
-	p.indexHTML = bytes.ReplaceAll(
-		p.indexHTML,
-		[]byte(historySizePlaceholder),
-		[]byte(strconv.Itoa(p.historySize)),
-	)
 	return nil
 }
 

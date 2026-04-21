@@ -32,13 +32,11 @@ package infra
 // DONE: clipEvent の JSON に text フィールドが含まれる
 // DONE: PlayMeta.Text が空文字の場合も text フィールドが空文字で含まれる
 // DONE: WithHTTPStreamHistorySize でリングバッファ容量を変更できる
-// DONE: index.html の __STREAM_HISTORY_SIZE__ プレースホルダが設定値に置換される
 
 import (
 	"bufio"
 	"context"
 	"fmt"
-	"io"
 	"net/http"
 	"strings"
 	"testing"
@@ -484,39 +482,5 @@ func TestHTTPStreamPlayer_WithHistorySize_AppliesToRingBuffer(t *testing.T) {
 	_ = resp4.Body.Close()
 	if resp4.StatusCode != http.StatusOK {
 		t.Errorf("expected 200 for clip 4, got %d", resp4.StatusCode)
-	}
-}
-
-func TestHTTPStreamPlayer_IndexHTML_ReplacesHistorySizePlaceholder(t *testing.T) {
-	t.Parallel()
-	p, err := NewHTTPStreamPlayer("127.0.0.1:0", WithHTTPStreamHistorySize(25))
-	if err != nil {
-		t.Fatalf("NewHTTPStreamPlayer: %v", err)
-	}
-	if err := p.Start(context.Background()); err != nil {
-		t.Fatalf("Start: %v", err)
-	}
-	t.Cleanup(func() {
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-		defer cancel()
-		_ = p.Shutdown(shutdownCtx)
-	})
-
-	resp, err := http.Get("http://" + p.Addr() + "/")
-	if err != nil {
-		t.Fatalf("GET /: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	buf := new(strings.Builder)
-	if _, err := io.Copy(buf, resp.Body); err != nil {
-		t.Fatalf("copy body: %v", err)
-	}
-	body := buf.String()
-	if strings.Contains(body, "__STREAM_HISTORY_SIZE__") {
-		t.Errorf("expected placeholder to be replaced, got raw placeholder in body")
-	}
-	if !strings.Contains(body, `data-history-size="25"`) {
-		t.Errorf("expected data-history-size=\"25\" in body, got: %s", body)
 	}
 }
