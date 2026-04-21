@@ -26,6 +26,9 @@ depcheck:
 test-e2e:
 	go test -tags=e2e ./test/e2e/...
 
+run-stream:
+	go run . watch --stream --stream-addr 0.0.0.0:8080 .vox-actor/queue
+
 all: build
 
-.PHONY: all setup build clean test test-e2e fmt lint depcheck
+.PHONY: all setup build clean test test-e2e fmt lint depcheck run-stream
