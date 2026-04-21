@@ -87,7 +87,6 @@ func WithHTTPStreamLogger(logger *slog.Logger) HTTPStreamOption {
 }
 
 // WithSpeakerLookup は clipEvent の speakerName/styleName 解決に使うマップを設定するオプション。
-// nil を渡した場合は何もしない（既存の lookup を維持する）。
 func WithSpeakerLookup(lookup map[int]entity.SpeakerStyleInfo) HTTPStreamOption {
 	return func(p *HTTPStreamPlayer) {
 		if lookup != nil {
@@ -96,7 +95,7 @@ func WithSpeakerLookup(lookup map[int]entity.SpeakerStyleInfo) HTTPStreamOption 
 	}
 }
 
-// withNowFunc は clipEvent の timestamp 取得に使う関数を設定するオプション（テスト用）。
+// withNowFunc は clipEvent の timestamp 取得に使う関数を設定する（テスト用）。
 func withNowFunc(now func() time.Time) HTTPStreamOption {
 	return func(p *HTTPStreamPlayer) {
 		if now != nil {

@@ -120,10 +120,7 @@
 
     const body = document.createElement("div");
     body.className = "timeline-body";
-    const text = document.createElement("span");
-    text.className = "timeline-text";
-    text.textContent = clip.text || "";
-    body.appendChild(text);
+    body.textContent = clip.text || "";
     li.appendChild(body);
 
     timelineEl.appendChild(li);

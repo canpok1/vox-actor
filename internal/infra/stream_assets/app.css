@@ -108,11 +108,7 @@ h1 { margin-top: 0; font-size: 1.4rem; }
 .timeline-item.playing .timeline-body::before {
   content: "▶";
 }
-.timeline-text {
-  flex: 1 1 auto;
-}
 
-/* Toggle-driven visibility. Checkboxes toggle these body classes via JS. */
 body.hide-speaker-name .timeline-speaker-name { display: none; }
 body.hide-style-name .timeline-style-name { display: none; }
 body.hide-timestamp .timeline-timestamp { display: none; }
