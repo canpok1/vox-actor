@@ -42,6 +42,9 @@ package infra
 // DONE: SpeakerLookup にヒットすれば speakerName / styleName が解決値で配信される
 // DONE: SpeakerLookup に未ヒットの ID は speakerName が `話者#<ID>` にフォールバックする
 // DONE: timestamp は nowFunc の戻り値の Unix ms で配信される
+//
+// #229 音量localStorage保存 / 消音チェックボックス:
+// DONE: index.html に音量スライダー初期値 50 と消音チェックボックス(checked) が含まれる
 
 import (
 	"bufio"
@@ -529,6 +532,32 @@ func TestHTTPStreamPlayer_Index_ContainsToggleControls(t *testing.T) {
 		"話者名",
 		"スタイル",
 		"時刻",
+	} {
+		if !strings.Contains(html, needle) {
+			t.Errorf("expected index.html to contain %q", needle)
+		}
+	}
+}
+
+func TestHTTPStreamPlayer_Index_ContainsVolumeControls(t *testing.T) {
+	t.Parallel()
+	p := newStartedPlayer(t)
+	resp, err := http.Get("http://" + p.Addr() + "/")
+	if err != nil {
+		t.Fatalf("GET /: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read body: %v", err)
+	}
+	html := string(body)
+	for _, needle := range []string{
+		`id="volume"`,
+		`value="50"`,
+		`id="mute" checked`,
+		"消音",
 	} {
 		if !strings.Contains(html, needle) {
 			t.Errorf("expected index.html to contain %q", needle)
