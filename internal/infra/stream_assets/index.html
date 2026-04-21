@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>vox-actor stream</title>
+<link rel="stylesheet" href="/app.css">
+</head>
+<body>
+<main class="container">
+  <h1>vox-actor stream</h1>
+  <p class="status">状態: <span id="status">接続中</span></p>
+  <label class="volume-row">
+    音量
+    <input type="range" id="volume" min="0" max="100" value="0">
+    <span id="volume-icon">🔇</span>
+  </label>
+  <p class="hint">音量を上げると再生が始まります</p>
+  <section class="now-playing">
+    <h2>再生中</h2>
+    <p id="now-playing">―</p>
+  </section>
+  <audio id="player" muted></audio>
+</main>
+<script src="/app.js"></script>
+</body>
+</html>

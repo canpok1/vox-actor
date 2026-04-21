@@ -1,10 +1,13 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/canpok1/vox-actor/internal/app"
 	"github.com/spf13/cobra"
@@ -12,11 +15,12 @@ import (
 
 // WatchDeps はwatchコマンドの依存を保持する。
 type WatchDeps struct {
-	Reader            app.ScriptReader
-	ClientFactory     func(engineURL string) app.VoicevoxClient
-	Player            app.AudioPlayer
-	Mover             app.FileMover
-	DirWatcherFactory func() app.DirWatcher
+	Reader              app.ScriptReader
+	ClientFactory       func(engineURL string) app.VoicevoxClient
+	Player              app.AudioPlayer
+	Mover               app.FileMover
+	DirWatcherFactory   func() app.DirWatcher
+	StreamPlayerFactory func(addr string, logger *slog.Logger) (app.StreamPlayer, error)
 }
 
 func makeWatchCmd(deps *WatchDeps) *cobra.Command {
@@ -37,6 +41,8 @@ func makeWatchCmd(deps *WatchDeps) *cobra.Command {
 
 	registerCommonFlags(cmd)
 	cmd.Flags().Bool("delete", false, "処理済みファイルを削除する（未指定時は各ディレクトリの done/ に移動）")
+	cmd.Flags().Bool("stream", false, "HTTPサーバーを起動し、SSE経由でブラウザに音声配信する")
+	cmd.Flags().String("stream-addr", "127.0.0.1:8080", "ストリーム配信用のバインドアドレス")
 
 	return cmd
 }
@@ -52,13 +58,6 @@ func runWatch(cmd *cobra.Command, args []string, deps *WatchDeps) error {
 		}
 	}
 
-	if deps == nil || deps.ClientFactory == nil || deps.Reader == nil || deps.Player == nil || deps.Mover == nil || deps.DirWatcherFactory == nil {
-		return fmt.Errorf("watch command dependencies are not initialized")
-	}
-
-	ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
-
 	deleteMode, _ := cmd.Flags().GetBool("delete")
 	engineURL, _ := cmd.Flags().GetString("engine-url")
 	speakerID, _ := cmd.Flags().GetInt("speaker")
@@ -66,6 +65,19 @@ func runWatch(cmd *cobra.Command, args []string, deps *WatchDeps) error {
 	pitch, _ := cmd.Flags().GetFloat64("pitch")
 	intonation, _ := cmd.Flags().GetFloat64("intonation")
 	dryRun, _ := cmd.Flags().GetBool("dry-run")
+	stream, _ := cmd.Flags().GetBool("stream")
+	streamAddr, _ := cmd.Flags().GetString("stream-addr")
+
+	if stream && dryRun {
+		return fmt.Errorf("%w: --stream and --dry-run cannot be used together", ErrUsage)
+	}
+
+	if deps == nil || deps.ClientFactory == nil || deps.Reader == nil || deps.Player == nil || deps.Mover == nil || deps.DirWatcherFactory == nil {
+		return fmt.Errorf("watch command dependencies are not initialized")
+	}
+
+	ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 
 	logger := buildLoggerFromFlags(cmd)
 
@@ -74,13 +86,36 @@ func runWatch(cmd *cobra.Command, args []string, deps *WatchDeps) error {
 		return fmt.Errorf("failed to create VoicevoxClient for %s", engineURL)
 	}
 
+	player := deps.Player
+	if stream {
+		if deps.StreamPlayerFactory == nil {
+			return fmt.Errorf("stream player factory is not initialized")
+		}
+		sp, err := deps.StreamPlayerFactory(streamAddr, logger)
+		if err != nil {
+			return fmt.Errorf("failed to create stream player: %w", err)
+		}
+		if err := sp.Start(ctx); err != nil {
+			return fmt.Errorf("failed to start stream server: %w", err)
+		}
+		defer func() {
+			shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			if err := sp.Shutdown(shutdownCtx); err != nil {
+				logger.Error("stream server shutdown error", "error", err)
+			}
+		}()
+		logger.Info("stream server listening", "addr", sp.Addr())
+		player = sp
+	}
+
 	watcher := deps.DirWatcherFactory()
 	opts := []app.WatchOption{app.WithWatchLogger(logger)}
 	if deleteMode {
 		opts = append(opts, app.WithDeleteMode())
 	}
 
-	uc := app.NewWatchUsecase(deps.Reader, client, deps.Player, deps.Mover, watcher, opts...)
+	uc := app.NewWatchUsecase(deps.Reader, client, player, deps.Mover, watcher, opts...)
 	return uc.Run(ctx, app.WatchParams{
 		Paths:      args,
 		SpeakerID:  speakerID,
