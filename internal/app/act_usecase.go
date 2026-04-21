@@ -110,7 +110,7 @@ func (u *ActUsecase) Run(ctx context.Context, params ActParams) error {
 
 		u.logger.Info(fmt.Sprintf("[%d/%d] processing script", result.index, total), "path", result.script.Path)
 
-		if err := u.player.Play(ctx, result.wav); err != nil {
+		if err := u.player.Play(ctx, result.wav, PlayMeta{Text: result.script.Text}); err != nil {
 			if ctx.Err() != nil {
 				return nil
 			}

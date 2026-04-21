@@ -73,14 +73,44 @@ func (m *mockVoicevoxClient) Synthesize(_ context.Context, query *entity.AudioQu
 type mockAudioPlayer struct {
 	err       error
 	playCalls int
+	playMetas []app.PlayMeta
 }
 
-func (m *mockAudioPlayer) Play(_ context.Context, _ []byte) error {
+func (m *mockAudioPlayer) Play(_ context.Context, _ []byte, meta app.PlayMeta) error {
 	m.playCalls++
+	m.playMetas = append(m.playMetas, meta)
 	return m.err
 }
 
 // --- テスト ---
+
+func TestActUsecase_Run_PlayReceivesScriptText(t *testing.T) {
+	reader := &mockScriptReader{
+		scripts: []entity.Script{
+			{Path: "a.txt", Text: "おはようなのだ", IsEmpty: false},
+			{Path: "b.txt", Text: "さようならなのだ", IsEmpty: false},
+		},
+	}
+	client := &mockVoicevoxClient{
+		query:   &entity.AudioQuery{},
+		wavData: []byte("fake-wav"),
+	}
+	player := &mockAudioPlayer{}
+
+	uc := app.NewActUsecase(reader, client, player)
+	params := app.ActParams{Path: "scripts/", SpeakerID: 3}
+
+	if err := uc.Run(context.Background(), params); err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	if len(player.playMetas) != 2 {
+		t.Fatalf("expected 2 Play calls, got: %d", len(player.playMetas))
+	}
+	if player.playMetas[0].Text != "おはようなのだ" || player.playMetas[1].Text != "さようならなのだ" {
+		t.Errorf("expected PlayMeta.Text in script order, got: %+v", player.playMetas)
+	}
+}
 
 func TestActUsecase_Run_SingleScript_Success(t *testing.T) {
 	reader := &mockScriptReader{
@@ -454,7 +484,7 @@ type cancellingAudioPlayer struct {
 	cancelFunc  context.CancelFunc
 }
 
-func (m *cancellingAudioPlayer) Play(_ context.Context, _ []byte) error {
+func (m *cancellingAudioPlayer) Play(_ context.Context, _ []byte, _ app.PlayMeta) error {
 	m.playCalls++
 	if m.playCalls >= m.cancelAfter {
 		m.cancelFunc()

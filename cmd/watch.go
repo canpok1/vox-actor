@@ -13,6 +13,12 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// StreamPlayerOptions はストリームプレイヤーの生成オプション。
+type StreamPlayerOptions struct {
+	// HistorySize はブラウザ側タイムラインに保持するセリフの上限件数。
+	HistorySize int
+}
+
 // WatchDeps はwatchコマンドの依存を保持する。
 type WatchDeps struct {
 	Reader              app.ScriptReader
@@ -20,7 +26,7 @@ type WatchDeps struct {
 	Player              app.AudioPlayer
 	Mover               app.FileMover
 	DirWatcherFactory   func() app.DirWatcher
-	StreamPlayerFactory func(addr string, logger *slog.Logger) (app.StreamPlayer, error)
+	StreamPlayerFactory func(addr string, logger *slog.Logger, opts StreamPlayerOptions) (app.StreamPlayer, error)
 }
 
 func makeWatchCmd(deps *WatchDeps) *cobra.Command {
@@ -43,6 +49,7 @@ func makeWatchCmd(deps *WatchDeps) *cobra.Command {
 	cmd.Flags().Bool("delete", false, "処理済みファイルを削除する（未指定時は各ディレクトリの done/ に移動）")
 	cmd.Flags().Bool("stream", false, "HTTPサーバーを起動し、SSE経由でブラウザに音声配信する")
 	cmd.Flags().String("stream-addr", "127.0.0.1:8080", "ストリーム配信用のバインドアドレス")
+	cmd.Flags().Int("stream-history-size", 10, "ストリーム画面のタイムラインに保持するセリフの件数上限（--stream と組み合わせて使用）")
 
 	return cmd
 }
@@ -67,9 +74,13 @@ func runWatch(cmd *cobra.Command, args []string, deps *WatchDeps) error {
 	dryRun, _ := cmd.Flags().GetBool("dry-run")
 	stream, _ := cmd.Flags().GetBool("stream")
 	streamAddr, _ := cmd.Flags().GetString("stream-addr")
+	streamHistorySize, _ := cmd.Flags().GetInt("stream-history-size")
 
 	if stream && dryRun {
 		return fmt.Errorf("%w: --stream and --dry-run cannot be used together", ErrUsage)
+	}
+	if streamHistorySize < 1 {
+		return fmt.Errorf("%w: --stream-history-size must be >= 1", ErrUsage)
 	}
 
 	if deps == nil || deps.ClientFactory == nil || deps.Reader == nil || deps.Player == nil || deps.Mover == nil || deps.DirWatcherFactory == nil {
@@ -91,7 +102,7 @@ func runWatch(cmd *cobra.Command, args []string, deps *WatchDeps) error {
 		if deps.StreamPlayerFactory == nil {
 			return fmt.Errorf("stream player factory is not initialized")
 		}
-		sp, err := deps.StreamPlayerFactory(streamAddr, logger)
+		sp, err := deps.StreamPlayerFactory(streamAddr, logger, StreamPlayerOptions{HistorySize: streamHistorySize})
 		if err != nil {
 			return fmt.Errorf("failed to create stream player: %w", err)
 		}

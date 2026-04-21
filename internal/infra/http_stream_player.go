@@ -1,6 +1,7 @@
 package infra
 
 import (
+	"bytes"
 	"context"
 	"embed"
 	"encoding/json"
@@ -24,8 +25,9 @@ var streamAssets embed.FS
 
 // HTTPStreamPlayer はWAVをHTTP/SSEでブラウザに配信する AudioPlayer 実装。
 type HTTPStreamPlayer struct {
-	addr   string
-	logger *slog.Logger
+	addr        string
+	logger      *slog.Logger
+	historySize int
 
 	server   *http.Server
 	listener net.Listener
@@ -46,17 +48,21 @@ type HTTPStreamPlayer struct {
 var _ app.StreamPlayer = (*HTTPStreamPlayer)(nil)
 
 const (
-	clipRingCapacity    = 10
-	clipPathPrefix      = "/clips/"
-	clipPathSuffix      = ".wav"
-	sseEventClip        = "clip"
-	sseSubscriberBuffer = 16
+	// defaultHistorySize はタイムライン履歴とWAVリングバッファの既定上限。
+	defaultHistorySize = 10
+	clipPathPrefix     = "/clips/"
+	clipPathSuffix     = ".wav"
+	sseEventClip       = "clip"
+	// historySizePlaceholder は index.html 内で履歴上限値に置換されるプレースホルダ。
+	historySizePlaceholder = "__STREAM_HISTORY_SIZE__"
+	sseSubscriberBuffer    = 16
 )
 
 // clipEvent は SSE で配信する clip イベントのペイロード。
 type clipEvent struct {
-	ID  uint64 `json:"id"`
-	URL string `json:"url"`
+	ID   uint64 `json:"id"`
+	URL  string `json:"url"`
+	Text string `json:"text"`
 }
 
 // HTTPStreamOption は HTTPStreamPlayer の生成時に指定するオプション。
@@ -71,6 +77,17 @@ func WithHTTPStreamLogger(logger *slog.Logger) HTTPStreamOption {
 	}
 }
 
+// WithHTTPStreamHistorySize は履歴の上限件数を設定するオプション。
+// UI のタイムラインに保持する最大件数と、サーバー側 WAV リングバッファの容量の両方に適用される。
+// 1 未満の値は無視される。
+func WithHTTPStreamHistorySize(size int) HTTPStreamOption {
+	return func(p *HTTPStreamPlayer) {
+		if size > 0 {
+			p.historySize = size
+		}
+	}
+}
+
 // NewHTTPStreamPlayer は新しい HTTPStreamPlayer を生成する。
 // addr はバインドアドレス（例: "127.0.0.1:8080"）。":0" で動的ポート割当。
 func NewHTTPStreamPlayer(addr string, opts ...HTTPStreamOption) (*HTTPStreamPlayer, error) {
@@ -80,12 +97,13 @@ func NewHTTPStreamPlayer(addr string, opts ...HTTPStreamOption) (*HTTPStreamPlay
 	p := &HTTPStreamPlayer{
 		addr:        addr,
 		logger:      slog.New(slog.DiscardHandler),
-		clips:       newClipRingBuffer(clipRingCapacity),
+		historySize: defaultHistorySize,
 		subscribers: newSubscriberRegistry(),
 	}
 	for _, opt := range opts {
 		opt(p)
 	}
+	p.clips = newClipRingBuffer(p.historySize)
 	return p, nil
 }
 
@@ -147,6 +165,12 @@ func (p *HTTPStreamPlayer) loadAssets() error {
 		}
 		*entry.dst = data
 	}
+	// index.html 内のプレースホルダを実値に置換してキャッシュする。
+	p.indexHTML = bytes.ReplaceAll(
+		p.indexHTML,
+		[]byte(historySizePlaceholder),
+		[]byte(strconv.Itoa(p.historySize)),
+	)
 	return nil
 }
 
@@ -179,7 +203,8 @@ func (p *HTTPStreamPlayer) Addr() string {
 }
 
 // Play はWAVバイト列をキューに積み、SSE購読者にブロードキャストする。
-func (p *HTTPStreamPlayer) Play(ctx context.Context, wavData []byte) error {
+// meta.Text はブラウザのタイムライン表示に利用される。
+func (p *HTTPStreamPlayer) Play(ctx context.Context, wavData []byte, meta app.PlayMeta) error {
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
@@ -203,7 +228,11 @@ func (p *HTTPStreamPlayer) Play(ctx context.Context, wavData []byte) error {
 	copy(buf, wavData)
 	p.clips.put(id, buf)
 
-	payload, err := json.Marshal(clipEvent{ID: id, URL: clipPathPrefix + strconv.FormatUint(id, 10) + clipPathSuffix})
+	payload, err := json.Marshal(clipEvent{
+		ID:   id,
+		URL:  clipPathPrefix + strconv.FormatUint(id, 10) + clipPathSuffix,
+		Text: meta.Text,
+	})
 	if err != nil {
 		return fmt.Errorf("failed to marshal clip payload: %w", err)
 	}

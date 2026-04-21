@@ -44,7 +44,8 @@ func NewBeepPlayer(backend speakerBackend) (*BeepPlayer, error) {
 // Play はWAVバイト列をスピーカーから再生する。
 // 再生完了まで同期的に待機し、再生失敗時はエラーを返す。
 // コンテキストがキャンセルされている場合は即座にエラーを返す。
-func (p *BeepPlayer) Play(ctx context.Context, wavData []byte) error {
+// meta はスピーカー再生では利用しない。
+func (p *BeepPlayer) Play(ctx context.Context, wavData []byte, _ app.PlayMeta) error {
 	// コンテキストのキャンセルチェック
 	select {
 	case <-ctx.Done():
