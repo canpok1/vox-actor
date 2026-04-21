@@ -87,9 +87,9 @@
   });
 
   // formatTimestamp は Unix ms を 24 時間表記 HH:MM:SS に整形する。
-  // サーバーが timestamp を送らない古いペイロードでも空文字を返すようにする。
+  // サーバーが timestamp を送らない/0 を送る古いペイロードでも空文字を返す。
   const formatTimestamp = (ms) => {
-    if (typeof ms !== "number" || !Number.isFinite(ms)) return "";
+    if (typeof ms !== "number" || !Number.isFinite(ms) || ms <= 0) return "";
     return new Date(ms).toLocaleTimeString("ja-JP", { hour12: false });
   };
 

@@ -106,7 +106,7 @@ func runWatch(cmd *cobra.Command, args []string, deps *WatchDeps) error {
 			return fmt.Errorf("failed to get speakers: %w", err)
 		}
 		lookup := entity.BuildSpeakerStyleLookup(speakers)
-		logger.Info("speakers loaded", "count", len(lookup))
+		logger.Info("speakers loaded", "speakerCount", len(speakers), "styleCount", len(lookup))
 
 		sp, err := deps.StreamPlayerFactory(streamAddr, logger, lookup)
 		if err != nil {
