@@ -9,11 +9,14 @@
 <main class="container">
   <h1>vox-actor stream</h1>
   <p class="status">状態: <span id="status">接続中</span></p>
-  <label class="volume-row">
-    音量
-    <input type="range" id="volume" min="0" max="100" value="0">
-    <span id="volume-icon">🔇</span>
-  </label>
+  <div class="volume-row">
+    <label class="volume-slider">
+      音量
+      <input type="range" id="volume" min="0" max="100" value="50">
+      <span id="volume-icon">🔇</span>
+    </label>
+    <label class="toggle"><input type="checkbox" id="mute" checked>消音</label>
+  </div>
   <div class="timeline-controls">
     <label for="history-size">履歴上限</label>
     <select id="history-size">

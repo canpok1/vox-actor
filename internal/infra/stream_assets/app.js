@@ -2,6 +2,7 @@
   const statusEl = document.getElementById("status");
   const volumeEl = document.getElementById("volume");
   const volumeIcon = document.getElementById("volume-icon");
+  const muteEl = document.getElementById("mute");
   const timelineEl = document.getElementById("timeline");
   const historySizeEl = document.getElementById("history-size");
   const showSpeakerNameEl = document.getElementById("show-speaker-name");
@@ -11,6 +12,8 @@
 
   const historySizeStorageKey = "vox-actor.stream.historySize";
   const defaultHistorySize = 20;
+  const volumeStorageKey = "vox-actor.stream.volume";
+  const defaultVolume = 50;
 
   const toggles = [
     { el: showSpeakerNameEl, storageKey: "vox-actor.stream.showSpeakerName", bodyClass: "hide-speaker-name" },
@@ -28,6 +31,13 @@
     const value = allowed.includes(stored) ? stored : defaultHistorySize;
     historySizeEl.value = String(value);
     return value;
+  }
+
+  function initVolume() {
+    const stored = parseInt(localStorage.getItem(volumeStorageKey), 10);
+    const value = Number.isInteger(stored) && stored >= 0 && stored <= 100 ? stored : defaultVolume;
+    volumeEl.value = String(value);
+    player.volume = value / 100;
   }
 
   function initToggles() {
@@ -55,20 +65,17 @@
     volumeIcon.textContent = player.muted || player.volume === 0 ? "🔇" : "🔊";
   };
 
-  const unlockAudio = () => {
-    player.muted = false;
-    setVolumeIcon();
-  };
-
   volumeEl.addEventListener("input", () => {
-    player.volume = Number(volumeEl.value) / 100;
-    if (player.volume > 0) {
-      unlockAudio();
-    }
+    const value = Number(volumeEl.value);
+    player.volume = value / 100;
+    localStorage.setItem(volumeStorageKey, String(value));
     setVolumeIcon();
   });
 
-  document.body.addEventListener("click", unlockAudio, { once: true });
+  muteEl.addEventListener("change", () => {
+    player.muted = muteEl.checked;
+    setVolumeIcon();
+  });
 
   const trimTimeline = () => {
     while (timelineEl.children.length > historySize) {
@@ -178,6 +185,8 @@
   };
 
   initToggles();
+  initVolume();
+  player.muted = muteEl.checked;
   setVolumeIcon();
   connect();
 })();
