@@ -72,17 +72,22 @@ ${CLAUDE_PLUGIN_ROOT}/skills/monologue/scripts/monologue.sh 通知確率 "（キ
 
 通知の実行に使用する `${CLAUDE_PLUGIN_ROOT}/skills/monologue/scripts/monologue.sh` は以下の前提条件を必要とする:
 
-- **環境変数 `VOX_ACTOR_WORKSPACE`**: vox-actor関連ファイルのルートディレクトリを指定する。配下に `queue/`（fileモードの通知JSON出力先）および `monologue-errors.log`（directモードのエラーログ）が置かれる。未設定の場合のデフォルト値は以下のとおり
-  - gitリポジトリ内: `<gitリポジトリ直下>/.vox-actor`
-  - gitリポジトリ外: `$PWD/.vox-actor`
-- **出力先ディレクトリ**: 上記のルートディレクトリおよび配下の `queue/` はスクリプトが必要に応じて自動作成する
+- **`vox-actor` コマンドのインストール必須**: スクリプト冒頭で `command -v vox-actor` を検査し、未インストール時は `[ERROR] vox-actor コマンドが必要です` を stderr に出して非0終了する
+- **ワークスペースの解決順**:
+  1. 環境変数 `VOX_ACTOR_WORKSPACE` が設定されていればその配下の `queue/` を使う
+  2. 未設定なら `vox-actor config path.queue` の出力（gitリポジトリ直下の `.vox-actor/queue` の絶対パス）を使う
+- **git 管理外で利用する場合**: `VOX_ACTOR_WORKSPACE` の明示が必要。未指定のままだと `vox-actor config path.queue` が非0終了し、そのエラーメッセージが表示されてスクリプトも終了する
+- **出力先ディレクトリ**: ワークスペースルートおよび配下の `queue/` はスクリプトが必要に応じて自動作成する
+- `monologue-errors.log`（directモードのエラーログ）はワークスペースルート直下に配置される
 
 ### 通知モード
 
 通知方式は以下のルールで自動切替する:
 
 1. 環境変数 `VOX_ACTOR_MONOLOGUE_MODE` が設定されていればそれに従う（`direct` または `file`）
-2. 未設定なら `vox-actor` コマンドの有無で判定する（あり → `direct`、なし → `file`）
+2. 未設定なら `vox-actor audio-check` の終了コードで自動判定する
+   - 終了コード 0（音声デバイス open 成功）→ `direct`
+   - 非0（音声デバイス open 失敗）→ `file`
 
 #### `direct` モード
 
@@ -91,11 +96,11 @@ ${CLAUDE_PLUGIN_ROOT}/skills/monologue/scripts/monologue.sh 通知確率 "（キ
 - VOICEVOXエンジンのURLは `vox-actor` 側の環境変数 `VOX_ENGINE_URL` で解決する（非デフォルトポート時はユーザーが設定）
 - 監視プロセス（`vox-actor watch`）の常駐は不要
 - 同期実行のため、同一セッション内で連続して呼び出した場合は先の発話が完了してから次が再生される。ただし複数セッションから並列に呼ばれた場合はエンジンへの並列リクエストと音声再生の重なりが発生しうる。複数セッション間でも逐次再生したい場合は `VOX_ACTOR_MONOLOGUE_MODE=file` + 監視プロセス構成に切り替える
-- `vox-actor say` 失敗時もスクリプト本体はエラー終了せず、標準出力/標準エラーの内容を `${VOX_ACTOR_WORKSPACE}/monologue-errors.log` にタイムスタンプ付きで追記する。ログは末尾200行でローテーションされる。失敗検知は `tail -f ${VOX_ACTOR_WORKSPACE}/monologue-errors.log` で行える
+- `vox-actor say` 失敗時もスクリプト本体はエラー終了せず、標準出力/標準エラーの内容をワークスペースルート直下の `monologue-errors.log` にタイムスタンプ付きで追記する。ログは末尾200行でローテーションされる。失敗検知は `tail -f <workspace>/monologue-errors.log` で行える
 
 #### `file` モード
 
-`${VOX_ACTOR_WORKSPACE}/queue/` に通知ファイルを書き出す。ファイル名は `monologue_{ミリ秒タイムスタンプ}.json`、形式は `{"speaker": スピーカーID, "text": "セリフ", "speedScale": 話速}`。外部の通知監視プロセス（`vox-actor watch` 等）はこの `queue/` ディレクトリを監視対象として検知・読み上げする
+解決された queue ディレクトリ（`VOX_ACTOR_WORKSPACE` 明示時は `${VOX_ACTOR_WORKSPACE}/queue/`、未指定時は `vox-actor config path.queue` の出力先）に通知ファイルを書き出す。ファイル名は `monologue_{ミリ秒タイムスタンプ}.json`、形式は `{"speaker": スピーカーID, "text": "セリフ", "speedScale": 話速}`。外部の通知監視プロセス（`vox-actor watch` 等）はこの `queue/` ディレクトリを監視対象として検知・読み上げする
 
 ## キャラクター設定ファイルについて
 

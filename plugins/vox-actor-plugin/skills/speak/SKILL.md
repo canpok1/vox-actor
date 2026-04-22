@@ -73,17 +73,22 @@ ${CLAUDE_PLUGIN_ROOT}/scripts/play-script.sh <jsonl_path>
 
 再生の実行に使用する `${CLAUDE_PLUGIN_ROOT}/scripts/play-script.sh` は以下の前提条件を必要とする:
 
-- **環境変数 `VOX_ACTOR_WORKSPACE`**: vox-actor関連ファイルのルートディレクトリを指定する。配下に `tmp/`（JSONL台本の一時格納先）、`queue/`（fileモードの通知ファイル出力先）、`play-script-errors.log`（directモードのエラーログ）が置かれる。未設定の場合のデフォルト値は以下のとおり
-  - gitリポジトリ内: `<gitリポジトリ直下>/.vox-actor`
-  - gitリポジトリ外: `$PWD/.vox-actor`
-- **出力先ディレクトリ**: 上記のルートディレクトリおよび配下の `queue/` は `play-script.sh` が必要に応じて自動作成する。`tmp/` ディレクトリは Claude が Write する前に `mkdir -p "${VOX_ACTOR_WORKSPACE}/tmp"` で作成する
+- **`vox-actor` コマンドのインストール必須**: スクリプト冒頭で `command -v vox-actor` を検査し、未インストール時は `[ERROR] vox-actor コマンドが必要です` を stderr に出して非0終了する
+- **ワークスペースの解決順**:
+  1. 環境変数 `VOX_ACTOR_WORKSPACE` が設定されていればその配下の `queue/` を使う
+  2. 未設定なら `vox-actor config path.queue` の出力（gitリポジトリ直下の `.vox-actor/queue` の絶対パス）を使う
+- **git 管理外で利用する場合**: `VOX_ACTOR_WORKSPACE` の明示が必要。未指定のままだと `vox-actor config path.queue` が非0終了し、そのエラーメッセージが表示されてスクリプトも終了する
+- **出力先ディレクトリ**: ワークスペースルートおよび配下の `queue/` は `play-script.sh` が必要に応じて自動作成する。`tmp/` ディレクトリは Claude が Write する前に `mkdir -p "${VOX_ACTOR_WORKSPACE}/tmp"` で作成する（`tmp/` 利用時は `VOX_ACTOR_WORKSPACE` の明示が前提）
+- `play-script-errors.log`（directモードのエラーログ）はワークスペースルート直下に配置される
 
 ### 通知モード
 
 通知方式は以下のルールで自動切替する:
 
 1. 環境変数 `VOX_ACTOR_MONOLOGUE_MODE` が設定されていればそれに従う（`direct` または `file`）
-2. 未設定なら `vox-actor` コマンドの有無で判定する（あり → `direct`、なし → `file`）
+2. 未設定なら `vox-actor audio-check` の終了コードで自動判定する
+   - 終了コード 0（音声デバイス open 成功）→ `direct`
+   - 非0（音声デバイス open 失敗）→ `file`
 
 #### `direct` モード
 
@@ -93,11 +98,11 @@ ${CLAUDE_PLUGIN_ROOT}/scripts/play-script.sh <jsonl_path>
 - 監視プロセス（`vox-actor watch`）の常駐は不要
 - 再生完了後、渡された一時ファイルを `rm -f` で削除する
 - 同期実行のため、同一セッション内で連続して呼び出した場合は先の再生が完了してから次が再生される。ただし複数セッションから並列に呼ばれた場合はエンジンへの並列リクエストと音声再生の重なりが発生しうる。複数セッション間でも逐次再生したい場合は `VOX_ACTOR_MONOLOGUE_MODE=file` + 監視プロセス構成に切り替える
-- `vox-actor act` 失敗時もスクリプト本体はエラー終了せず、標準出力/標準エラーの内容を `${VOX_ACTOR_WORKSPACE}/play-script-errors.log` にタイムスタンプ付きで追記する。ログは末尾200行でローテーションされる。失敗検知は `tail -f ${VOX_ACTOR_WORKSPACE}/play-script-errors.log` で行える
+- `vox-actor act` 失敗時もスクリプト本体はエラー終了せず、標準出力/標準エラーの内容をワークスペースルート直下の `play-script-errors.log` にタイムスタンプ付きで追記する。ログは末尾200行でローテーションされる。失敗検知は `tail -f <workspace>/play-script-errors.log` で行える
 
 #### `file` モード
 
-一時ファイルを `${VOX_ACTOR_WORKSPACE}/queue/$(basename <jsonl_path>)` へ `mv` で移動する（渡された一時ファイル名がそのまま使われるため、`speak_<ms>.jsonl` なら `queue/speak_<ms>.jsonl` となる）。外部の通知監視プロセス（`vox-actor watch` 等）はこの `queue/` ディレクトリを監視対象として検知・読み上げする。
+一時ファイルを解決された queue ディレクトリ（`VOX_ACTOR_WORKSPACE` 明示時は `${VOX_ACTOR_WORKSPACE}/queue/`、未指定時は `vox-actor config path.queue` の出力先）配下へ `mv` で移動する（渡された一時ファイル名がそのまま使われるため、`speak_<ms>.jsonl` なら `queue/speak_<ms>.jsonl` となる）。外部の通知監視プロセス（`vox-actor watch` 等）はこの `queue/` ディレクトリを監視対象として検知・読み上げする。
 
 ## JSONL 出力例
 

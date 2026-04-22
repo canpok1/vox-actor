@@ -1,11 +1,7 @@
 #!/bin/bash
-if [ -z "$VOX_ACTOR_WORKSPACE" ]; then
-  GIT_COMMON_DIR=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)
-  if [ -n "$GIT_COMMON_DIR" ]; then
-    VOX_ACTOR_WORKSPACE="$(dirname "$GIT_COMMON_DIR")/.vox-actor"
-  else
-    VOX_ACTOR_WORKSPACE="$PWD/.vox-actor"
-  fi
+if ! command -v vox-actor >/dev/null 2>&1; then
+  echo "[ERROR] vox-actor コマンドが必要です。インストール方法は README を参照してください" >&2
+  exit 1
 fi
 
 JSONL_PATH="$1"
@@ -20,20 +16,26 @@ if [ ! -f "$JSONL_PATH" ]; then
   exit 1
 fi
 
+if [ -n "$VOX_ACTOR_WORKSPACE" ]; then
+  QUEUE_DIR="${VOX_ACTOR_WORKSPACE}/queue"
+else
+  QUEUE_DIR=$(vox-actor config path.queue) || exit 1
+fi
+WORKSPACE_DIR="$(dirname "$QUEUE_DIR")"
+
 MODE="${VOX_ACTOR_MONOLOGUE_MODE:-}"
 if [ -z "$MODE" ]; then
-  if command -v vox-actor >/dev/null 2>&1; then
+  if vox-actor audio-check >/dev/null 2>&1; then
     MODE="direct"
   else
     MODE="file"
   fi
 fi
 
-mkdir -p "$VOX_ACTOR_WORKSPACE"
-
 case "$MODE" in
   direct)
-    ERROR_LOG="${VOX_ACTOR_WORKSPACE}/play-script-errors.log"
+    mkdir -p "$WORKSPACE_DIR"
+    ERROR_LOG="${WORKSPACE_DIR}/play-script-errors.log"
     MAX_LOG_LINES=200
     OUTPUT=$(vox-actor act "$JSONL_PATH" 2>&1)
     STATUS=$?
@@ -53,7 +55,6 @@ case "$MODE" in
     rm -f "$JSONL_PATH"
     ;;
   file)
-    QUEUE_DIR="${VOX_ACTOR_WORKSPACE}/queue"
     mkdir -p "$QUEUE_DIR"
     DEST="${QUEUE_DIR}/$(basename "$JSONL_PATH")"
     mv "$JSONL_PATH" "$DEST"
