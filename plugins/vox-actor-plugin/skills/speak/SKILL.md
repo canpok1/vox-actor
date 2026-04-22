@@ -20,7 +20,7 @@ allowed-tools:
    - 冒頭の挨拶／つかみ → 本題 → まとめの流れを意識する
    - セリフ毎に内容の感情に合う `speaker` と `speedScale` を選定する
 5. `mkdir -p "${VOX_ACTOR_WORKSPACE}/tmp"` で一時ディレクトリを作成する
-6. 一時ファイル `${VOX_ACTOR_WORKSPACE}/tmp/speak_<unix_ms>.jsonl` に Write する
+6. 一時ファイル `${VOX_ACTOR_WORKSPACE}/tmp/<unix_ms>_speak.jsonl` に Write する
 7. `play-script.sh <path>` を呼び出す
 
 ```bash
@@ -102,7 +102,7 @@ ${CLAUDE_PLUGIN_ROOT}/scripts/play-script.sh <jsonl_path>
 
 #### `file` モード
 
-一時ファイルを `vox-actor config path.queue` で解決された queue ディレクトリ配下へ `mv` で移動する（渡された一時ファイル名がそのまま使われるため、`speak_<ms>.jsonl` なら `queue/speak_<ms>.jsonl` となる）。外部の通知監視プロセス（`vox-actor watch` 等）はこの `queue/` ディレクトリを監視対象として検知・読み上げする。
+一時ファイルを `vox-actor config path.queue` で解決された queue ディレクトリ配下へ `mv` で移動する（渡された一時ファイル名がそのまま使われるため、`<ms>_speak.jsonl` なら `queue/<ms>_speak.jsonl` となる）。外部の通知監視プロセス（`vox-actor watch` 等）はこの `queue/` ディレクトリを監視対象として検知・読み上げする。
 
 ## JSONL 出力例
 

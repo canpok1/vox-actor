@@ -22,7 +22,7 @@ allowed-tools:
    - 本題ではキャラ同士の掛け合い・質問応答・補足などで会話を展開する
    - セリフ毎に担当キャラの `speakers` から感情に合うIDを選定し、`speedScale` も感情に合わせる
 6. `mkdir -p "${VOX_ACTOR_WORKSPACE}/tmp"` で一時ディレクトリを作成する
-7. 一時ファイル `${VOX_ACTOR_WORKSPACE}/tmp/talk_<unix_ms>.jsonl` に Write する
+7. 一時ファイル `${VOX_ACTOR_WORKSPACE}/tmp/<unix_ms>_talk.jsonl` に Write する
 8. `play-script.sh <path>` を呼び出す
 
 ```bash
@@ -104,7 +104,7 @@ ${CLAUDE_PLUGIN_ROOT}/scripts/play-script.sh <jsonl_path>
 
 #### `file` モード
 
-一時ファイルを `vox-actor config path.queue` で解決された queue ディレクトリ配下へ `mv` で移動する（渡された一時ファイル名がそのまま使われるため、`talk_<ms>.jsonl` なら `queue/talk_<ms>.jsonl` となる）。外部の通知監視プロセス（`vox-actor watch` 等）はこの `queue/` ディレクトリを監視対象として検知・読み上げする。
+一時ファイルを `vox-actor config path.queue` で解決された queue ディレクトリ配下へ `mv` で移動する（渡された一時ファイル名がそのまま使われるため、`<ms>_talk.jsonl` なら `queue/<ms>_talk.jsonl` となる）。外部の通知監視プロセス（`vox-actor watch` 等）はこの `queue/` ディレクトリを監視対象として検知・読み上げする。
 
 ## JSONL 出力例
 
