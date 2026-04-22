@@ -100,7 +100,7 @@ ${CLAUDE_PLUGIN_ROOT}/skills/monologue/scripts/monologue.sh 通知確率 "（キ
 
 #### `file` モード
 
-`vox-actor config path.queue` で解決された queue ディレクトリに通知ファイルを書き出す。ファイル名は `monologue_{ミリ秒タイムスタンプ}.json`、形式は `{"speaker": スピーカーID, "text": "セリフ", "speedScale": 話速}`。外部の通知監視プロセス（`vox-actor watch` 等）はこの `queue/` ディレクトリを監視対象として検知・読み上げする
+`vox-actor config path.queue` で解決された queue ディレクトリに通知ファイルを書き出す。ファイル名は `{ミリ秒タイムスタンプ}_monologue.json`、形式は `{"speaker": スピーカーID, "text": "セリフ", "speedScale": 話速}`。外部の通知監視プロセス（`vox-actor watch` 等）はこの `queue/` ディレクトリを監視対象として検知・読み上げする
 
 ## キャラクター設定ファイルについて
 
