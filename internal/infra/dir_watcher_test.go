@@ -322,16 +322,6 @@ func TestPollingDirWatcher_NonENOENTErrorGoesToErrCh(t *testing.T) {
 	}
 }
 
-func collectLogLines(logs, needle string) []string {
-	var matched []string
-	for _, line := range strings.Split(strings.TrimRight(logs, "\n"), "\n") {
-		if strings.Contains(line, needle) {
-			matched = append(matched, line)
-		}
-	}
-	return matched
-}
-
 func TestPollingDirWatcher_StopsOnContextCancel(t *testing.T) {
 	dir := t.TempDir()
 
@@ -360,4 +350,14 @@ func TestPollingDirWatcher_StopsOnContextCancel(t *testing.T) {
 	case <-time.After(1 * time.Second):
 		t.Fatal("timeout: channel should be closed after context cancel")
 	}
+}
+
+func collectLogLines(logs, needle string) []string {
+	var matched []string
+	for _, line := range strings.Split(strings.TrimRight(logs, "\n"), "\n") {
+		if strings.Contains(line, needle) {
+			matched = append(matched, line)
+		}
+	}
+	return matched
 }

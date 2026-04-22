@@ -107,9 +107,7 @@ func (w *PollingDirWatcher) Watch(ctx context.Context, dir string) (<-chan strin
 }
 
 // handleListError は listFiles のエラーを処理する。
-// ENOENTの場合はディレクトリを自動再作成し、成功時はwarnログを出す。
-// ENOENT以外、または再作成失敗時は errCh にエラーを送る。
-// ctx.Done() でループを終了すべき場合は false を返す。
+// 戻り値 false は ctx.Done() によりループを終了すべきことを示す。
 func (w *PollingDirWatcher) handleListError(ctx context.Context, dir string, err error, errCh chan<- error) bool {
 	if errors.Is(err, fs.ErrNotExist) {
 		if mkErr := os.MkdirAll(dir, 0o755); mkErr != nil {
