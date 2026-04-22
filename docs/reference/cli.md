@@ -161,7 +161,16 @@ vox-actor config <key>
 
 | キー | 返却値 |
 |---|---|
-| `path.queue` | gitリポジトリ直下の `.vox-actor/queue` の絶対パス |
+| `path.workspace` | vox-actor のワークスペースルート絶対パス |
+| `path.queue` | ワークスペースルート配下の `queue` ディレクトリ絶対パス |
+
+**解決順（両キー共通）:**
+
+1. 環境変数 `VOX_ACTOR_WORKSPACE` が設定されていればその値をワークスペースルートとして扱う
+2. gitリポジトリ内であれば `git rev-parse --path-format=absolute --git-common-dir` の結果の親ディレクトリ配下の `.vox-actor` をワークスペースルートとする
+3. それ以外は非0終了
+
+`path.queue` はワークスペースルートに `queue` を結合した値を返すため、`path.workspace`/queue = `path.queue` の関係が常に成立します。
 
 **出力:**
 
@@ -175,23 +184,32 @@ vox-actor config <key>
 | 成功 | 0 | — |
 | 未知のキー | 2 (`ErrUsage`) | `unknown key: <key>` とサポートキー一覧 |
 | `git` コマンドがPATH上に無い | 1 | `Error: gitコマンドが見つかりません` |
-| カレントディレクトリがgitリポジトリ外 | 1 | `Error: カレントディレクトリはgitリポジトリではありません` |
+| カレントディレクトリがgitリポジトリ外かつ `VOX_ACTOR_WORKSPACE` 未設定 | 1 | `Error: カレントディレクトリはgitリポジトリではありません` |
 
 **使用例:**
 
 ```bash
 # gitリポジトリ内で実行
+$ cd /path/to/repo && vox-actor config path.workspace
+/path/to/repo/.vox-actor
 $ cd /path/to/repo && vox-actor config path.queue
 /path/to/repo/.vox-actor/queue
+
+# VOX_ACTOR_WORKSPACE 明示
+$ VOX_ACTOR_WORKSPACE=/custom vox-actor config path.workspace
+/custom
+$ VOX_ACTOR_WORKSPACE=/custom vox-actor config path.queue
+/custom/queue
 
 # 未知のキー
 $ vox-actor config path.unknown
 Error: unknown key: path.unknown
 supported keys:
   path.queue
+  path.workspace
 ```
 
-`path.queue` の解決は `git rev-parse --path-format=absolute --git-common-dir` の結果の親ディレクトリに `.vox-actor/queue` を結合したパスを返します。worktree 上で実行しても本体リポジトリ直下のパスが返るため、外部スクリプトから共通のキューディレクトリを参照できます。`config` サブコマンド自体は**パスの返却のみ**を行い、ディレクトリ作成は行いません。
+`config` サブコマンド自体は**パスの返却のみ**を行い、ディレクトリ作成は行いません。worktree 上で実行した場合も本体リポジトリ直下のパスが返るため、外部スクリプトから共通のワークスペースを参照できます。
 
 ## `audio-check` サブコマンド
 
