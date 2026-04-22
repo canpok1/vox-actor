@@ -46,6 +46,7 @@ func makeRootCmd(deps ...*Deps) *cobra.Command {
 	cmd.AddCommand(makeActCmd(actDeps))
 	cmd.AddCommand(makeWatchCmd(watchDeps))
 	cmd.AddCommand(makeSayCmd(sayDeps))
+	cmd.AddCommand(makeConfigCmd())
 
 	return cmd
 }
