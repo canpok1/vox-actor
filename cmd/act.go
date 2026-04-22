@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
@@ -16,7 +17,7 @@ type ActDeps struct {
 	ClientFactory     func(engineURL string) app.VoicevoxClient
 	Player            app.AudioPlayer
 	Mover             app.FileMover
-	DirWatcherFactory func() app.DirWatcher
+	DirWatcherFactory func(logger *slog.Logger) app.DirWatcher
 }
 
 func makeActCmd(deps *ActDeps) *cobra.Command {
@@ -90,7 +91,7 @@ func runAct(cmd *cobra.Command, args []string, deps *ActDeps) error {
 		if deps.Mover == nil || deps.DirWatcherFactory == nil {
 			return fmt.Errorf("watch mode dependencies are not initialized")
 		}
-		watcher := deps.DirWatcherFactory()
+		watcher := deps.DirWatcherFactory(logger)
 		opts := []app.WatchOption{app.WithWatchLogger(logger)}
 		if watchDelete {
 			opts = append(opts, app.WithDeleteMode())

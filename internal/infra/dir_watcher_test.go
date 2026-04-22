@@ -1,9 +1,14 @@
 package infra_test
 
 import (
+	"bytes"
 	"context"
+	"errors"
+	"io/fs"
+	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -183,6 +188,148 @@ func TestPollingDirWatcher_RedetectsFileAfterRemovalAndReplacement(t *testing.T)
 	case <-ctx.Done():
 		t.Fatal("timeout waiting for re-detection of replaced file")
 	}
+}
+
+func TestPollingDirWatcher_RecreatesMissingDirectory(t *testing.T) {
+	parent := t.TempDir()
+	dir := filepath.Join(parent, "watched")
+	if err := os.Mkdir(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn}))
+
+	watcher := infra.NewPollingDirWatcher(
+		50*time.Millisecond,
+		infra.WithPollingDirWatcherLogger(logger),
+	)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	fileCh, errCh := watcher.Watch(ctx, dir)
+
+	// 監視ディレクトリを削除
+	if err := os.RemoveAll(dir); err != nil {
+		t.Fatal(err)
+	}
+
+	// 自動再作成されるのを待つ
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		info, err := os.Stat(dir)
+		if err == nil && info.IsDir() {
+			break
+		}
+		select {
+		case e := <-errCh:
+			t.Fatalf("unexpected error from errCh: %v", e)
+		case <-time.After(50 * time.Millisecond):
+		}
+	}
+	info, err := os.Stat(dir)
+	if err != nil {
+		t.Fatalf("directory was not recreated: %v", err)
+	}
+	if !info.IsDir() {
+		t.Fatalf("recreated path is not a directory")
+	}
+
+	// 再作成されたディレクトリに新規ファイルを置くと検知される
+	newFile := filepath.Join(dir, "after.txt")
+	if err := os.WriteFile(newFile, []byte("hello"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	select {
+	case f := <-fileCh:
+		if filepath.Base(f) != "after.txt" {
+			t.Errorf("expected after.txt, got %s", filepath.Base(f))
+		}
+	case <-ctx.Done():
+		t.Fatal("timeout waiting for re-detection after recreation")
+	}
+
+	// warn ログが1回だけ出ていることを確認
+	warnLines := collectLogLines(buf.String(), "watch directory was recreated")
+	if len(warnLines) != 1 {
+		t.Errorf("expected 1 warn log for recreation, got %d: %s", len(warnLines), buf.String())
+	} else if !strings.Contains(warnLines[0], "level=WARN") {
+		t.Errorf("expected WARN level log, got: %s", warnLines[0])
+	}
+}
+
+func TestPollingDirWatcher_RecreateFailureGoesToErrCh(t *testing.T) {
+	parent := t.TempDir()
+
+	// 親パスをファイルにすることで、その配下のディレクトリ再作成を失敗させる
+	fileAsParent := filepath.Join(parent, "file")
+	if err := os.WriteFile(fileAsParent, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// "file/watched" は親がファイルなのでMkdirAllが失敗する
+	dir := filepath.Join(fileAsParent, "watched")
+
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn}))
+
+	watcher := infra.NewPollingDirWatcher(
+		50*time.Millisecond,
+		infra.WithPollingDirWatcherLogger(logger),
+	)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	_, errCh := watcher.Watch(ctx, dir)
+
+	// 再作成失敗のエラーがerrChに流れることを確認
+	select {
+	case err := <-errCh:
+		if err == nil {
+			t.Fatal("expected non-nil error")
+		}
+	case <-ctx.Done():
+		t.Fatal("timeout waiting for error on recreate failure")
+	}
+}
+
+func TestPollingDirWatcher_NonENOENTErrorGoesToErrCh(t *testing.T) {
+	parent := t.TempDir()
+
+	// 監視対象をファイル（ディレクトリではない）にする
+	// os.ReadDir は ENOTDIR を返し、ENOENTではないため従来通りerrChに流れる
+	notADir := filepath.Join(parent, "not-a-dir.txt")
+	if err := os.WriteFile(notADir, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	watcher := infra.NewPollingDirWatcher(50 * time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	_, errCh := watcher.Watch(ctx, notADir)
+
+	select {
+	case err := <-errCh:
+		if err == nil {
+			t.Fatal("expected non-nil error")
+		}
+		if errors.Is(err, fs.ErrNotExist) {
+			t.Errorf("expected non-ENOENT error, got ENOENT-equivalent: %v", err)
+		}
+	case <-ctx.Done():
+		t.Fatal("timeout waiting for error")
+	}
+}
+
+func collectLogLines(logs, needle string) []string {
+	var matched []string
+	for _, line := range strings.Split(strings.TrimRight(logs, "\n"), "\n") {
+		if strings.Contains(line, needle) {
+			matched = append(matched, line)
+		}
+	}
+	return matched
 }
 
 func TestPollingDirWatcher_StopsOnContextCancel(t *testing.T) {
