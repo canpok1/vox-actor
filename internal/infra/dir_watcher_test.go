@@ -322,6 +322,51 @@ func TestPollingDirWatcher_NonENOENTErrorGoesToErrCh(t *testing.T) {
 	}
 }
 
+func TestPollingDirWatcher_MultipleDirsIndependentOnOneDeleted(t *testing.T) {
+	dir1 := t.TempDir()
+	dir2 := t.TempDir()
+
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn}))
+
+	watcher := infra.NewPollingDirWatcher(
+		50*time.Millisecond,
+		infra.WithPollingDirWatcherLogger(logger),
+	)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	_, errCh1 := watcher.Watch(ctx, dir1)
+	fileCh2, errCh2 := watcher.Watch(ctx, dir2)
+
+	// dir1 のみ削除
+	if err := os.RemoveAll(dir1); err != nil {
+		t.Fatal(err)
+	}
+
+	// dir2 に新規ファイルを置くと検知される（dir1削除の影響を受けない）
+	if err := os.WriteFile(filepath.Join(dir2, "x.txt"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case f := <-fileCh2:
+		if filepath.Base(f) != "x.txt" {
+			t.Errorf("expected x.txt, got %s", filepath.Base(f))
+		}
+	case e := <-errCh2:
+		t.Fatalf("unexpected error on dir2 errCh: %v", e)
+	case <-ctx.Done():
+		t.Fatal("timeout waiting for dir2 detection")
+	}
+
+	// dir1 側は errCh にエラーが流れていないこと（再作成成功している）
+	select {
+	case e := <-errCh1:
+		t.Errorf("unexpected error on dir1 errCh: %v", e)
+	default:
+	}
+}
+
 func TestPollingDirWatcher_StopsOnContextCancel(t *testing.T) {
 	dir := t.TempDir()
 
