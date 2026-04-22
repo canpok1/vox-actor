@@ -27,7 +27,7 @@ test-e2e:
 	go test -tags=e2e ./test/e2e/...
 
 run-stream:
-	go run . watch --engine-url http://voicevox:50021 --stream --stream-addr 0.0.0.0:8080 --git-common-queue
+	go run . watch --engine-url http://voicevox:50021 --stream --stream-addr 0.0.0.0:8080 --queue
 
 install:
 	go install .
