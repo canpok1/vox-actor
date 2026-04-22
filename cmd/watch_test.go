@@ -11,6 +11,7 @@ import (
 
 	"github.com/canpok1/vox-actor/internal/app"
 	"github.com/canpok1/vox-actor/internal/domain/entity"
+	"github.com/canpok1/vox-actor/internal/infra"
 	"github.com/spf13/cobra"
 )
 
@@ -370,5 +371,152 @@ func TestWatchCmd_EnvVarVOXSpeaker(t *testing.T) {
 	speaker, _ := watchCmd.Flags().GetInt("speaker")
 	if speaker != 42 {
 		t.Errorf("expected speaker to be 42, got: %d", speaker)
+	}
+}
+
+// --- #239 --git-common-queue オプション ---
+
+// makeGitCommonQueueWatchDeps は --git-common-queue のテストで共通利用する WatchDeps を組み立てる。
+// resolver は呼び出された回数と返却パスを captured を通じて観測できる。
+func makeGitCommonQueueWatchDeps(resolver func() (string, error)) *Deps {
+	return &Deps{
+		Watch: &WatchDeps{
+			Reader:            stubScriptReader{},
+			ClientFactory:     func(_ string) app.VoicevoxClient { return &stubVoicevoxClient{} },
+			Player:            stubAudioPlayer{},
+			Mover:             stubFileMover{},
+			DirWatcherFactory: func() app.DirWatcher { return stubDirWatcher{} },
+			QueuePathResolver: resolver,
+		},
+	}
+}
+
+func TestWatchCmd_GitCommonQueue_ResolvesAndCreatesQueueDir(t *testing.T) {
+	baseDir := t.TempDir()
+	queueDir := baseDir + "/.vox-actor/queue"
+
+	resolverCalled := 0
+	deps := makeGitCommonQueueWatchDeps(func() (string, error) {
+		resolverCalled++
+		return queueDir, nil
+	})
+
+	rootCmd := makeRootCmd(deps)
+	buf := new(bytes.Buffer)
+	rootCmd.SetOut(buf)
+	rootCmd.SetErr(buf)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	rootCmd.SetContext(ctx)
+	rootCmd.SetArgs([]string{"watch", "--git-common-queue"})
+
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resolverCalled != 1 {
+		t.Errorf("expected QueuePathResolver to be called once, got %d", resolverCalled)
+	}
+
+	info, err := os.Stat(queueDir)
+	if err != nil {
+		t.Fatalf("expected queue directory to be auto-created at %s: %v", queueDir, err)
+	}
+	if !info.IsDir() {
+		t.Errorf("expected %s to be a directory", queueDir)
+	}
+}
+
+func TestWatchCmd_GitCommonQueue_WithPositionalArg_ReturnsUsageError(t *testing.T) {
+	dir := t.TempDir()
+	deps := makeGitCommonQueueWatchDeps(func() (string, error) {
+		t.Error("resolver should not be called when usage error occurs")
+		return "", nil
+	})
+
+	rootCmd := makeRootCmd(deps)
+	buf := new(bytes.Buffer)
+	rootCmd.SetOut(buf)
+	rootCmd.SetErr(buf)
+	rootCmd.SetArgs([]string{"watch", "--git-common-queue", dir})
+
+	err := rootCmd.Execute()
+	if err == nil {
+		t.Fatal("expected error when --git-common-queue is combined with a positional arg")
+	}
+	if !errors.Is(err, ErrUsage) {
+		t.Errorf("expected ErrUsage, got: %v", err)
+	}
+	if !strings.Contains(err.Error(), "--git-common-queue") {
+		t.Errorf("expected error to mention --git-common-queue, got: %v", err)
+	}
+}
+
+func TestWatchCmd_NoArgsAndNoGitCommonQueue_ReturnsUsageError(t *testing.T) {
+	rootCmd := makeRootCmd()
+	buf := new(bytes.Buffer)
+	rootCmd.SetOut(buf)
+	rootCmd.SetErr(buf)
+	rootCmd.SetArgs([]string{"watch"})
+
+	err := rootCmd.Execute()
+	if err == nil {
+		t.Fatal("expected error when neither args nor --git-common-queue is given")
+	}
+	if !errors.Is(err, ErrUsage) {
+		t.Errorf("expected ErrUsage, got: %v", err)
+	}
+}
+
+func TestWatchCmd_GitCommonQueue_ResolverReturnsNotInRepo_ReturnsError(t *testing.T) {
+	deps := makeGitCommonQueueWatchDeps(func() (string, error) {
+		return "", infra.ErrNotInGitRepo
+	})
+
+	rootCmd := makeRootCmd(deps)
+	buf := new(bytes.Buffer)
+	rootCmd.SetOut(buf)
+	rootCmd.SetErr(buf)
+	rootCmd.SetArgs([]string{"watch", "--git-common-queue"})
+
+	err := rootCmd.Execute()
+	if err == nil {
+		t.Fatal("expected error when resolver fails with not-in-git-repo")
+	}
+	if !strings.Contains(err.Error(), "gitリポジトリではありません") {
+		t.Errorf("expected error message to contain 'gitリポジトリではありません', got: %v", err)
+	}
+}
+
+func TestWatchCmd_GitCommonQueue_ResolverReturnsGitNotFound_ReturnsError(t *testing.T) {
+	deps := makeGitCommonQueueWatchDeps(func() (string, error) {
+		return "", infra.ErrGitNotFound
+	})
+
+	rootCmd := makeRootCmd(deps)
+	buf := new(bytes.Buffer)
+	rootCmd.SetOut(buf)
+	rootCmd.SetErr(buf)
+	rootCmd.SetArgs([]string{"watch", "--git-common-queue"})
+
+	err := rootCmd.Execute()
+	if err == nil {
+		t.Fatal("expected error when resolver fails with git-not-found")
+	}
+	if !strings.Contains(err.Error(), "gitコマンドが見つかりません") {
+		t.Errorf("expected error message to contain 'gitコマンドが見つかりません', got: %v", err)
+	}
+}
+
+func TestWatchCmd_HelpContainsGitCommonQueueFlag(t *testing.T) {
+	rootCmd := makeRootCmd()
+	buf := new(bytes.Buffer)
+	rootCmd.SetOut(buf)
+	rootCmd.SetArgs([]string{"watch", "--help"})
+
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("expected no error for --help, got: %v", err)
+	}
+	if !strings.Contains(buf.String(), "--git-common-queue") {
+		t.Errorf("expected help output to contain '--git-common-queue'")
 	}
 }

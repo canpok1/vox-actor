@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/canpok1/vox-actor/internal/app"
 	"github.com/canpok1/vox-actor/internal/domain/entity"
+	"github.com/canpok1/vox-actor/internal/infra"
 	"github.com/spf13/cobra"
 )
 
@@ -26,6 +28,9 @@ type WatchDeps struct {
 	// マップが空でも factory はエラーにせず player を返してよい（フォールバック表示が使われる）。
 	// client はブラウザ側の /test-clip エンドポイントから音声合成を呼ぶために渡す。
 	StreamPlayerFactory func(addr string, logger *slog.Logger, speakerLookup map[int]entity.SpeakerStyleInfo, client app.VoicevoxClient) (app.StreamPlayer, error)
+	// QueuePathResolver は --git-common-queue 指定時に監視対象パスを解決する関数。
+	// nil の場合は infra.ResolveQueuePath がデフォルトで使われる。
+	QueuePathResolver func() (string, error)
 }
 
 func makeWatchCmd(deps *WatchDeps) *cobra.Command {
@@ -33,12 +38,8 @@ func makeWatchCmd(deps *WatchDeps) *cobra.Command {
 		Use:   "watch <dir1> [<dir2> ...]",
 		Short: "複数ディレクトリを監視してテキストファイルを読み上げる",
 		Long:  "1つ以上のディレクトリを並列監視し、検知したファイルを順次読み上げる。",
-		Args: func(cmd *cobra.Command, args []string) error {
-			if err := cobra.MinimumNArgs(1)(cmd, args); err != nil {
-				return fmt.Errorf("%w: %s", ErrUsage, err)
-			}
-			return nil
-		},
+		// 位置引数と --git-common-queue の排他・片方必須は RunE 側で検証する。
+		Args: cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runWatch(cmd, args, deps)
 		},
@@ -48,11 +49,55 @@ func makeWatchCmd(deps *WatchDeps) *cobra.Command {
 	cmd.Flags().Bool("delete", false, "処理済みファイルを削除する（未指定時は各ディレクトリの done/ に移動）")
 	cmd.Flags().Bool("stream", false, "HTTPサーバーを起動し、SSE経由でブラウザに音声配信する")
 	cmd.Flags().String("stream-addr", "127.0.0.1:8080", "ストリーム配信用のバインドアドレス")
+	cmd.Flags().Bool("git-common-queue", false, "gitリポジトリ直下の .vox-actor/queue を監視対象に自動選択する（位置引数と併用不可、起動時に自動作成）")
 
 	return cmd
 }
 
+// resolveWatchPaths は watch の監視対象パスを確定する。
+// --git-common-queue が指定されていればキュー解決・自動作成を行い、
+// それ以外は与えられた位置引数をそのまま返す。
+func resolveWatchPaths(args []string, useGitCommonQueue bool, deps *WatchDeps) ([]string, error) {
+	switch {
+	case useGitCommonQueue && len(args) > 0:
+		return nil, fmt.Errorf("%w: --git-common-queue と位置引数は併用できません", ErrUsage)
+	case !useGitCommonQueue && len(args) == 0:
+		return nil, fmt.Errorf("%w: requires at least 1 arg(s), only received 0", ErrUsage)
+	}
+
+	if !useGitCommonQueue {
+		return args, nil
+	}
+
+	resolver := infra.ResolveQueuePath
+	if deps != nil && deps.QueuePathResolver != nil {
+		resolver = deps.QueuePathResolver
+	}
+	queuePath, err := resolver()
+	if err != nil {
+		switch {
+		case errors.Is(err, infra.ErrGitNotFound):
+			return nil, fmt.Errorf("gitコマンドが見つかりません")
+		case errors.Is(err, infra.ErrNotInGitRepo):
+			return nil, fmt.Errorf("カレントディレクトリはgitリポジトリではありません")
+		default:
+			return nil, err
+		}
+	}
+	if err := os.MkdirAll(queuePath, 0o755); err != nil {
+		return nil, fmt.Errorf("failed to create queue directory %s: %w", queuePath, err)
+	}
+	return []string{queuePath}, nil
+}
+
 func runWatch(cmd *cobra.Command, args []string, deps *WatchDeps) error {
+	useGitCommonQueue, _ := cmd.Flags().GetBool("git-common-queue")
+
+	args, err := resolveWatchPaths(args, useGitCommonQueue, deps)
+	if err != nil {
+		return err
+	}
+
 	for _, path := range args {
 		info, err := os.Stat(path)
 		if err != nil {

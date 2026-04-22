@@ -109,6 +109,7 @@ vox-actor act <path>
 
 ```
 vox-actor watch <dir1> [<dir2> ...]
+vox-actor watch --git-common-queue
 ```
 
 1つ以上のディレクトリを並列監視し、配置されたファイルを検知順に逐次再生する。
@@ -123,8 +124,74 @@ vox-actor watch <dir1> [<dir2> ...]
 | `--delete` | — | `false` | 処理済みファイルを削除（未指定時は各ディレクトリの `done/` に移動） |
 | `--stream` | — | `false` | HTTPサーバーを起動し、SSE経由でブラウザに音声を配信（[詳細](#ストリーム配信モード)） |
 | `--stream-addr` | — | `127.0.0.1:8080` | ストリーム配信用のバインドアドレス |
+| `--git-common-queue` | — | `false` | gitリポジトリ直下の `.vox-actor/queue` を監視対象に自動選択（[詳細](#git-common-queueオプション)） |
 | `--verbose` | — | `false` | 詳細ログを出力 |
 | `--dry-run` | — | `false` | VOICEVOX・音声再生を行わず、読み上げ対象をログ出力（[詳細](#dry-runモード)） |
+
+### `--git-common-queue`オプション
+
+`vox-actor watch --git-common-queue` を指定すると、`vox-actor config path.queue` と同じロジックで解決される「gitリポジトリ直下の `.vox-actor/queue`」を監視対象として自動選択します。
+
+- 位置引数（ディレクトリパス）との**併用はエラー**になります。
+- カレントディレクトリがgitリポジトリ外、または `git` コマンドがPATH上に無い場合は起動時にエラー終了します。
+- `.vox-actor/queue` が存在しない場合は起動時に自動作成されます（`os.MkdirAll(..., 0o755)`）。
+- worktree 上で実行した場合でも、`git rev-parse --git-common-dir` で本体リポジトリの `.git` を参照するため、**本体リポジトリ直下**の `.vox-actor/queue` が選ばれます。
+- `--delete` / `--stream` / `--stream-addr` / `--dry-run` などの既存オプションとは自由に併用できます。
+
+```bash
+# gitリポジトリ直下の .vox-actor/queue を監視（done/ 移動モード）
+vox-actor watch --git-common-queue
+
+# 削除モードで監視
+vox-actor watch --git-common-queue --delete
+
+# ストリーム配信モード
+vox-actor watch --git-common-queue --stream
+```
+
+## `config` サブコマンド
+
+```
+vox-actor config <key>
+```
+
+指定したキーの設定値を取得して標準出力に返す、読み取り専用のサブコマンド。`git config` 風のインターフェースで、初期リリースではパス解決のみをサポートする。
+
+**サポートキー:**
+
+| キー | 返却値 |
+|---|---|
+| `path.queue` | gitリポジトリ直下の `.vox-actor/queue` の絶対パス |
+
+**出力:**
+
+- 成功時: 標準出力に絶対パスを1行出力（末尾LFあり）
+- 失敗時: 標準エラーに日本語メッセージを出力
+
+**エラー条件:**
+
+| 状況 | 終了コード | エラー出力 |
+|---|---|---|
+| 成功 | 0 | — |
+| 未知のキー | 2 (`ErrUsage`) | `unknown key: <key>` とサポートキー一覧 |
+| `git` コマンドがPATH上に無い | 1 | `Error: gitコマンドが見つかりません` |
+| カレントディレクトリがgitリポジトリ外 | 1 | `Error: カレントディレクトリはgitリポジトリではありません` |
+
+**使用例:**
+
+```bash
+# gitリポジトリ内で実行
+$ cd /path/to/repo && vox-actor config path.queue
+/path/to/repo/.vox-actor/queue
+
+# 未知のキー
+$ vox-actor config path.unknown
+Error: unknown key: path.unknown
+supported keys:
+  path.queue
+```
+
+`path.queue` の解決は `git rev-parse --path-format=absolute --git-common-dir` の結果の親ディレクトリに `.vox-actor/queue` を結合したパスを返します。worktree 上で実行しても本体リポジトリ直下のパスが返るため、外部スクリプトから共通のキューディレクトリを参照できます。`config` サブコマンド自体は**パスの返却のみ**を行い、ディレクトリ作成は行いません。
 
 ## ストリーム配信モード
 
