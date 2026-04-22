@@ -7,6 +7,7 @@ import (
 	"errors"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -58,6 +59,16 @@ func extractLineContaining(t *testing.T, s, needle string) string {
 	}
 	t.Fatalf("expected output to contain a line with %q\noutput:\n%s", needle, s)
 	return ""
+}
+
+// writeTempFile は dir 配下に name のファイルを作成して絶対パスを返す。
+func writeTempFile(t *testing.T, dir, name, content string) string {
+	t.Helper()
+	path := filepath.Join(dir, name)
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("failed to write %s: %v", path, err)
+	}
+	return path
 }
 
 // countNonEmptyLines は s の空行を除いた行数を返す。
