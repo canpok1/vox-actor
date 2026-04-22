@@ -2,6 +2,7 @@ package infra
 
 import (
 	"errors"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -13,15 +14,23 @@ var ErrGitNotFound = errors.New("gitコマンドが見つかりません")
 // ErrNotInGitRepo はカレントディレクトリが git リポジトリ外であることを示すエラー。
 var ErrNotInGitRepo = errors.New("カレントディレクトリはgitリポジトリではありません")
 
+// envWorkspaceKey はワークスペースルートを明示指定するための環境変数名。
+const envWorkspaceKey = "VOX_ACTOR_WORKSPACE"
+
 // gitRunner はテスト差し替え可能な git コマンド実行関数。
 var gitRunner = exec.Command
 
-// ResolveQueuePath は `git rev-parse --path-format=absolute --git-common-dir` の
-// 結果の親ディレクトリに `.vox-actor/queue` を結合したパスを返す。
+// ResolveWorkspacePath は vox-actor のワークスペースルートの絶対パスを返す。
 //
-// worktree 上で実行しても `--git-common-dir` により本体リポジトリ直下の
-// `.vox-actor/queue` が選ばれる。ディレクトリの作成は行わない。
-func ResolveQueuePath() (string, error) {
+// 解決順:
+//  1. 環境変数 VOX_ACTOR_WORKSPACE が設定されていればその値
+//  2. git リポジトリ内であれば `<repoRoot>/.vox-actor`
+//  3. それ以外は ErrNotInGitRepo
+func ResolveWorkspacePath() (string, error) {
+	if v := os.Getenv(envWorkspaceKey); v != "" {
+		return v, nil
+	}
+
 	cmd := gitRunner("git", "rev-parse", "--path-format=absolute", "--git-common-dir")
 	out, err := cmd.Output()
 	if err != nil {
@@ -40,5 +49,17 @@ func ResolveQueuePath() (string, error) {
 	}
 
 	repoRoot := filepath.Dir(gitCommonDir)
-	return filepath.Join(repoRoot, ".vox-actor", "queue"), nil
+	return filepath.Join(repoRoot, ".vox-actor"), nil
+}
+
+// ResolveQueuePath はワークスペースルート配下の queue ディレクトリ絶対パスを返す。
+//
+// 実装は ResolveWorkspacePath の結果に `queue` を結合するだけで、環境変数/git解決は
+// ResolveWorkspacePath に一元化する。ディレクトリの作成は行わない。
+func ResolveQueuePath() (string, error) {
+	workspace, err := ResolveWorkspacePath()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(workspace, "queue"), nil
 }

@@ -11,6 +11,7 @@ import (
 // supportedConfigKeys は `vox-actor config <key>` で解決可能なキーをアルファベット順で保持する。
 var supportedConfigKeys = []string{
 	"path.queue",
+	"path.workspace",
 }
 
 func makeConfigCmd() *cobra.Command {
@@ -32,19 +33,25 @@ func makeConfigCmd() *cobra.Command {
 }
 
 func runConfig(cmd *cobra.Command, key string) error {
+	var (
+		path string
+		err  error
+	)
 	switch key {
 	case "path.queue":
-		path, err := infra.ResolveQueuePath()
-		if err != nil {
-			return err
-		}
-		if _, err := fmt.Fprintln(cmd.OutOrStdout(), path); err != nil {
-			return err
-		}
-		return nil
+		path, err = infra.ResolveQueuePath()
+	case "path.workspace":
+		path, err = infra.ResolveWorkspacePath()
 	default:
 		return fmt.Errorf("%w: unknown key: %s\nsupported keys:\n%s", ErrUsage, key, formatSupportedKeys())
 	}
+	if err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintln(cmd.OutOrStdout(), path); err != nil {
+		return err
+	}
+	return nil
 }
 
 func formatSupportedKeys() string {
