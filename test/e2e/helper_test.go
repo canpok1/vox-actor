@@ -7,6 +7,7 @@ import (
 	"errors"
 	"os"
 	"os/exec"
+	"strings"
 	"testing"
 )
 
@@ -44,4 +45,28 @@ func runCLI(t *testing.T, env map[string]string, args ...string) (stdout, stderr
 	}
 
 	return stdoutBuf.String(), stderrBuf.String(), exitCode
+}
+
+// extractLineContaining は s の中から needle を含む最初の行を返す。
+// 見つからない場合は t.Fatalf でテストを停止する。
+func extractLineContaining(t *testing.T, s, needle string) string {
+	t.Helper()
+	for _, line := range strings.Split(s, "\n") {
+		if strings.Contains(line, needle) {
+			return line
+		}
+	}
+	t.Fatalf("expected output to contain a line with %q\noutput:\n%s", needle, s)
+	return ""
+}
+
+// countNonEmptyLines は s の空行を除いた行数を返す。
+func countNonEmptyLines(s string) int {
+	n := 0
+	for _, line := range strings.Split(s, "\n") {
+		if strings.TrimSpace(line) != "" {
+			n++
+		}
+	}
+	return n
 }
