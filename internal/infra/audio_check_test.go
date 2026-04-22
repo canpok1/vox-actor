@@ -2,43 +2,36 @@ package infra
 
 // テストリスト: CheckAudioDevice
 //
-// DONE: 正常系: backend.Initが成功した場合、プラットフォームに対応するバックエンド名を返す
-// DONE: 異常系: backend.Initが失敗した場合、バックエンド名は空・エラーを返す
+// DONE: 正常系: probe.Probeが成功した場合、プラットフォームに対応するバックエンド名を返す
+// DONE: 異常系: probe.Probeが失敗した場合、バックエンド名は空・エラーを返す
 // DONE: 異常系: 失敗時のエラーメッセージに元のエラー原因が含まれること
-// DONE: 異常系: backend.Initがタイムアウトを超えてブロックした場合、エラーを返す
-// DONE: 異常系: backend が nil の場合、エラーを返す
+// DONE: 異常系: probe.Probeがタイムアウトを超えてブロックした場合、エラーを返す
+// DONE: 異常系: probe が nil の場合、エラーを返す
 
 import (
-	"context"
 	"errors"
 	"runtime"
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/gopxl/beep/v2"
 )
 
-// audioCheckBackend は audio_check のテスト専用 speakerBackend 実装。
-// initErr / blockDuration をセットすることで挙動を制御できる。
-type audioCheckBackend struct {
-	initErr       error
+// audioCheckProbe は audio_check のテスト専用 audioProbe 実装。
+// probeErr / blockDuration をセットすることで挙動を制御できる。
+type audioCheckProbe struct {
+	probeErr      error
 	blockDuration time.Duration
 }
 
-func (b *audioCheckBackend) Init(_ beep.SampleRate, _ int) error {
-	if b.blockDuration > 0 {
-		time.Sleep(b.blockDuration)
+func (p *audioCheckProbe) Probe() error {
+	if p.blockDuration > 0 {
+		time.Sleep(p.blockDuration)
 	}
-	return b.initErr
-}
-
-func (b *audioCheckBackend) PlayAndWait(_ context.Context, _ beep.Streamer) error {
-	return errors.New("PlayAndWait should not be called in audio-check tests")
+	return p.probeErr
 }
 
 func TestCheckAudioDevice_Success_ReturnsPlatformBackend(t *testing.T) {
-	backend, err := CheckAudioDevice(&audioCheckBackend{})
+	backend, err := CheckAudioDevice(&audioCheckProbe{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -61,7 +54,7 @@ func TestCheckAudioDevice_Success_ReturnsPlatformBackend(t *testing.T) {
 
 func TestCheckAudioDevice_Failure(t *testing.T) {
 	reason := "no output device available"
-	backend, err := CheckAudioDevice(&audioCheckBackend{initErr: errors.New(reason)})
+	backend, err := CheckAudioDevice(&audioCheckProbe{probeErr: errors.New(reason)})
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -76,7 +69,7 @@ func TestCheckAudioDevice_Failure(t *testing.T) {
 func TestCheckAudioDevice_Timeout(t *testing.T) {
 	start := time.Now()
 	backend, err := CheckAudioDevice(
-		&audioCheckBackend{blockDuration: 200 * time.Millisecond},
+		&audioCheckProbe{blockDuration: 200 * time.Millisecond},
 		WithAudioCheckTimeout(20*time.Millisecond),
 	)
 	elapsed := time.Since(start)
@@ -95,9 +88,9 @@ func TestCheckAudioDevice_Timeout(t *testing.T) {
 	}
 }
 
-func TestCheckAudioDevice_NilBackend(t *testing.T) {
+func TestCheckAudioDevice_NilProbe(t *testing.T) {
 	_, err := CheckAudioDevice(nil)
 	if err == nil {
-		t.Fatal("expected error when backend is nil, got nil")
+		t.Fatal("expected error when probe is nil, got nil")
 	}
 }
