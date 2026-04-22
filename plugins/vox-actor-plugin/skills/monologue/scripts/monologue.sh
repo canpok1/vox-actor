@@ -49,12 +49,8 @@ if [ "$ROLL" -gt "$PROBABILITY" ]; then
   exit 0
 fi
 
-if [ -n "$VOX_ACTOR_WORKSPACE" ]; then
-  QUEUE_DIR="${VOX_ACTOR_WORKSPACE}/queue"
-else
-  QUEUE_DIR=$(vox-actor config path.queue) || exit 1
-fi
-WORKSPACE_DIR="$(dirname "$QUEUE_DIR")"
+QUEUE_DIR=$(vox-actor config path.queue) || exit 1
+WORKSPACE_DIR=$(vox-actor config path.workspace) || exit 1
 
 MODE="${VOX_ACTOR_MONOLOGUE_MODE:-}"
 if [ -z "$MODE" ]; then
