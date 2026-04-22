@@ -21,8 +21,22 @@ import (
 // t.Fatalf で停止する想定。
 func runCLI(t *testing.T, env map[string]string, args ...string) (stdout, stderr string, exitCode int) {
 	t.Helper()
+	return runCLIInDir(t, "", env, args...)
+}
+
+// runCLIInDir は runCLI と同等だが、子プロセスのワーキングディレクトリを
+// dir に設定して実行する。dir が空文字列の場合は現在のワーキングディレクトリを
+// そのまま引き継ぐ（runCLI と同じ挙動）。
+//
+// config サブコマンドのように gitリポジトリ有無でパス解決が変わるケースを
+// 明示的に制御したいテストから利用する。
+func runCLIInDir(t *testing.T, dir string, env map[string]string, args ...string) (stdout, stderr string, exitCode int) {
+	t.Helper()
 
 	cmd := exec.Command(binaryPath, args...)
+	if dir != "" {
+		cmd.Dir = dir
+	}
 	if len(env) > 0 {
 		base := os.Environ()
 		for k, v := range env {
