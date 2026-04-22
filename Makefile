@@ -34,4 +34,4 @@ install:
 
 all: build
 
-.PHONY: all setup build clean test test-e2e fmt lint depcheck run-stream
+.PHONY: all setup build clean test test-e2e fmt lint depcheck run-stream install
