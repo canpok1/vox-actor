@@ -56,6 +56,11 @@ func main() {
 			ClientFactory: clientFactory,
 			Player:        player,
 		},
+		AudioCheck: &cmd.AudioCheckDeps{
+			CheckFunc: func() (string, error) {
+				return infra.CheckAudioDevice(infra.NewRealSpeakerBackend())
+			},
+		},
 	}
 
 	if err := cmd.Execute(deps); err != nil {
