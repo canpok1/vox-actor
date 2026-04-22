@@ -22,8 +22,6 @@ func WithAudioCheckTimeout(d time.Duration) AudioCheckOption {
 }
 
 // audioProbe は音声出力デバイスの可用性を検査する抽象。
-// 実装はデバイスを open → ready 待機 → 内部エラー判定までを行い、
-// 実際にデバイスが利用可能な場合のみ nil を返す。
 type audioProbe interface {
 	Probe() error
 }

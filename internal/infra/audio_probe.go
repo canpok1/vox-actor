@@ -12,19 +12,19 @@ const (
 	otoProbeBufferSize   = 50 * time.Millisecond
 )
 
-// OtoAudioProbe は ebitengine/oto を直接使って音声出力デバイスを検査する audioProbe 実装。
+// otoAudioProbe は oto を直接使う audioProbe 実装。
 // beep/speaker は oto.Context 生成後のエラーを外部に公開しないため、
 // デバイス不在を正しく検知するには oto を直接扱う必要がある。
-type OtoAudioProbe struct{}
+type otoAudioProbe struct{}
 
-// NewOtoAudioProbe は OtoAudioProbe を生成する。
-func NewOtoAudioProbe() *OtoAudioProbe {
-	return &OtoAudioProbe{}
+// NewOtoAudioProbe は oto を使う audioProbe 実装を生成する。
+func NewOtoAudioProbe() *otoAudioProbe {
+	return &otoAudioProbe{}
 }
 
-// Probe は oto.NewContext でデバイスを open し、ready 待機後に Err() を参照して
-// 実際に open できたかを判定する。open 失敗時は non-nil を返す。
-func (p *OtoAudioProbe) Probe() error {
+// Probe は oto.NewContext でデバイス open 後、ready を待ってから ctx.Err() を参照する。
+// ready 待機前の Err() は初期化中のため信頼できない。
+func (p *otoAudioProbe) Probe() error {
 	ctx, ready, err := oto.NewContext(&oto.NewContextOptions{
 		SampleRate:   otoProbeSampleRate,
 		ChannelCount: otoProbeChannelCount,
