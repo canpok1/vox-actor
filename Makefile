@@ -29,6 +29,9 @@ test-e2e:
 run-stream:
 	go run . watch --engine-url http://voicevox:50021 --stream --stream-addr 0.0.0.0:8080 .vox-actor/queue
 
+install:
+	go install .
+
 all: build
 
 .PHONY: all setup build clean test test-e2e fmt lint depcheck run-stream
