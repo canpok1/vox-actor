@@ -57,7 +57,9 @@ func main() {
 			Player:        player,
 		},
 		AudioCheck: &cmd.AudioCheckDeps{
-			CheckFunc: infra.CheckAudioDevice,
+			CheckFunc: func() (string, error) {
+				return infra.CheckAudioDevice(infra.NewRealSpeakerBackend())
+			},
 		},
 	}
 

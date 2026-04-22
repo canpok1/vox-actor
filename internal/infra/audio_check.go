@@ -6,30 +6,47 @@ import (
 	"time"
 
 	"github.com/gopxl/beep/v2"
-	"github.com/gopxl/beep/v2/speaker"
 )
 
-// audioInitFunc は音声デバイスの初期化関数。テストから差し替え可能にするためpackage変数にしている。
-var audioInitFunc = func(sampleRate beep.SampleRate, bufferSize int) error {
-	return speaker.Init(sampleRate, bufferSize)
+const (
+	defaultAudioCheckTimeout = 2 * time.Second
+	audioCheckSampleRate     = beep.SampleRate(44100)
+	audioCheckBufferSize     = 512
+)
+
+// audioCheckConfig は CheckAudioDevice の調整可能なパラメータ。
+type audioCheckConfig struct {
+	timeout time.Duration
 }
 
-// audioCheckTimeout はデバイス初期化がブロックした場合の上限。テストから短縮できる。
-var audioCheckTimeout = 2 * time.Second
+// AudioCheckOption は CheckAudioDevice の挙動をカスタマイズする関数型オプション。
+type AudioCheckOption func(*audioCheckConfig)
 
-// audioCheckSampleRate はデバイス可用性チェックに使うサンプリングレート。
-const audioCheckSampleRate = beep.SampleRate(44100)
+// WithAudioCheckTimeout は CheckAudioDevice の初期化タイムアウトを上書きする。
+func WithAudioCheckTimeout(d time.Duration) AudioCheckOption {
+	return func(c *audioCheckConfig) { c.timeout = d }
+}
 
-// audioCheckBufferSize はデバイス可用性チェックに使うバッファサイズ。
-const audioCheckBufferSize = 512
+// CheckAudioDevice は backend.Init を呼び出して音声出力デバイスの可用性を判定する。
+// 成功時はプラットフォームに対応するバックエンド名（coreaudio / pulseaudio / wasapi）を返す。
+// 失敗時・タイムアウト時は空文字列とエラーを返す。
+//
+// 設計メモ: goroutine内のbackend.Initが戻らない場合、timeoutでselectを抜けて戻るが、
+// goroutine自体はInitが戻るまで残留する。done channel は buffered (cap=1) のため、
+// レシーバが居なくても送信は成功し goroutine は正常終了する。CLIは直後に終了するため
+// 短時間なら常駐しない。
+func CheckAudioDevice(backend speakerBackend, opts ...AudioCheckOption) (string, error) {
+	if backend == nil {
+		return "", fmt.Errorf("speaker backend must not be nil")
+	}
+	cfg := audioCheckConfig{timeout: defaultAudioCheckTimeout}
+	for _, o := range opts {
+		o(&cfg)
+	}
 
-// CheckAudioDevice は音声出力デバイスを open → 即 close のみ行い、可用性を判定する。
-// 成功時はバックエンド名（coreaudio / pulseaudio / wasapi など）を返す。
-// 失敗時は空文字列とエラーを返す。
-func CheckAudioDevice() (string, error) {
 	done := make(chan error, 1)
 	go func() {
-		done <- audioInitFunc(audioCheckSampleRate, audioCheckBufferSize)
+		done <- backend.Init(audioCheckSampleRate, audioCheckBufferSize)
 	}()
 
 	select {
@@ -38,13 +55,11 @@ func CheckAudioDevice() (string, error) {
 			return "", fmt.Errorf("failed to initialize audio device: %w", err)
 		}
 		return audioBackendName()
-	case <-time.After(audioCheckTimeout):
-		return "", fmt.Errorf("audio device initialization timed out after %s", audioCheckTimeout)
+	case <-time.After(cfg.timeout):
+		return "", fmt.Errorf("audio device initialization timed out after %s", cfg.timeout)
 	}
 }
 
-// audioBackendName は現在のプラットフォームに対応するバックエンド名を返す。
-// 未対応プラットフォームではエラーを返す。
 func audioBackendName() (string, error) {
 	switch runtime.GOOS {
 	case "darwin":
