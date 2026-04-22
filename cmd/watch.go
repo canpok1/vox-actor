@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -75,14 +74,7 @@ func resolveWatchPaths(args []string, useGitCommonQueue bool, deps *WatchDeps) (
 	}
 	queuePath, err := resolver()
 	if err != nil {
-		switch {
-		case errors.Is(err, infra.ErrGitNotFound):
-			return nil, fmt.Errorf("gitコマンドが見つかりません")
-		case errors.Is(err, infra.ErrNotInGitRepo):
-			return nil, fmt.Errorf("カレントディレクトリはgitリポジトリではありません")
-		default:
-			return nil, err
-		}
+		return nil, err
 	}
 	if err := os.MkdirAll(queuePath, 0o755); err != nil {
 		return nil, fmt.Errorf("failed to create queue directory %s: %w", queuePath, err)

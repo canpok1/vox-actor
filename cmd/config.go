@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"errors"
 	"fmt"
 	"strings"
 
@@ -37,7 +36,7 @@ func runConfig(cmd *cobra.Command, key string) error {
 	case "path.queue":
 		path, err := infra.ResolveQueuePath()
 		if err != nil {
-			return formatConfigError(err)
+			return err
 		}
 		if _, err := fmt.Fprintln(cmd.OutOrStdout(), path); err != nil {
 			return err
@@ -45,18 +44,6 @@ func runConfig(cmd *cobra.Command, key string) error {
 		return nil
 	default:
 		return fmt.Errorf("%w: unknown key: %s\nsupported keys:\n%s", ErrUsage, key, formatSupportedKeys())
-	}
-}
-
-// formatConfigError は infra パッケージのセンチネルエラーを日本語メッセージ付きのエラーに変換する。
-func formatConfigError(err error) error {
-	switch {
-	case errors.Is(err, infra.ErrGitNotFound):
-		return fmt.Errorf("gitコマンドが見つかりません")
-	case errors.Is(err, infra.ErrNotInGitRepo):
-		return fmt.Errorf("カレントディレクトリはgitリポジトリではありません")
-	default:
-		return err
 	}
 }
 
