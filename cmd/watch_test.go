@@ -274,7 +274,7 @@ func TestWatchCmd_Stream_GetSpeakersFailure_ReturnsError(t *testing.T) {
 			ClientFactory:     func(_ string) app.VoicevoxClient { return stubClient },
 			Player:            stubAudioPlayer{},
 			Mover:             stubFileMover{},
-			DirWatcherFactory: func() app.DirWatcher { return stubDirWatcher{} },
+			DirWatcherFactory: func(_ *slog.Logger) app.DirWatcher { return stubDirWatcher{} },
 			StreamPlayerFactory: func(_ string, _ *slog.Logger, _ map[int]entity.SpeakerStyleInfo, _ app.VoicevoxClient) (app.StreamPlayer, error) {
 				t.Error("StreamPlayerFactory should not be called when GetSpeakers fails")
 				return stubStreamPlayer{}, nil
@@ -315,7 +315,7 @@ func TestWatchCmd_Stream_PassesSpeakerLookupToFactory(t *testing.T) {
 			ClientFactory:     func(_ string) app.VoicevoxClient { return stubClient },
 			Player:            stubAudioPlayer{},
 			Mover:             stubFileMover{},
-			DirWatcherFactory: func() app.DirWatcher { return stubDirWatcher{} },
+			DirWatcherFactory: func(_ *slog.Logger) app.DirWatcher { return stubDirWatcher{} },
 			StreamPlayerFactory: func(_ string, _ *slog.Logger, lookup map[int]entity.SpeakerStyleInfo, _ app.VoicevoxClient) (app.StreamPlayer, error) {
 				captured = lookup
 				// usecase.Run まで進ませず、watch loop から確実に抜けるためにキャンセルを返す。
@@ -385,7 +385,7 @@ func makeQueueWatchDeps(resolver func() (string, error)) *Deps {
 			ClientFactory:     func(_ string) app.VoicevoxClient { return &stubVoicevoxClient{} },
 			Player:            stubAudioPlayer{},
 			Mover:             stubFileMover{},
-			DirWatcherFactory: func() app.DirWatcher { return stubDirWatcher{} },
+			DirWatcherFactory: func(_ *slog.Logger) app.DirWatcher { return stubDirWatcher{} },
 			QueuePathResolver: resolver,
 		},
 	}

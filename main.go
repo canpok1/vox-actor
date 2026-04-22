@@ -23,8 +23,11 @@ func main() {
 		return infra.NewRetryableVoicevoxClient(infra.NewVoicevoxClient(engineURL))
 	}
 
-	dirWatcherFactory := func() app.DirWatcher {
-		return infra.NewPollingDirWatcher(infra.PollInterval)
+	dirWatcherFactory := func(logger *slog.Logger) app.DirWatcher {
+		return infra.NewPollingDirWatcher(
+			infra.PollInterval,
+			infra.WithPollingDirWatcherLogger(logger),
+		)
 	}
 
 	reader := infra.NewFileReader()

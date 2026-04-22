@@ -21,7 +21,7 @@ type WatchDeps struct {
 	ClientFactory     func(engineURL string) app.VoicevoxClient
 	Player            app.AudioPlayer
 	Mover             app.FileMover
-	DirWatcherFactory func() app.DirWatcher
+	DirWatcherFactory func(logger *slog.Logger) app.DirWatcher
 	// StreamPlayerFactory は --stream 指定時にストリーム配信用の AudioPlayer を生成する。
 	// speakerLookup は /speakers 取得結果から構築されたマップで、配信時に話者名/スタイル名を解決する。
 	// マップが空でも factory はエラーにせず player を返してよい（フォールバック表示が使われる）。
@@ -164,7 +164,7 @@ func runWatch(cmd *cobra.Command, args []string, deps *WatchDeps) error {
 		player = sp
 	}
 
-	watcher := deps.DirWatcherFactory()
+	watcher := deps.DirWatcherFactory(logger)
 	opts := []app.WatchOption{app.WithWatchLogger(logger)}
 	if deleteMode {
 		opts = append(opts, app.WithDeleteMode())
