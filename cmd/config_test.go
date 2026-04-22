@@ -52,6 +52,7 @@ func TestConfigCmd_RegisteredAsSubcommand(t *testing.T) {
 }
 
 func TestConfigCmd_PathQueue_InsideGitRepo_PrintsAbsolutePath(t *testing.T) {
+	t.Setenv("VOX_ACTOR_WORKSPACE", "")
 	repoRoot := withTempGitRepo(t)
 
 	rootCmd := makeRootCmd()
@@ -75,7 +76,103 @@ func TestConfigCmd_PathQueue_InsideGitRepo_PrintsAbsolutePath(t *testing.T) {
 	}
 }
 
+func TestConfigCmd_PathWorkspace_InsideGitRepo_PrintsAbsolutePath(t *testing.T) {
+	t.Setenv("VOX_ACTOR_WORKSPACE", "")
+	repoRoot := withTempGitRepo(t)
+
+	rootCmd := makeRootCmd()
+	outBuf := new(bytes.Buffer)
+	errBuf := new(bytes.Buffer)
+	rootCmd.SetOut(outBuf)
+	rootCmd.SetErr(errBuf)
+	rootCmd.SetArgs([]string{"config", "path.workspace"})
+
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("unexpected error: %v, stderr: %s", err, errBuf.String())
+	}
+
+	got := strings.TrimRight(outBuf.String(), "\n")
+	want := filepath.Join(repoRoot, ".vox-actor")
+	wantEval, _ := filepath.EvalSymlinks(filepath.Dir(want))
+	gotEval, _ := filepath.EvalSymlinks(filepath.Dir(got))
+	if gotEval != wantEval || filepath.Base(got) != filepath.Base(want) {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestConfigCmd_PathWorkspace_WithEnv_PrintsEnvValue(t *testing.T) {
+	workspace := t.TempDir()
+	t.Setenv("VOX_ACTOR_WORKSPACE", workspace)
+
+	rootCmd := makeRootCmd()
+	outBuf := new(bytes.Buffer)
+	errBuf := new(bytes.Buffer)
+	rootCmd.SetOut(outBuf)
+	rootCmd.SetErr(errBuf)
+	rootCmd.SetArgs([]string{"config", "path.workspace"})
+
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("unexpected error: %v, stderr: %s", err, errBuf.String())
+	}
+
+	got := strings.TrimRight(outBuf.String(), "\n")
+	if got != workspace {
+		t.Errorf("got %q, want %q", got, workspace)
+	}
+}
+
+func TestConfigCmd_PathWorkspace_OutsideGitRepo_ReturnsErrorWithJapaneseMessage(t *testing.T) {
+	t.Setenv("VOX_ACTOR_WORKSPACE", "")
+	dir := t.TempDir()
+	orig, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("failed to getwd: %v", err)
+	}
+	if err := os.Chdir(dir); err != nil {
+		t.Fatalf("failed to chdir: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(orig) })
+
+	rootCmd := makeRootCmd()
+	outBuf := new(bytes.Buffer)
+	errBuf := new(bytes.Buffer)
+	rootCmd.SetOut(outBuf)
+	rootCmd.SetErr(errBuf)
+	rootCmd.SetArgs([]string{"config", "path.workspace"})
+
+	err = rootCmd.Execute()
+	if err == nil {
+		t.Fatal("expected error when outside git repo, got nil")
+	}
+	if !strings.Contains(err.Error(), "gitリポジトリではありません") {
+		t.Errorf("expected error to contain 'gitリポジトリではありません', got: %v", err)
+	}
+}
+
+func TestConfigCmd_PathQueue_WithEnv_PrintsEnvValueJoinedWithQueue(t *testing.T) {
+	workspace := t.TempDir()
+	t.Setenv("VOX_ACTOR_WORKSPACE", workspace)
+
+	rootCmd := makeRootCmd()
+	outBuf := new(bytes.Buffer)
+	errBuf := new(bytes.Buffer)
+	rootCmd.SetOut(outBuf)
+	rootCmd.SetErr(errBuf)
+	rootCmd.SetArgs([]string{"config", "path.queue"})
+
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("unexpected error: %v, stderr: %s", err, errBuf.String())
+	}
+
+	got := strings.TrimRight(outBuf.String(), "\n")
+	want := filepath.Join(workspace, "queue")
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
 func TestConfigCmd_PathQueue_OutsideGitRepo_ReturnsErrorWithJapaneseMessage(t *testing.T) {
+	t.Setenv("VOX_ACTOR_WORKSPACE", "")
 	// TempDir はgitリポジトリではない
 	dir := t.TempDir()
 	orig, err := os.Getwd()

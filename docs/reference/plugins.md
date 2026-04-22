@@ -152,11 +152,11 @@ claude code に `vox-actor-plugin` を導入すると、以下のスラッシュ
 
 > **前提**: `vox-actor` コマンドのインストールは必須です（両スクリプトは起動時に `command -v vox-actor` で存在確認し、未インストール時は `[ERROR] vox-actor コマンドが必要です` を stderr に出して非0終了します）。
 >
-> **ワークスペースの解決順**:
-> 1. `VOX_ACTOR_WORKSPACE` が設定されていればその配下の `queue/` を使う
-> 2. 未設定なら `vox-actor config path.queue` の出力（gitリポジトリ直下の `.vox-actor/queue` の絶対パス）を使う
+> **ワークスペースの解決**: スクリプトは `vox-actor config path.workspace` / `vox-actor config path.queue` を呼ぶだけで、環境変数の分岐は CLI 側が担います。CLI の解決順は以下のとおりです。
+> 1. `VOX_ACTOR_WORKSPACE` が設定されていればその値をワークスペースルートとして使う（queue は `${VOX_ACTOR_WORKSPACE}/queue`）
+> 2. 未設定なら gitリポジトリ直下の `.vox-actor` をワークスペースルートとする（queue は `<repo>/.vox-actor/queue`）
 >
-> git 管理外ディレクトリで `VOX_ACTOR_WORKSPACE` を明示しないまま実行すると `vox-actor config path.queue` が非0終了し、そのエラーがユーザーに表示されてスクリプトも終了します。git 外で利用する場合は `VOX_ACTOR_WORKSPACE` を明示してください。`file` モードでホストとLLM実行環境を分ける場合も、双方から参照可能な共有パスを明示的に指定します。
+> git 管理外ディレクトリで `VOX_ACTOR_WORKSPACE` を明示しないまま実行すると CLI が非0終了し、そのエラーがユーザーに表示されてスクリプトも終了します。git 外で利用する場合は `VOX_ACTOR_WORKSPACE` を明示してください。`file` モードでホストとLLM実行環境を分ける場合も、双方から参照可能な共有パスを明示的に指定します。
 
 モードは `VOX_ACTOR_MONOLOGUE_MODE` 環境変数で明示するか、未設定時は `vox-actor audio-check` の終了コードで自動判定されます（0 → `direct`、非0 → `file`）。
 
@@ -166,10 +166,10 @@ claude code をコンテナ／リモートで動かし、音声デバイスは�
 
 1. **ホスト側で監視プロセスを常駐させる**
    ```bash
-   # vox-actor 関連ファイルのルートディレクトリを指定
+   # vox-actor 関連ファイルのルートディレクトリを指定（vox-actor CLI が VOX_ACTOR_WORKSPACE を解釈する）
    export VOX_ACTOR_WORKSPACE=/path/to/shared/directory
-   # 通知ファイルは $VOX_ACTOR_WORKSPACE/queue/ に配置されるためそこを監視する
-   vox-actor watch "$VOX_ACTOR_WORKSPACE/queue"
+   # 通知ファイルの配置先は vox-actor config path.queue で解決できる
+   vox-actor watch "$(vox-actor config path.queue)"
    ```
 
 2. **claude code 側で `file` モードを明示し、共有ディレクトリを指定する**
@@ -222,7 +222,7 @@ vox-actor act --watch-delete /path/to/watch-dir
 
 ### エラーログ
 
-`direct` モードでの失敗は以下のログに追記されます（いずれも末尾200行でローテーション）。`tail -f` で確認できます。いずれも解決済みワークスペースルート直下に配置されます（`VOX_ACTOR_WORKSPACE` 明示時はその直下、未指定時は `vox-actor config path.queue` の出力の親ディレクトリ直下）。
+`direct` モードでの失敗は以下のログに追記されます（いずれも末尾200行でローテーション）。`tail -f` で確認できます。いずれも `vox-actor config path.workspace` で解決されるワークスペースルート直下に配置されます。
 
 - `monologue` スキル: `<workspace>/monologue-errors.log`
 - `speak` / `talk` スキル: `<workspace>/play-script-errors.log`

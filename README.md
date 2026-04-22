@@ -109,9 +109,9 @@ claude code と `vox-actor` CLI が同じ環境で動作するケースです。
 claude code がコンテナ／リモートで動作し、音声デバイスはホスト側のみにある構成です。ホスト側で `vox-actor watch` を常駐させ、claude code側は共有ディレクトリへ通知ファイルを書き出すことで、読み上げが逐次再生されます。
 
 ```bash
-# ホスト側: 共有ディレクトリを監視
+# ホスト側: 共有ディレクトリを監視（VOX_ACTOR_WORKSPACE は vox-actor CLI が解釈する）
 export VOX_ACTOR_WORKSPACE=/path/to/shared/directory
-vox-actor watch "$VOX_ACTOR_WORKSPACE/queue"
+vox-actor watch "$(vox-actor config path.queue)"
 ```
 
 ```bash

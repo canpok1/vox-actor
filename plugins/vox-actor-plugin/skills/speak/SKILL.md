@@ -74,10 +74,10 @@ ${CLAUDE_PLUGIN_ROOT}/scripts/play-script.sh <jsonl_path>
 再生の実行に使用する `${CLAUDE_PLUGIN_ROOT}/scripts/play-script.sh` は以下の前提条件を必要とする:
 
 - **`vox-actor` コマンドのインストール必須**: スクリプト冒頭で `command -v vox-actor` を検査し、未インストール時は `[ERROR] vox-actor コマンドが必要です` を stderr に出して非0終了する
-- **ワークスペースの解決順**:
-  1. 環境変数 `VOX_ACTOR_WORKSPACE` が設定されていればその配下の `queue/` を使う
-  2. 未設定なら `vox-actor config path.queue` の出力（gitリポジトリ直下の `.vox-actor/queue` の絶対パス）を使う
-- **git 管理外で利用する場合**: `VOX_ACTOR_WORKSPACE` の明示が必要。未指定のままだと `vox-actor config path.queue` が非0終了し、そのエラーメッセージが表示されてスクリプトも終了する
+- **ワークスペースの解決**: スクリプトは `vox-actor config path.queue` / `vox-actor config path.workspace` を呼ぶだけで、環境変数の分岐は CLI 側が担う。CLI の解決順は以下のとおり
+  1. 環境変数 `VOX_ACTOR_WORKSPACE` が設定されていればその値をワークスペースルートとして使う（queue は `${VOX_ACTOR_WORKSPACE}/queue`）
+  2. 未設定なら gitリポジトリ直下の `.vox-actor` をワークスペースルートとする（queue は `<repo>/.vox-actor/queue`）
+- **git 管理外で利用する場合**: `VOX_ACTOR_WORKSPACE` の明示が必要。未指定のままだと CLI が非0終了し、そのエラーメッセージが表示されてスクリプトも終了する
 - **出力先ディレクトリ**: ワークスペースルートおよび配下の `queue/` は `play-script.sh` が必要に応じて自動作成する。`tmp/` ディレクトリは Claude が Write する前に `mkdir -p "${VOX_ACTOR_WORKSPACE}/tmp"` で作成する（`tmp/` 利用時は `VOX_ACTOR_WORKSPACE` の明示が前提）
 - `play-script-errors.log`（directモードのエラーログ）はワークスペースルート直下に配置される
 
@@ -102,7 +102,7 @@ ${CLAUDE_PLUGIN_ROOT}/scripts/play-script.sh <jsonl_path>
 
 #### `file` モード
 
-一時ファイルを解決された queue ディレクトリ（`VOX_ACTOR_WORKSPACE` 明示時は `${VOX_ACTOR_WORKSPACE}/queue/`、未指定時は `vox-actor config path.queue` の出力先）配下へ `mv` で移動する（渡された一時ファイル名がそのまま使われるため、`speak_<ms>.jsonl` なら `queue/speak_<ms>.jsonl` となる）。外部の通知監視プロセス（`vox-actor watch` 等）はこの `queue/` ディレクトリを監視対象として検知・読み上げする。
+一時ファイルを `vox-actor config path.queue` で解決された queue ディレクトリ配下へ `mv` で移動する（渡された一時ファイル名がそのまま使われるため、`speak_<ms>.jsonl` なら `queue/speak_<ms>.jsonl` となる）。外部の通知監視プロセス（`vox-actor watch` 等）はこの `queue/` ディレクトリを監視対象として検知・読み上げする。
 
 ## JSONL 出力例
 
