@@ -75,26 +75,6 @@
           }
         ]
       }
-    ],
-    "Notification": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "./.claude/hooks/notify-host.sh 'Claude Code Notify'"
-          }
-        ]
-      }
-    ],
-    "Stop": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "./.claude/hooks/notify-host.sh 'Claude Code Task Finished'"
-          }
-        ]
-      }
     ]
   },
   "statusLine": {
