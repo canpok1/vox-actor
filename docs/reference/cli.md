@@ -193,6 +193,73 @@ supported keys:
 
 `path.queue` の解決は `git rev-parse --path-format=absolute --git-common-dir` の結果の親ディレクトリに `.vox-actor/queue` を結合したパスを返します。worktree 上で実行しても本体リポジトリ直下のパスが返るため、外部スクリプトから共通のキューディレクトリを参照できます。`config` サブコマンド自体は**パスの返却のみ**を行い、ディレクトリ作成は行いません。
 
+## `audio-check` サブコマンド
+
+```
+vox-actor audio-check [-v|--verbose]
+```
+
+音声出力デバイスを **open → 即 close** のみ行い、実再生を伴わずに可用性を**終了コード**で返す診断用サブコマンド。シェルスクリプトから `VOX_ACTOR_MONOLOGUE_MODE` 未指定時のモード判定（direct / file）に利用できる。
+
+| オプション | 環境変数 | デフォルト値 | 説明 |
+|---|---|---|---|
+| `--verbose` / `-v` | — | `false` | 診断メッセージを標準エラー出力に出力する |
+
+**出力と終了コード:**
+
+| 状況 | 終了コード | stdout | stderr (通常) | stderr (`--verbose`) |
+|---|---|---|---|---|
+| デバイス open 成功 | `0` | 空 | 空 | `audio backend: <name>` |
+| デバイス open 失敗 | `1` | 空 | 空 | `Error: <エラー内容>` |
+| バックエンド未対応 OS | `1` | 空 | 空 | `Error: unsupported platform: <GOOS>` |
+
+- `stdout` には一切出力しない。機械可読な判定は**終了コード**で行う。
+- 失敗理由の細分化は `--verbose` 指定時の stderr 出力で確認する。
+- 呼び出しはミリ秒オーダーで完了する想定（内部に2秒のタイムアウトを持つ）。
+- 本サブコマンドは**ローカルの出力デバイスのみ**を対象とする。VOICEVOX エンジンの疎通確認は行わない。
+
+**バックエンド名:**
+
+| GOOS | backend |
+|---|---|
+| `darwin` | `coreaudio` |
+| `linux` | `pulseaudio` |
+| `windows` | `wasapi` |
+
+**使用例:**
+
+```bash
+# 直接実行（成功）
+$ vox-actor audio-check
+$ echo $?
+0
+
+# verbose 出力
+$ vox-actor audio-check -v
+audio backend: coreaudio
+$ echo $?
+0
+
+# 音声デバイスが使えない環境（例: CI コンテナ）
+$ vox-actor audio-check -v
+Error: failed to initialize audio device: no output device available
+$ echo $?
+1
+```
+
+**シェルスクリプトからのモード判定例:**
+
+```bash
+MODE="${VOX_ACTOR_MONOLOGUE_MODE:-}"
+if [ -z "$MODE" ]; then
+  if vox-actor audio-check >/dev/null 2>&1; then
+    MODE="direct"
+  else
+    MODE="file"
+  fi
+fi
+```
+
 ## ストリーム配信モード
 
 `watch --stream` を付けると、ローカルスピーカー再生の代わりにHTTPサーバーを起動し、SSE経由でブラウザに音声を配信します。音声デバイスが利用できない環境でホスト側のブラウザに再生させるケースで利用できます。

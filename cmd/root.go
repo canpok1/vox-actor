@@ -14,9 +14,10 @@ var ErrUsage = errors.New("usage error")
 
 // Deps はルートコマンドの依存を保持する。
 type Deps struct {
-	Act   *ActDeps
-	Watch *WatchDeps
-	Say   *SayDeps
+	Act        *ActDeps
+	Watch      *WatchDeps
+	Say        *SayDeps
+	AudioCheck *AudioCheckDeps
 }
 
 func makeRootCmd(deps ...*Deps) *cobra.Command {
@@ -38,15 +39,18 @@ func makeRootCmd(deps ...*Deps) *cobra.Command {
 	var actDeps *ActDeps
 	var watchDeps *WatchDeps
 	var sayDeps *SayDeps
+	var audioCheckDeps *AudioCheckDeps
 	if d != nil {
 		actDeps = d.Act
 		watchDeps = d.Watch
 		sayDeps = d.Say
+		audioCheckDeps = d.AudioCheck
 	}
 	cmd.AddCommand(makeActCmd(actDeps))
 	cmd.AddCommand(makeWatchCmd(watchDeps))
 	cmd.AddCommand(makeSayCmd(sayDeps))
 	cmd.AddCommand(makeConfigCmd())
+	cmd.AddCommand(makeAudioCheckCmd(audioCheckDeps))
 
 	return cmd
 }

@@ -56,6 +56,9 @@ func main() {
 			ClientFactory: clientFactory,
 			Player:        player,
 		},
+		AudioCheck: &cmd.AudioCheckDeps{
+			CheckFunc: infra.CheckAudioDevice,
+		},
 	}
 
 	if err := cmd.Execute(deps); err != nil {
