@@ -109,7 +109,7 @@ vox-actor act <path>
 
 ```
 vox-actor watch <dir1> [<dir2> ...]
-vox-actor watch --git-common-queue
+vox-actor watch --queue
 ```
 
 1つ以上のディレクトリを並列監視し、配置されたファイルを検知順に逐次再生する。
@@ -124,29 +124,29 @@ vox-actor watch --git-common-queue
 | `--delete` | — | `false` | 処理済みファイルを削除（未指定時は各ディレクトリの `done/` に移動） |
 | `--stream` | — | `false` | HTTPサーバーを起動し、SSE経由でブラウザに音声を配信（[詳細](#ストリーム配信モード)） |
 | `--stream-addr` | — | `127.0.0.1:8080` | ストリーム配信用のバインドアドレス |
-| `--git-common-queue` | — | `false` | gitリポジトリ直下の `.vox-actor/queue` を監視対象に自動選択（[詳細](#git-common-queueオプション)） |
+| `--queue` | — | `false` | `vox-actor config path.queue` で解決される queue ディレクトリを監視対象に自動選択（[詳細](#queueオプション)） |
 | `--verbose` | — | `false` | 詳細ログを出力 |
 | `--dry-run` | — | `false` | VOICEVOX・音声再生を行わず、読み上げ対象をログ出力（[詳細](#dry-runモード)） |
 
-### `--git-common-queue`オプション
+### `--queue`オプション
 
-`vox-actor watch --git-common-queue` を指定すると、`vox-actor config path.queue` と同じロジックで解決される「gitリポジトリ直下の `.vox-actor/queue`」を監視対象として自動選択します。
+`vox-actor watch --queue` を指定すると、`vox-actor config path.queue` と同じロジックで解決される queue ディレクトリを監視対象として自動選択します。
 
 - 位置引数（ディレクトリパス）との**併用はエラー**になります。
-- カレントディレクトリがgitリポジトリ外、または `git` コマンドがPATH上に無い場合は起動時にエラー終了します。
-- `.vox-actor/queue` が存在しない場合は起動時に自動作成されます（`os.MkdirAll(..., 0o755)`）。
+- `VOX_ACTOR_WORKSPACE` 未設定かつカレントディレクトリがgitリポジトリ外、または `git` コマンドがPATH上に無い場合は起動時にエラー終了します。
+- queue ディレクトリが存在しない場合は起動時に自動作成されます（`os.MkdirAll(..., 0o755)`）。
 - worktree 上で実行した場合でも、`git rev-parse --git-common-dir` で本体リポジトリの `.git` を参照するため、**本体リポジトリ直下**の `.vox-actor/queue` が選ばれます。
 - `--delete` / `--stream` / `--stream-addr` / `--dry-run` などの既存オプションとは自由に併用できます。
 
 ```bash
-# gitリポジトリ直下の .vox-actor/queue を監視（done/ 移動モード）
-vox-actor watch --git-common-queue
+# config path.queue で解決される queue ディレクトリを監視（done/ 移動モード）
+vox-actor watch --queue
 
 # 削除モードで監視
-vox-actor watch --git-common-queue --delete
+vox-actor watch --queue --delete
 
 # ストリーム配信モード
-vox-actor watch --git-common-queue --stream
+vox-actor watch --queue --stream
 ```
 
 ## `config` サブコマンド

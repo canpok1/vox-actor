@@ -374,11 +374,11 @@ func TestWatchCmd_EnvVarVOXSpeaker(t *testing.T) {
 	}
 }
 
-// --- #239 --git-common-queue オプション ---
+// --- #239 --queue オプション ---
 
-// makeGitCommonQueueWatchDeps は --git-common-queue のテストで共通利用する WatchDeps を組み立てる。
+// makeQueueWatchDeps は --queue のテストで共通利用する WatchDeps を組み立てる。
 // resolver は呼び出された回数と返却パスを captured を通じて観測できる。
-func makeGitCommonQueueWatchDeps(resolver func() (string, error)) *Deps {
+func makeQueueWatchDeps(resolver func() (string, error)) *Deps {
 	return &Deps{
 		Watch: &WatchDeps{
 			Reader:            stubScriptReader{},
@@ -391,12 +391,12 @@ func makeGitCommonQueueWatchDeps(resolver func() (string, error)) *Deps {
 	}
 }
 
-func TestWatchCmd_GitCommonQueue_ResolvesAndCreatesQueueDir(t *testing.T) {
+func TestWatchCmd_Queue_ResolvesAndCreatesQueueDir(t *testing.T) {
 	baseDir := t.TempDir()
 	queueDir := baseDir + "/.vox-actor/queue"
 
 	resolverCalled := 0
-	deps := makeGitCommonQueueWatchDeps(func() (string, error) {
+	deps := makeQueueWatchDeps(func() (string, error) {
 		resolverCalled++
 		return queueDir, nil
 	})
@@ -408,7 +408,7 @@ func TestWatchCmd_GitCommonQueue_ResolvesAndCreatesQueueDir(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	rootCmd.SetContext(ctx)
-	rootCmd.SetArgs([]string{"watch", "--git-common-queue"})
+	rootCmd.SetArgs([]string{"watch", "--queue"})
 
 	if err := rootCmd.Execute(); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -426,9 +426,9 @@ func TestWatchCmd_GitCommonQueue_ResolvesAndCreatesQueueDir(t *testing.T) {
 	}
 }
 
-func TestWatchCmd_GitCommonQueue_WithPositionalArg_ReturnsUsageError(t *testing.T) {
+func TestWatchCmd_Queue_WithPositionalArg_ReturnsUsageError(t *testing.T) {
 	dir := t.TempDir()
-	deps := makeGitCommonQueueWatchDeps(func() (string, error) {
+	deps := makeQueueWatchDeps(func() (string, error) {
 		t.Error("resolver should not be called when usage error occurs")
 		return "", nil
 	})
@@ -437,21 +437,21 @@ func TestWatchCmd_GitCommonQueue_WithPositionalArg_ReturnsUsageError(t *testing.
 	buf := new(bytes.Buffer)
 	rootCmd.SetOut(buf)
 	rootCmd.SetErr(buf)
-	rootCmd.SetArgs([]string{"watch", "--git-common-queue", dir})
+	rootCmd.SetArgs([]string{"watch", "--queue", dir})
 
 	err := rootCmd.Execute()
 	if err == nil {
-		t.Fatal("expected error when --git-common-queue is combined with a positional arg")
+		t.Fatal("expected error when --queue is combined with a positional arg")
 	}
 	if !errors.Is(err, ErrUsage) {
 		t.Errorf("expected ErrUsage, got: %v", err)
 	}
-	if !strings.Contains(err.Error(), "--git-common-queue") {
-		t.Errorf("expected error to mention --git-common-queue, got: %v", err)
+	if !strings.Contains(err.Error(), "--queue") {
+		t.Errorf("expected error to mention --queue, got: %v", err)
 	}
 }
 
-func TestWatchCmd_NoArgsAndNoGitCommonQueue_ReturnsUsageError(t *testing.T) {
+func TestWatchCmd_NoArgsAndNoQueue_ReturnsUsageError(t *testing.T) {
 	rootCmd := makeRootCmd()
 	buf := new(bytes.Buffer)
 	rootCmd.SetOut(buf)
@@ -460,15 +460,15 @@ func TestWatchCmd_NoArgsAndNoGitCommonQueue_ReturnsUsageError(t *testing.T) {
 
 	err := rootCmd.Execute()
 	if err == nil {
-		t.Fatal("expected error when neither args nor --git-common-queue is given")
+		t.Fatal("expected error when neither args nor --queue is given")
 	}
 	if !errors.Is(err, ErrUsage) {
 		t.Errorf("expected ErrUsage, got: %v", err)
 	}
 }
 
-func TestWatchCmd_GitCommonQueue_ResolverReturnsNotInRepo_ReturnsError(t *testing.T) {
-	deps := makeGitCommonQueueWatchDeps(func() (string, error) {
+func TestWatchCmd_Queue_ResolverReturnsNotInRepo_ReturnsError(t *testing.T) {
+	deps := makeQueueWatchDeps(func() (string, error) {
 		return "", infra.ErrNotInGitRepo
 	})
 
@@ -476,7 +476,7 @@ func TestWatchCmd_GitCommonQueue_ResolverReturnsNotInRepo_ReturnsError(t *testin
 	buf := new(bytes.Buffer)
 	rootCmd.SetOut(buf)
 	rootCmd.SetErr(buf)
-	rootCmd.SetArgs([]string{"watch", "--git-common-queue"})
+	rootCmd.SetArgs([]string{"watch", "--queue"})
 
 	err := rootCmd.Execute()
 	if err == nil {
@@ -487,8 +487,8 @@ func TestWatchCmd_GitCommonQueue_ResolverReturnsNotInRepo_ReturnsError(t *testin
 	}
 }
 
-func TestWatchCmd_GitCommonQueue_ResolverReturnsGitNotFound_ReturnsError(t *testing.T) {
-	deps := makeGitCommonQueueWatchDeps(func() (string, error) {
+func TestWatchCmd_Queue_ResolverReturnsGitNotFound_ReturnsError(t *testing.T) {
+	deps := makeQueueWatchDeps(func() (string, error) {
 		return "", infra.ErrGitNotFound
 	})
 
@@ -496,7 +496,7 @@ func TestWatchCmd_GitCommonQueue_ResolverReturnsGitNotFound_ReturnsError(t *test
 	buf := new(bytes.Buffer)
 	rootCmd.SetOut(buf)
 	rootCmd.SetErr(buf)
-	rootCmd.SetArgs([]string{"watch", "--git-common-queue"})
+	rootCmd.SetArgs([]string{"watch", "--queue"})
 
 	err := rootCmd.Execute()
 	if err == nil {
@@ -507,7 +507,7 @@ func TestWatchCmd_GitCommonQueue_ResolverReturnsGitNotFound_ReturnsError(t *test
 	}
 }
 
-func TestWatchCmd_HelpContainsGitCommonQueueFlag(t *testing.T) {
+func TestWatchCmd_HelpContainsQueueFlag(t *testing.T) {
 	rootCmd := makeRootCmd()
 	buf := new(bytes.Buffer)
 	rootCmd.SetOut(buf)
@@ -516,7 +516,7 @@ func TestWatchCmd_HelpContainsGitCommonQueueFlag(t *testing.T) {
 	if err := rootCmd.Execute(); err != nil {
 		t.Fatalf("expected no error for --help, got: %v", err)
 	}
-	if !strings.Contains(buf.String(), "--git-common-queue") {
-		t.Errorf("expected help output to contain '--git-common-queue'")
+	if !strings.Contains(buf.String(), "--queue") {
+		t.Errorf("expected help output to contain '--queue'")
 	}
 }
