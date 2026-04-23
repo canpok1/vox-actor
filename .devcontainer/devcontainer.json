@@ -6,7 +6,10 @@
 	"runServices": ["voicevox"],
 	"features": {
 		"ghcr.io/devcontainers/features/github-cli:1": {},
-		"ghcr.io/devcontainers/features/go:1": {}
+		"ghcr.io/devcontainers/features/go:1": {},
+		"ghcr.io/devcontainers/features/node:1": {
+			"version": "20"
+		}
 	},
 	"remoteUser": "vscode",
 	"mounts": [

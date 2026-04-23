@@ -2,7 +2,6 @@ package infra
 
 import (
 	"context"
-	"embed"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -21,9 +20,6 @@ import (
 	"github.com/canpok1/vox-actor/internal/domain/entity"
 )
 
-//go:embed stream_assets
-var streamAssets embed.FS
-
 // HTTPStreamPlayer はWAVをHTTP/SSEでブラウザに配信する AudioPlayer 実装。
 type HTTPStreamPlayer struct {
 	addr   string
@@ -32,10 +28,8 @@ type HTTPStreamPlayer struct {
 	server   *http.Server
 	listener net.Listener
 
-	// アセットは Start 時に embed.FS から一度だけ読み込む。
-	indexHTML []byte
-	appJS     []byte
-	appCSS    []byte
+	// staticFS は配信画面用の静的ファイル FS（Vite の dist 出力を想定）。
+	staticFS fs.FS
 	// speakersJSON は Start 時に speakerLookup から一度だけマーシャルしたレスポンス。
 	speakersJSON []byte
 
@@ -141,13 +135,19 @@ func withNowFunc(now func() time.Time) HTTPStreamOption {
 
 // NewHTTPStreamPlayer は新しい HTTPStreamPlayer を生成する。
 // addr はバインドアドレス（例: "127.0.0.1:8080"）。":0" で動的ポート割当。
-func NewHTTPStreamPlayer(addr string, opts ...HTTPStreamOption) (*HTTPStreamPlayer, error) {
+// staticFS には Vite でビルドした配信画面の dist ディレクトリ相当の FS を渡す
+// （ルートに index.html、assets/ に <hash>.js / <hash>.css が配置されている想定）。
+func NewHTTPStreamPlayer(addr string, staticFS fs.FS, opts ...HTTPStreamOption) (*HTTPStreamPlayer, error) {
 	if addr == "" {
 		return nil, fmt.Errorf("stream addr must not be empty")
+	}
+	if staticFS == nil {
+		return nil, fmt.Errorf("stream staticFS must not be nil")
 	}
 	p := &HTTPStreamPlayer{
 		addr:          addr,
 		logger:        slog.New(slog.DiscardHandler),
+		staticFS:      staticFS,
 		subscribers:   newSubscriberRegistry(),
 		nowFunc:       time.Now,
 		testPhrase:    defaultTestPhrase,
@@ -169,9 +169,6 @@ func (p *HTTPStreamPlayer) Start(_ context.Context) error {
 		return fmt.Errorf("HTTPStreamPlayer already started")
 	}
 
-	if err := p.loadAssets(); err != nil {
-		return err
-	}
 	if err := p.buildSpeakersJSON(); err != nil {
 		return err
 	}
@@ -182,10 +179,10 @@ func (p *HTTPStreamPlayer) Start(_ context.Context) error {
 	}
 	p.listener = lis
 
+	fileServer := http.FileServer(http.FS(p.staticFS))
+
 	mux := http.NewServeMux()
-	mux.HandleFunc("/", p.handleRoot)
-	mux.HandleFunc("/app.js", p.handleStaticAsset(p.appJS, "application/javascript; charset=utf-8"))
-	mux.HandleFunc("/app.css", p.handleStaticAsset(p.appCSS, "text/css; charset=utf-8"))
+	mux.Handle("/", withStaticCacheControl(fileServer))
 	mux.HandleFunc("/events", p.handleEvents)
 	mux.HandleFunc("/speakers.json", p.handleSpeakers)
 	mux.HandleFunc("/test-clip", p.handleTestClip)
@@ -208,22 +205,19 @@ func (p *HTTPStreamPlayer) Start(_ context.Context) error {
 	return nil
 }
 
-func (p *HTTPStreamPlayer) loadAssets() error {
-	for _, entry := range []struct {
-		name string
-		dst  *[]byte
-	}{
-		{"stream_assets/index.html", &p.indexHTML},
-		{"stream_assets/app.js", &p.appJS},
-		{"stream_assets/app.css", &p.appCSS},
-	} {
-		data, err := fs.ReadFile(streamAssets, entry.name)
-		if err != nil {
-			return fmt.Errorf("failed to read embedded asset %s: %w", entry.name, err)
+// withStaticCacheControl は /assets/ 配下のハッシュ付きアセットに強力なキャッシュを、
+// それ以外（index.html 等）には no-cache を付与してから次のハンドラに渡す。
+// これにより index.html は常に最新を取得し、そこから参照されるハッシュ付きアセットは
+// ハッシュが変わらない限り長期キャッシュで配信される（キャッシュバスティング）。
+func withStaticCacheControl(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/assets/") {
+			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		} else {
+			w.Header().Set("Cache-Control", "no-cache")
 		}
-		*entry.dst = data
-	}
-	return nil
+		next.ServeHTTP(w, r)
+	})
 }
 
 // Shutdown はサーバーを停止する。
@@ -325,22 +319,6 @@ func (p *HTTPStreamPlayer) Play(ctx context.Context, wavData []byte, meta app.Pl
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()
-	}
-}
-
-func (p *HTTPStreamPlayer) handleRoot(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Path != "/" {
-		http.NotFound(w, r)
-		return
-	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_, _ = w.Write(p.indexHTML)
-}
-
-func (p *HTTPStreamPlayer) handleStaticAsset(data []byte, contentType string) http.HandlerFunc {
-	return func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", contentType)
-		_, _ = w.Write(data)
 	}
 }
 
