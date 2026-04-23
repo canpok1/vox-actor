@@ -3,17 +3,31 @@ name: monologue
 description: 作業開始時、作業終了時、想定外のことが起こった時に呼び出す独り言スキル。キャラクターになりきった一言コメントを通知する。
 argument-hint: "[キャラクター名]"
 allowed-tools:
-  - "Bash(${CLAUDE_PLUGIN_ROOT}/skills/monologue/scripts/monologue.sh *)"
+  - "Bash(${CLAUDE_PLUGIN_ROOT}/scripts/play-script.sh *)"
+  - "Bash(mkdir -p *)"
+  - "Bash(echo $((RANDOM % 100 + 1)))"
   - "Read(${CLAUDE_PLUGIN_ROOT}/characters/*.md)"
+  - "Write(${VOX_ACTOR_WORKSPACE}/tmp/*)"
 ---
 
 作業の開始時や終了時に、キャラクターになりきった独り言を通知します。
 
-## 通知の仕組み
+## 実行フロー
 
-1. キャラクター設定に基づいた一言コメントを生成する
-2. `monologue.sh` にメモリから取得した通知確率とセリフを渡して呼び出す
-3. スクリプト内で乱数判定が行われ、確率に基づいて通知される
+1. `$ARGUMENTS` を独り言のテーマとして受け取る（未指定なら作業の文脈から生成する）
+2. メモリから `default_character`（既定 `zundamon`、`speak` スキルと共用）と `monologue_probability`（既定 `100`）を読み取る
+3. **確率判定**: `echo $((RANDOM % 100 + 1))` を Bash で実行し、1〜100 の判定値を取得する。判定値が `monologue_probability` より大きい場合はここで終了する（後続のキャラクター設定読み込みも `play-script.sh` 呼び出しも行わない）
+4. `${CLAUDE_PLUGIN_ROOT}/characters/<name>.md` を読み、`speakers` 一覧と性格を把握する
+5. キャラクターになりきった 1 文程度の独り言セリフを生成し、感情に合う `speaker` と `speedScale` を選定する
+6. `mkdir -p "${VOX_ACTOR_WORKSPACE}/tmp"` で一時ディレクトリを作成する
+7. 一時ファイル `${VOX_ACTOR_WORKSPACE}/tmp/<unix_ms>_monologue.json` に単一JSONを Write する（形式: `{"text": "...", "speaker": ..., "speedScale": ...}`）
+8. `play-script.sh <path>` を呼び出す
+
+```bash
+${CLAUDE_PLUGIN_ROOT}/scripts/play-script.sh <json_path>
+```
+
+- `<json_path>`（第1引数・必須）: 生成した JSON ファイルの絶対パス
 
 ### 通知確率
 
@@ -21,21 +35,7 @@ allowed-tools:
 - ユーザーの指示により調整可能（Claudeのメモリシステムに保存する）
   - 例: 「独り言の頻度を30%にして」→ メモリに `monologue_probability: 30` を保存
 
-### 通知の実行
-
-1. キャラクター設定ファイルの `speakers` フィールドを参照し、生成したセリフの感情に最も合うスピーカーIDを選定する
-2. 通知確率（第1引数）、セリフ（第2引数）、スピーカーID（第3引数）、話速（第4引数）を `monologue.sh` に渡す
-
-```bash
-${CLAUDE_PLUGIN_ROOT}/skills/monologue/scripts/monologue.sh 通知確率 "（キャラクターの一言コメント）" スピーカーID 話速
-```
-
-- 通知確率（第1引数・必須）: 1〜100の整数。メモリに保存された確率を渡す
-- セリフ（第2引数・必須）: キャラクターの一言コメント
-- スピーカーID（第3引数・必須）: キャラクター設定ファイルの `speakers` フィールドから、セリフの感情に最も合うスピーカーIDを選定する
-- 話速（第4引数・必須）: セリフの感情やキャラクターの状態に合わせて選定する
-
-#### 話速の目安
+### 話速の目安
 
 | 値 | 説明 |
 |----|------|
@@ -44,8 +44,6 @@ ${CLAUDE_PLUGIN_ROOT}/skills/monologue/scripts/monologue.sh 通知確率 "（キ
 | 1.0 | 普通（デフォルト） |
 | 1.1 | ちょっと早口 |
 | 1.2 | 早口 |
-
-スクリプト内の乱数判定により通知される。
 
 ## キャラクター設定
 
@@ -64,21 +62,21 @@ ${CLAUDE_PLUGIN_ROOT}/skills/monologue/scripts/monologue.sh 通知確率 "（キ
 | 項目 | キー | デフォルト値 | 説明 |
 |------|------|-------------|------|
 | デフォルトキャラクター | `default_character` | `zundamon` | `characters/<name>.md` の `<name>`。`speak` スキルと共用 |
-| 通知確率 | `monologue_probability` | 100 | 1〜100の整数。通知する確率（%） |
+| 通知確率 | `monologue_probability` | 100 | 0〜100の整数。通知する確率（%）。`0` で常に通知されない、`100` で必ず通知される |
 
 ## 前提条件
 
-### monologue.sh の依存関係
+### play-script.sh の依存関係
 
-通知の実行に使用する `${CLAUDE_PLUGIN_ROOT}/skills/monologue/scripts/monologue.sh` は以下の前提条件を必要とする:
+通知の実行に使用する `${CLAUDE_PLUGIN_ROOT}/scripts/play-script.sh` は以下の前提条件を必要とする:
 
 - **`vox-actor` コマンドのインストール必須**: スクリプト冒頭で `command -v vox-actor` を検査し、未インストール時は `[ERROR] vox-actor コマンドが必要です` を stderr に出して非0終了する
 - **ワークスペースの解決**: スクリプトは `vox-actor config path.queue` / `vox-actor config path.workspace` を呼ぶだけで、環境変数の分岐は CLI 側が担う。CLI の解決順は以下のとおり
   1. 環境変数 `VOX_ACTOR_WORKSPACE` が設定されていればその値をワークスペースルートとして使う（queue は `${VOX_ACTOR_WORKSPACE}/queue`）
   2. 未設定なら gitリポジトリ直下の `.vox-actor` をワークスペースルートとする（queue は `<repo>/.vox-actor/queue`）
 - **git 管理外で利用する場合**: `VOX_ACTOR_WORKSPACE` の明示が必要。未指定のままだと CLI が非0終了し、そのエラーメッセージが表示されてスクリプトも終了する
-- **出力先ディレクトリ**: ワークスペースルートおよび配下の `queue/` はスクリプトが必要に応じて自動作成する
-- `monologue-errors.log`（directモードのエラーログ）はワークスペースルート直下に配置される
+- **出力先ディレクトリ**: ワークスペースルートおよび配下の `queue/` は `play-script.sh` が必要に応じて自動作成する。`tmp/` ディレクトリは Claude が Write する前に `mkdir -p "${VOX_ACTOR_WORKSPACE}/tmp"` で作成する（`tmp/` 利用時は `VOX_ACTOR_WORKSPACE` の明示が前提）
+- `play-script-errors.log`（directモードのエラーログ）はワークスペースルート直下に配置される
 
 ### 通知モード
 
@@ -91,16 +89,25 @@ ${CLAUDE_PLUGIN_ROOT}/skills/monologue/scripts/monologue.sh 通知確率 "（キ
 
 #### `direct` モード
 
-`vox-actor say --speaker <スピーカーID> --speed <話速> "<セリフ>"` を同期実行し、再生の完了を待ってスクリプトが戻る。
+`vox-actor act <json_path>` を同期実行し、再生の完了を待ってスクリプトが戻る。
 
 - VOICEVOXエンジンのURLは `vox-actor` 側の環境変数 `VOX_ENGINE_URL` で解決する（非デフォルトポート時はユーザーが設定）
 - 監視プロセス（`vox-actor watch`）の常駐は不要
+- 再生完了後、渡された一時ファイルを `rm -f` で削除する
 - 同期実行のため、同一セッション内で連続して呼び出した場合は先の発話が完了してから次が再生される。ただし複数セッションから並列に呼ばれた場合はエンジンへの並列リクエストと音声再生の重なりが発生しうる。複数セッション間でも逐次再生したい場合は `VOX_ACTOR_MONOLOGUE_MODE=file` + 監視プロセス構成に切り替える
-- `vox-actor say` 失敗時もスクリプト本体はエラー終了せず、標準出力/標準エラーの内容をワークスペースルート直下の `monologue-errors.log` にタイムスタンプ付きで追記する。ログは末尾200行でローテーションされる。失敗検知は `tail -f <workspace>/monologue-errors.log` で行える
+- `vox-actor act` 失敗時もスクリプト本体はエラー終了せず、標準出力/標準エラーの内容をワークスペースルート直下の `play-script-errors.log` にタイムスタンプ付きで追記する。ログは末尾200行でローテーションされる。失敗検知は `tail -f <workspace>/play-script-errors.log` で行える
 
 #### `file` モード
 
-`vox-actor config path.queue` で解決された queue ディレクトリに通知ファイルを書き出す。ファイル名は `{ミリ秒タイムスタンプ}_monologue.json`、形式は `{"speaker": スピーカーID, "text": "セリフ", "speedScale": 話速}`。外部の通知監視プロセス（`vox-actor watch` 等）はこの `queue/` ディレクトリを監視対象として検知・読み上げする
+一時ファイルを `vox-actor config path.queue` で解決された queue ディレクトリ配下へ `mv` で移動する（渡された一時ファイル名がそのまま使われるため、`<unix_ms>_monologue.json` なら `queue/<unix_ms>_monologue.json` となる）。外部の通知監視プロセス（`vox-actor watch` 等）はこの `queue/` ディレクトリを監視対象として検知・読み上げする。
+
+## JSON 出力例
+
+ずんだもん（`speakers.ノーマル: 3`）の独り言例:
+
+```json
+{"text": "よーし、始めるのだ！", "speaker": 3, "speedScale": 1.1}
+```
 
 ## キャラクター設定ファイルについて
 
@@ -114,3 +121,4 @@ ${CLAUDE_PLUGIN_ROOT}/skills/monologue/scripts/monologue.sh 通知確率 "（キ
   - 拡張子も省略せず発音を表す日本語にすること
   - 例: `README.md` → 「リードミードットエムディー」、`config.json` → 「コンフィグドットジェイソン」、`merge` → 「マージ」、`build` → 「ビルド」
 - ファイルパス、URL、UUIDなど長い文字情報は発音しても分かりづらいため、セリフに含めないこと
+- JSON 内のダブルクォート・バックスラッシュ等は JSON 仕様に従って適切にエスケープすること

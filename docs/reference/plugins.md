@@ -146,7 +146,7 @@ claude code に `vox-actor-plugin` を導入すると、以下のスラッシュ
 |---|---|---|
 | 読み上げ方式 | `vox-actor say` をその場で直接呼び出す | テキスト等をファイルに書き出し、別プロセスの `vox-actor watch` が読み上げる |
 | 監視プロセス | 不要 | `vox-actor watch` の常駐が必要 |
-| ファイル出力先 | エラーログのみ（`monologue` はワークスペースルート直下の `monologue-errors.log`、`speak` / `talk` は `play-script-errors.log`） | 通知ファイル（ワークスペース配下の `queue/*_monologue.json` / `*_speak.jsonl` / `*_talk.jsonl`）＋エラーログ |
+| ファイル出力先 | エラーログのみ（`monologue` / `speak` / `talk` 共通でワークスペースルート直下の `play-script-errors.log`） | 通知ファイル（ワークスペース配下の `queue/*_monologue.json` / `*_speak.jsonl` / `*_talk.jsonl`）＋エラーログ |
 | 同時呼び出し時 | 同一セッション内は逐次再生、複数セッション間は並列再生 | 検知順に逐次再生 |
 | 前提 | `vox-actor` コマンドが `PATH` 上にあり、音声デバイスが利用可能（`vox-actor audio-check` が成功） | claude code 側と `vox-actor watch` 側で `VOX_ACTOR_WORKSPACE` を共有 |
 
@@ -222,7 +222,6 @@ vox-actor act --watch-delete /path/to/watch-dir
 
 ### エラーログ
 
-`direct` モードでの失敗は以下のログに追記されます（いずれも末尾200行でローテーション）。`tail -f` で確認できます。いずれも `vox-actor config path.workspace` で解決されるワークスペースルート直下に配置されます。
+`direct` モードでの失敗は以下のログに追記されます（末尾200行でローテーション）。`tail -f` で確認できます。`vox-actor config path.workspace` で解決されるワークスペースルート直下に配置されます。
 
-- `monologue` スキル: `<workspace>/monologue-errors.log`
-- `speak` / `talk` スキル: `<workspace>/play-script-errors.log`
+- `monologue` / `speak` / `talk` スキル共通: `<workspace>/play-script-errors.log`
