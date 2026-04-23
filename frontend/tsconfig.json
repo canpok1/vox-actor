@@ -6,6 +6,7 @@
     "strict": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
+    "noImplicitReturns": true,
     "noFallthroughCasesInSwitch": true,
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "allowJs": true,

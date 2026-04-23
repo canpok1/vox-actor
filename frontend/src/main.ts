@@ -1,23 +1,43 @@
 import "./app.css";
+import { getElement } from "./dom";
+import {
+  isClipEvent,
+  isSpeakerArray,
+  type ClipEvent,
+  type Speaker,
+} from "./types/api";
+
+interface ToggleConfig {
+  el: HTMLInputElement;
+  storageKey: string;
+  bodyClass: string;
+}
+
+interface QueueItem {
+  clip: ClipEvent;
+  item: HTMLLIElement;
+}
+
+type TabName = "stream" | "test";
 
 (() => {
-  const statusBadge = document.getElementById("status-badge");
-  const volumeEl = document.getElementById("volume");
-  const volumeIcon = document.getElementById("volume-icon");
-  const muteEl = document.getElementById("mute");
-  const timelineEl = document.getElementById("timeline");
-  const historySizeEl = document.getElementById("history-size");
-  const showSpeakerNameEl = document.getElementById("show-speaker-name");
-  const showStyleNameEl = document.getElementById("show-style-name");
-  const showTimestampEl = document.getElementById("show-timestamp");
-  const player = document.getElementById("player");
-  const tabStreamEl = document.getElementById("tab-stream");
-  const tabTestEl = document.getElementById("tab-test");
-  const panelStreamEl = document.getElementById("panel-stream");
-  const panelTestEl = document.getElementById("panel-test");
-  const testSpeakerEl = document.getElementById("test-speaker");
-  const testPlayEl = document.getElementById("test-play");
-  const testErrorEl = document.getElementById("test-error");
+  const statusBadge = getElement<HTMLSpanElement>("status-badge");
+  const volumeEl = getElement<HTMLInputElement>("volume");
+  const volumeIcon = getElement<HTMLSpanElement>("volume-icon");
+  const muteEl = getElement<HTMLInputElement>("mute");
+  const timelineEl = getElement<HTMLOListElement>("timeline");
+  const historySizeEl = getElement<HTMLSelectElement>("history-size");
+  const showSpeakerNameEl = getElement<HTMLInputElement>("show-speaker-name");
+  const showStyleNameEl = getElement<HTMLInputElement>("show-style-name");
+  const showTimestampEl = getElement<HTMLInputElement>("show-timestamp");
+  const player = getElement<HTMLAudioElement>("player");
+  const tabStreamEl = getElement<HTMLButtonElement>("tab-stream");
+  const tabTestEl = getElement<HTMLButtonElement>("tab-test");
+  const panelStreamEl = getElement<HTMLElement>("panel-stream");
+  const panelTestEl = getElement<HTMLElement>("panel-test");
+  const testSpeakerEl = getElement<HTMLSelectElement>("test-speaker");
+  const testPlayEl = getElement<HTMLButtonElement>("test-play");
+  const testErrorEl = getElement<HTMLSpanElement>("test-error");
 
   const historySizeStorageKey = "vox-actor.stream.historySize";
   const defaultHistorySize = 20;
@@ -25,37 +45,37 @@ import "./app.css";
   const defaultVolume = 50;
   const activeTabStorageKey = "vox-actor.stream.activeTab";
   const testSpeakerStorageKey = "vox-actor.stream.testSpeakerId";
-  const defaultActiveTab = "stream";
+  const defaultActiveTab: TabName = "stream";
   const testErrorDisplayMs = 4000;
 
-  const toggles = [
+  const toggles: ToggleConfig[] = [
     { el: showSpeakerNameEl, storageKey: "vox-actor.stream.showSpeakerName", bodyClass: "hide-speaker-name" },
     { el: showStyleNameEl, storageKey: "vox-actor.stream.showStyleName", bodyClass: "hide-style-name" },
     { el: showTimestampEl, storageKey: "vox-actor.stream.showTimestamp", bodyClass: "hide-timestamp" },
   ];
 
-  const queue = [];
-  let playingItem = null;
+  const queue: QueueItem[] = [];
+  let playingItem: HTMLLIElement | null = null;
   let historySize = initHistorySize();
-  let activeTab = defaultActiveTab;
-  let testErrorTimer = null;
+  let activeTab: TabName = defaultActiveTab;
+  let testErrorTimer: ReturnType<typeof setTimeout> | null = null;
 
-  function initHistorySize() {
-    const stored = parseInt(localStorage.getItem(historySizeStorageKey), 10);
+  function initHistorySize(): number {
+    const stored = parseInt(localStorage.getItem(historySizeStorageKey) ?? "", 10);
     const allowed = Array.from(historySizeEl.options).map((o) => parseInt(o.value, 10));
     const value = allowed.includes(stored) ? stored : defaultHistorySize;
     historySizeEl.value = String(value);
     return value;
   }
 
-  function initVolume() {
-    const stored = parseInt(localStorage.getItem(volumeStorageKey), 10);
+  function initVolume(): void {
+    const stored = parseInt(localStorage.getItem(volumeStorageKey) ?? "", 10);
     const value = Number.isInteger(stored) && stored >= 0 && stored <= 100 ? stored : defaultVolume;
     volumeEl.value = String(value);
     player.volume = value / 100;
   }
 
-  function initToggles() {
+  function initToggles(): void {
     toggles.forEach((t) => {
       const stored = localStorage.getItem(t.storageKey);
       const checked = stored === null ? true : stored === "true";
@@ -68,7 +88,7 @@ import "./app.css";
     });
   }
 
-  function applyToggleState(t, checked) {
+  function applyToggleState(t: ToggleConfig, checked: boolean): void {
     if (checked) {
       document.body.classList.remove(t.bodyClass);
     } else {
@@ -76,7 +96,7 @@ import "./app.css";
     }
   }
 
-  const setVolumeIcon = () => {
+  const setVolumeIcon = (): void => {
     volumeIcon.textContent = player.muted || player.volume === 0 ? "🔇" : "🔊";
   };
 
@@ -92,7 +112,7 @@ import "./app.css";
     setVolumeIcon();
   });
 
-  const trimTimeline = () => {
+  const trimTimeline = (): void => {
     while (timelineEl.children.length > historySize) {
       const first = timelineEl.firstElementChild;
       if (!first || first === playingItem) break;
@@ -108,12 +128,12 @@ import "./app.css";
     trimTimeline();
   });
 
-  const formatTimestamp = (ms) => {
-    if (typeof ms !== "number" || !Number.isFinite(ms) || ms <= 0) return "";
+  const formatTimestamp = (ms: number): string => {
+    if (!Number.isFinite(ms) || ms <= 0) return "";
     return new Date(ms).toLocaleTimeString("ja-JP", { hour12: false });
   };
 
-  const appendTimelineItem = (clip) => {
+  const appendTimelineItem = (clip: ClipEvent): HTMLLIElement => {
     const li = document.createElement("li");
     li.className = "timeline-item";
     li.dataset.clipId = String(clip.id);
@@ -128,7 +148,7 @@ import "./app.css";
 
     const speakerName = document.createElement("span");
     speakerName.className = "timeline-speaker-name";
-    speakerName.textContent = clip.speakerName || "";
+    speakerName.textContent = clip.speakerName;
     meta.appendChild(speakerName);
 
     const styleName = document.createElement("span");
@@ -140,7 +160,7 @@ import "./app.css";
 
     const body = document.createElement("div");
     body.className = "timeline-body";
-    body.textContent = clip.text || "";
+    body.textContent = clip.text;
     li.appendChild(body);
 
     timelineEl.appendChild(li);
@@ -149,14 +169,14 @@ import "./app.css";
     return li;
   };
 
-  const clearPlayingHighlight = () => {
+  const clearPlayingHighlight = (): void => {
     if (playingItem) {
       playingItem.classList.remove("playing");
       playingItem = null;
     }
   };
 
-  const stopPlayback = () => {
+  const stopPlayback = (): void => {
     player.pause();
     player.removeAttribute("src");
     player.load();
@@ -164,15 +184,17 @@ import "./app.css";
     clearPlayingHighlight();
   };
 
-  const playNext = () => {
+  const playNext = (): void => {
     if (activeTab !== "stream") return;
-    if (playingItem || queue.length === 0) return;
-    const { clip, item } = queue.shift();
+    if (playingItem) return;
+    const next = queue.shift();
+    if (!next) return;
+    const { clip, item } = next;
     playingItem = item;
     item.classList.add("playing");
     item.scrollIntoView({ block: "nearest" });
     player.src = clip.url;
-    player.play().catch((err) => {
+    player.play().catch((err: unknown) => {
       console.error("play failed", err);
       clearPlayingHighlight();
       playNext();
@@ -184,8 +206,8 @@ import "./app.css";
     playNext();
   });
 
-  const applyTab = (tab) => {
-    activeTab = tab === "test" ? "test" : "stream";
+  const applyTab = (tab: TabName): void => {
+    activeTab = tab;
     const isStream = activeTab === "stream";
     tabStreamEl.classList.toggle("active", isStream);
     tabStreamEl.setAttribute("aria-selected", String(isStream));
@@ -199,7 +221,7 @@ import "./app.css";
     }
   };
 
-  const setActiveTab = (tab) => {
+  const setActiveTab = (tab: TabName): void => {
     applyTab(tab);
     localStorage.setItem(activeTabStorageKey, activeTab);
   };
@@ -207,9 +229,9 @@ import "./app.css";
   tabStreamEl.addEventListener("click", () => setActiveTab("stream"));
   tabTestEl.addEventListener("click", () => setActiveTab("test"));
 
-  const showTestError = (msg) => {
+  const showTestError = (msg: string): void => {
     testErrorEl.textContent = msg;
-    if (testErrorTimer) {
+    if (testErrorTimer !== null) {
       clearTimeout(testErrorTimer);
     }
     testErrorTimer = setTimeout(() => {
@@ -218,11 +240,15 @@ import "./app.css";
     }, testErrorDisplayMs);
   };
 
-  const loadSpeakers = async () => {
+  const loadSpeakers = async (): Promise<void> => {
     try {
       const resp = await fetch("/speakers.json");
       if (!resp.ok) throw new Error(`status ${resp.status}`);
-      const speakers = await resp.json();
+      const data: unknown = await resp.json();
+      if (!isSpeakerArray(data)) {
+        throw new Error("invalid speakers payload");
+      }
+      const speakers: Speaker[] = data;
       testSpeakerEl.innerHTML = "";
       speakers.forEach((s) => {
         const opt = document.createElement("option");
@@ -232,7 +258,7 @@ import "./app.css";
         testSpeakerEl.appendChild(opt);
       });
       const stored = localStorage.getItem(testSpeakerStorageKey);
-      if (stored && Array.from(testSpeakerEl.options).some((o) => o.value === stored)) {
+      if (stored !== null && Array.from(testSpeakerEl.options).some((o) => o.value === stored)) {
         testSpeakerEl.value = stored;
       }
     } catch (err) {
@@ -254,13 +280,13 @@ import "./app.css";
     testErrorEl.textContent = "";
     player.pause();
     player.src = `/test-clip?speaker=${encodeURIComponent(speakerId)}`;
-    player.play().catch((err) => {
+    player.play().catch((err: unknown) => {
       console.error("test play failed", err);
       showTestError("合成に失敗しました");
     });
   });
 
-  const setBadge = (connected) => {
+  const setBadge = (connected: boolean): void => {
     if (connected) {
       statusBadge.textContent = "● 接続中";
       statusBadge.classList.add("badge-connected");
@@ -272,17 +298,21 @@ import "./app.css";
     }
   };
 
-  const connect = () => {
+  const connect = (): void => {
     const es = new EventSource("/events");
     es.addEventListener("open", () => {
       setBadge(true);
     });
     es.addEventListener("clip", (event) => {
       try {
-        const clip = JSON.parse(event.data);
-        const item = appendTimelineItem(clip);
+        const data: unknown = JSON.parse(event.data);
+        if (!isClipEvent(data)) {
+          console.error("invalid clip payload", data);
+          return;
+        }
+        const item = appendTimelineItem(data);
         if (activeTab === "stream") {
-          queue.push({ clip, item });
+          queue.push({ clip: data, item });
           playNext();
         }
       } catch (err) {
@@ -302,6 +332,6 @@ import "./app.css";
   setVolumeIcon();
   const storedTab = localStorage.getItem(activeTabStorageKey);
   applyTab(storedTab === "test" ? "test" : "stream");
-  loadSpeakers();
+  void loadSpeakers();
   connect();
 })();
