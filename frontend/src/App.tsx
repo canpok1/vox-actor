@@ -1,0 +1,266 @@
+import { useCallback, useEffect, useRef, useState } from "react";
+import { StatusBadge } from "./components/StatusBadge";
+import { StreamPanel } from "./components/StreamPanel";
+import { type TabName, Tabs } from "./components/Tabs";
+import { TestPanel } from "./components/TestPanel";
+import { VolumeControls } from "./components/VolumeControls";
+import { useEventSource } from "./hooks/useEventSource";
+import { usePersistedState } from "./hooks/usePersistedState";
+import { usePlaybackQueue } from "./hooks/usePlaybackQueue";
+import {
+  type ClipEvent,
+  isClipEvent,
+  isSpeakerArray,
+  type Speaker,
+} from "./types/api";
+
+const STORAGE_KEYS = {
+  historySize: "vox-actor.stream.historySize",
+  volume: "vox-actor.stream.volume",
+  activeTab: "vox-actor.stream.activeTab",
+  testSpeakerId: "vox-actor.stream.testSpeakerId",
+  showSpeakerName: "vox-actor.stream.showSpeakerName",
+  showStyleName: "vox-actor.stream.showStyleName",
+  showTimestamp: "vox-actor.stream.showTimestamp",
+} as const;
+
+const DEFAULT_HISTORY_SIZE = 20;
+const DEFAULT_VOLUME = 50;
+const HISTORY_SIZE_OPTIONS: readonly number[] = [10, 20, 30, 50, 100, 200];
+const TEST_ERROR_DISPLAY_MS = 4000;
+
+const parseTab = (raw: string): TabName | null =>
+  raw === "stream" || raw === "test" ? raw : null;
+
+const parseHistorySize = (raw: string): number | null => {
+  const n = parseInt(raw, 10);
+  return Number.isFinite(n) && HISTORY_SIZE_OPTIONS.includes(n) ? n : null;
+};
+
+const parseVolume = (raw: string): number | null => {
+  const n = parseInt(raw, 10);
+  return Number.isInteger(n) && n >= 0 && n <= 100 ? n : null;
+};
+
+const parseBool = (raw: string): boolean | null =>
+  raw === "true" ? true : raw === "false" ? false : null;
+
+const passthrough = (v: string): string => v;
+
+function trimClips(
+  clips: ClipEvent[],
+  size: number,
+  playingId: number | null,
+): ClipEvent[] {
+  let next = clips;
+  while (next.length > size) {
+    if (next[0].id === playingId) break;
+    next = next.slice(1);
+  }
+  return next;
+}
+
+export function App() {
+  const audioRef = useRef<HTMLAudioElement>(null);
+
+  const [activeTab, setActiveTab] = usePersistedState<TabName>(
+    STORAGE_KEYS.activeTab,
+    "stream",
+    parseTab,
+    passthrough,
+  );
+  const [historySize, setHistorySize] = usePersistedState<number>(
+    STORAGE_KEYS.historySize,
+    DEFAULT_HISTORY_SIZE,
+    parseHistorySize,
+    String,
+  );
+  const [volume, setVolume] = usePersistedState<number>(
+    STORAGE_KEYS.volume,
+    DEFAULT_VOLUME,
+    parseVolume,
+    String,
+  );
+  const [muted, setMuted] = useState(true);
+  const [showSpeakerName, setShowSpeakerName] = usePersistedState(
+    STORAGE_KEYS.showSpeakerName,
+    true,
+    parseBool,
+    String,
+  );
+  const [showStyleName, setShowStyleName] = usePersistedState(
+    STORAGE_KEYS.showStyleName,
+    true,
+    parseBool,
+    String,
+  );
+  const [showTimestamp, setShowTimestamp] = usePersistedState(
+    STORAGE_KEYS.showTimestamp,
+    true,
+    parseBool,
+    String,
+  );
+  const [testSpeakerId, setTestSpeakerId] = usePersistedState<string>(
+    STORAGE_KEYS.testSpeakerId,
+    "",
+    passthrough,
+    passthrough,
+  );
+
+  const [speakers, setSpeakers] = useState<Speaker[]>([]);
+  const [clips, setClips] = useState<ClipEvent[]>([]);
+  const [testError, setTestError] = useState<string>("");
+  const testErrorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const { playingClipId, enqueue } = usePlaybackQueue(
+    audioRef,
+    activeTab === "stream",
+  );
+  const playingClipIdRef = useRef<number | null>(null);
+  playingClipIdRef.current = playingClipId;
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (audio) audio.volume = volume / 100;
+  }, [volume]);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (audio) audio.muted = muted;
+  }, [muted]);
+
+  // 履歴上限の変更時のみトリム。再生状態の変化ではトリムしない
+  // （再生終了直後の playingClipId=null 経由で過去のハイライト対象が消えるのを防ぐ）。
+  useEffect(() => {
+    setClips((prev) => trimClips(prev, historySize, playingClipIdRef.current));
+  }, [historySize]);
+
+  const showTestError = useCallback((msg: string): void => {
+    setTestError(msg);
+    if (testErrorTimerRef.current !== null) {
+      clearTimeout(testErrorTimerRef.current);
+    }
+    testErrorTimerRef.current = setTimeout(() => {
+      setTestError("");
+      testErrorTimerRef.current = null;
+    }, TEST_ERROR_DISPLAY_MS);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (testErrorTimerRef.current !== null) {
+        clearTimeout(testErrorTimerRef.current);
+        testErrorTimerRef.current = null;
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = async (): Promise<void> => {
+      try {
+        const resp = await fetch("/speakers.json");
+        if (!resp.ok) throw new Error(`status ${resp.status}`);
+        const data: unknown = await resp.json();
+        if (!isSpeakerArray(data)) {
+          throw new Error("invalid speakers payload");
+        }
+        if (!cancelled) setSpeakers(data);
+      } catch (err) {
+        console.error("failed to load speakers", err);
+        if (!cancelled) showTestError("話者一覧の取得に失敗しました");
+      }
+    };
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, [showTestError]);
+
+  useEffect(() => {
+    if (speakers.length === 0) return;
+    const exists = speakers.some((s) => String(s.id) === testSpeakerId);
+    if (!exists) {
+      setTestSpeakerId(String(speakers[0].id));
+    }
+  }, [speakers, testSpeakerId, setTestSpeakerId]);
+
+  const handleClip = useCallback(
+    (data: string): void => {
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(data);
+      } catch (err) {
+        console.error("invalid clip payload", err);
+        return;
+      }
+      if (!isClipEvent(parsed)) {
+        console.error("invalid clip payload", parsed);
+        return;
+      }
+      const clip = parsed;
+      setClips((prev) =>
+        trimClips([...prev, clip], historySize, playingClipIdRef.current),
+      );
+      enqueue(clip);
+    },
+    [historySize, enqueue],
+  );
+
+  const connected = useEventSource("/events", handleClip);
+
+  const handleTestPlay = useCallback((): void => {
+    if (!testSpeakerId) {
+      showTestError("話者が選択されていません");
+      return;
+    }
+    setTestError("");
+    const audio = audioRef.current;
+    if (!audio) return;
+    audio.pause();
+    audio.src = `/test-clip?speaker=${encodeURIComponent(testSpeakerId)}`;
+    audio.play().catch((err: unknown) => {
+      console.error("test play failed", err);
+      showTestError("合成に失敗しました");
+    });
+  }, [testSpeakerId, showTestError]);
+
+  return (
+    <main className="mx-auto my-2 max-w-[1200px] rounded-md bg-ctp-surface p-3 sm:my-4 sm:p-4 md:my-8 md:rounded-lg md:p-6">
+      <div className="mb-2 flex flex-wrap items-center gap-3">
+        <h1 className="m-0 text-[1.1rem] md:text-[1.4rem]">vox-actor stream</h1>
+        <StatusBadge connected={connected} />
+      </div>
+      <VolumeControls
+        volume={volume}
+        muted={muted}
+        onVolumeChange={setVolume}
+        onMuteChange={setMuted}
+      />
+      <Tabs active={activeTab} onChange={setActiveTab} />
+      <StreamPanel
+        hidden={activeTab !== "stream"}
+        clips={clips}
+        playingClipId={playingClipId}
+        historySize={historySize}
+        historySizeOptions={HISTORY_SIZE_OPTIONS}
+        onHistorySizeChange={setHistorySize}
+        showSpeakerName={showSpeakerName}
+        showStyleName={showStyleName}
+        showTimestamp={showTimestamp}
+        onShowSpeakerNameChange={setShowSpeakerName}
+        onShowStyleNameChange={setShowStyleName}
+        onShowTimestampChange={setShowTimestamp}
+      />
+      <TestPanel
+        hidden={activeTab !== "test"}
+        speakers={speakers}
+        selectedSpeakerId={testSpeakerId}
+        onSpeakerChange={setTestSpeakerId}
+        onPlay={handleTestPlay}
+        error={testError}
+      />
+      <audio ref={audioRef} muted />
+    </main>
+  );
+}

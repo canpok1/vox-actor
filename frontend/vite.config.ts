@@ -1,3 +1,5 @@
+import tailwindcss from "@tailwindcss/vite";
+import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 
 // 配信画面は Go バックエンド (`vox-actor watch --stream`) 提供の SSE / API と
@@ -8,6 +10,7 @@ const backendTarget = "http://localhost:8080";
 export default defineConfig({
   root: ".",
   base: "/",
+  plugins: [react(), tailwindcss()],
   build: {
     outDir: "dist",
     emptyOutDir: true,
