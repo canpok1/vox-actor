@@ -1,7 +1,7 @@
 {
   "name": "auto-monologue-plugin",
   "description": "独り言を自動的に生成するためのプラグイン",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "author": {
     "name": "canpok1"
   }
