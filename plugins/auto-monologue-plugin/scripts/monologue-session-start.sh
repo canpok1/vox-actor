@@ -3,9 +3,20 @@ set -euo pipefail
 
 cat > /dev/null
 
-jq -n '{
+CONTEXT=$(cat <<'EOF'
+以下のタイミングでは /vox-actor-plugin:monologue スキルを必ず呼び出してキャラクターの独り言を通知してください。呼び出しをスキップしてはいけません。
+
+- セッション開始直後の最初の行動として必ず呼び出すこと
+- 会話や作業の区切りがいいとき
+- 方針を転換したとき
+- タスクが完了したとき
+- エラーが発生したとき、想定外の結果が返ってきたときなど、想定外のことが起きたとき
+EOF
+)
+
+jq -n --arg ctx "$CONTEXT" '{
   hookSpecificOutput: {
     hookEventName: "SessionStart",
-    additionalContext: "会話の区切りや作業の節目で /vox-actor-plugin:monologue スキルを LLM 判断で活用してください。長時間沈黙する前、方針転換時、タスク完了時などには積極的に呼び出してください。"
+    additionalContext: $ctx
   }
 }'
