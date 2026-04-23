@@ -22,7 +22,10 @@ export function TimelineItem({
   showTimestamp,
 }: TimelineItemProps) {
   const ref = useRef<HTMLLIElement>(null);
-  const prevPlaying = useRef(playing);
+  // 初期値は false 固定。マウント時点で playing=true のケース（SSE で
+  // clip 追加と再生開始が同一レンダーにコミットされる）も立ち上がりエッジと
+  // して scrollIntoView を発火させる必要があるため。
+  const prevPlaying = useRef(false);
 
   useEffect(() => {
     if (playing && !prevPlaying.current) {
