@@ -38,3 +38,7 @@ dist/
 # 一時ファイル（作業メモ・通知・ロック等）
 .tmp/
 .vox-actor/
+
+# フロントエンド（Vite）
+frontend/dist/
+frontend/node_modules/

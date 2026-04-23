@@ -1,3 +1,5 @@
+import "./app.css";
+
 (() => {
   const statusBadge = document.getElementById("status-badge");
   const volumeEl = document.getElementById("volume");

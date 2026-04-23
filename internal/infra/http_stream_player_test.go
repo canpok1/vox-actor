@@ -68,17 +68,74 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"regexp"
 	"strings"
 	"testing"
+	"testing/fstest"
 	"time"
 
 	"github.com/canpok1/vox-actor/internal/app"
 	"github.com/canpok1/vox-actor/internal/domain/entity"
 )
 
+// testIndexHTML は Vite build 後の dist/index.html を模した fixture。
+// 配信画面テストが検証する UI マーカーをすべて含み、ハッシュ付きアセットへの参照を持つ。
+const testIndexHTML = `<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>vox-actor stream</title>
+<script type="module" crossorigin src="/assets/index-test.js"></script>
+<link rel="stylesheet" crossorigin href="/assets/index-test.css">
+</head>
+<body>
+<main class="container">
+  <div class="header">
+    <h1>vox-actor stream</h1>
+    <span id="status-badge" class="badge badge-connected">● 接続中</span>
+  </div>
+  <div class="volume-row">
+    <label class="volume-slider">
+      音量
+      <input type="range" id="volume" min="0" max="100" value="50">
+      <span id="volume-icon">🔇</span>
+    </label>
+    <label class="toggle"><input type="checkbox" id="mute" checked>消音</label>
+  </div>
+  <div class="tabs">
+    <button type="button" id="tab-stream" class="tab active">配信</button>
+    <button type="button" id="tab-test" class="tab">音声テスト</button>
+  </div>
+  <section id="panel-stream" class="panel">
+    <div class="timeline-controls">
+      <label class="toggle"><input type="checkbox" id="show-speaker-name" checked>話者名</label>
+      <label class="toggle"><input type="checkbox" id="show-style-name" checked>スタイル</label>
+      <label class="toggle"><input type="checkbox" id="show-timestamp" checked>時刻</label>
+    </div>
+  </section>
+  <section id="panel-test" class="panel hidden">
+    <select id="test-speaker"></select>
+    <button type="button" id="test-play">▶ テスト再生</button>
+  </section>
+  <audio id="player" muted></audio>
+</main>
+</body>
+</html>
+`
+
+// newTestStreamAssets は Vite dist ライクな fs.FS を返す。
+// index.html はマーカー検証用に共通の testIndexHTML を使う。
+func newTestStreamAssets() fstest.MapFS {
+	return fstest.MapFS{
+		"index.html":            {Data: []byte(testIndexHTML)},
+		"assets/index-test.js":  {Data: []byte("export const a=1;\n")},
+		"assets/index-test.css": {Data: []byte("body{}\n")},
+	}
+}
+
 func newStartedPlayer(t *testing.T) *HTTPStreamPlayer {
 	t.Helper()
-	p, err := NewHTTPStreamPlayer("127.0.0.1:0")
+	p, err := NewHTTPStreamPlayer("127.0.0.1:0", newTestStreamAssets())
 	if err != nil {
 		t.Fatalf("NewHTTPStreamPlayer: %v", err)
 	}
@@ -117,7 +174,7 @@ func TestHTTPStreamPlayer_StartAddr_DynamicPort(t *testing.T) {
 
 func TestHTTPStreamPlayer_Start_InvalidAddr(t *testing.T) {
 	t.Parallel()
-	p, err := NewHTTPStreamPlayer("not-a-valid-addr")
+	p, err := NewHTTPStreamPlayer("not-a-valid-addr", newTestStreamAssets())
 	if err != nil {
 		t.Fatalf("NewHTTPStreamPlayer: %v", err)
 	}
@@ -128,7 +185,7 @@ func TestHTTPStreamPlayer_Start_InvalidAddr(t *testing.T) {
 
 func TestHTTPStreamPlayer_Play_BeforeStart(t *testing.T) {
 	t.Parallel()
-	p, err := NewHTTPStreamPlayer("127.0.0.1:0")
+	p, err := NewHTTPStreamPlayer("127.0.0.1:0", newTestStreamAssets())
 	if err != nil {
 		t.Fatalf("NewHTTPStreamPlayer: %v", err)
 	}
@@ -139,7 +196,7 @@ func TestHTTPStreamPlayer_Play_BeforeStart(t *testing.T) {
 
 func TestHTTPStreamPlayer_Shutdown_StopsServer(t *testing.T) {
 	t.Parallel()
-	p, err := NewHTTPStreamPlayer("127.0.0.1:0")
+	p, err := NewHTTPStreamPlayer("127.0.0.1:0", newTestStreamAssets())
 	if err != nil {
 		t.Fatalf("NewHTTPStreamPlayer: %v", err)
 	}
@@ -179,35 +236,90 @@ func TestHTTPStreamPlayer_Index(t *testing.T) {
 	}
 }
 
-func TestHTTPStreamPlayer_AppJS(t *testing.T) {
-	t.Parallel()
-	p := newStartedPlayer(t)
-	resp, err := http.Get("http://" + p.Addr() + "/app.js")
+// fetchIndexAssetPaths は GET / から Vite が書き換えた /assets/<hash>.{js,css} のパスを抽出する。
+// ハッシュ付きファイル名はテスト側で決め打ちできないため、index.html からランタイムで取得する。
+func fetchIndexAssetPaths(t *testing.T, baseURL string) (jsPath, cssPath string) {
+	t.Helper()
+	resp, err := http.Get(baseURL + "/")
 	if err != nil {
-		t.Fatalf("GET /app.js: %v", err)
+		t.Fatalf("GET /: %v", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read index: %v", err)
+	}
+	html := string(body)
+	jsRe := regexp.MustCompile(`src="(/assets/[^"]+\.js)"`)
+	cssRe := regexp.MustCompile(`href="(/assets/[^"]+\.css)"`)
+	jsMatch := jsRe.FindStringSubmatch(html)
+	cssMatch := cssRe.FindStringSubmatch(html)
+	if len(jsMatch) < 2 {
+		t.Fatalf("no /assets/*.js reference in index: %s", html)
+	}
+	if len(cssMatch) < 2 {
+		t.Fatalf("no /assets/*.css reference in index: %s", html)
+	}
+	return jsMatch[1], cssMatch[1]
+}
+
+func TestHTTPStreamPlayer_Assets_JSAndCSS(t *testing.T) {
+	t.Parallel()
+	p := newStartedPlayer(t)
+	baseURL := "http://" + p.Addr()
+	jsPath, cssPath := fetchIndexAssetPaths(t, baseURL)
+
+	resp, err := http.Get(baseURL + jsPath)
+	if err != nil {
+		t.Fatalf("GET %s: %v", jsPath, err)
+	}
+	_ = resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status: %d", resp.StatusCode)
+		t.Fatalf("js status: %d", resp.StatusCode)
 	}
 	if ct := resp.Header.Get("Content-Type"); !strings.Contains(ct, "javascript") {
-		t.Errorf("unexpected Content-Type: %s", ct)
+		t.Errorf("unexpected js Content-Type: %s", ct)
+	}
+
+	resp, err = http.Get(baseURL + cssPath)
+	if err != nil {
+		t.Fatalf("GET %s: %v", cssPath, err)
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("css status: %d", resp.StatusCode)
+	}
+	if ct := resp.Header.Get("Content-Type"); !strings.Contains(ct, "css") {
+		t.Errorf("unexpected css Content-Type: %s", ct)
 	}
 }
 
-func TestHTTPStreamPlayer_AppCSS(t *testing.T) {
+func TestHTTPStreamPlayer_Index_CacheControlNoCache(t *testing.T) {
 	t.Parallel()
 	p := newStartedPlayer(t)
-	resp, err := http.Get("http://" + p.Addr() + "/app.css")
+	resp, err := http.Get("http://" + p.Addr() + "/")
 	if err != nil {
-		t.Fatalf("GET /app.css: %v", err)
+		t.Fatalf("GET /: %v", err)
 	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status: %d", resp.StatusCode)
+	_ = resp.Body.Close()
+	if got := resp.Header.Get("Cache-Control"); got != "no-cache" {
+		t.Errorf("expected Cache-Control=no-cache on /, got %q", got)
 	}
-	if ct := resp.Header.Get("Content-Type"); !strings.Contains(ct, "css") {
-		t.Errorf("unexpected Content-Type: %s", ct)
+}
+
+func TestHTTPStreamPlayer_Assets_CacheControlImmutable(t *testing.T) {
+	t.Parallel()
+	p := newStartedPlayer(t)
+	baseURL := "http://" + p.Addr()
+	jsPath, _ := fetchIndexAssetPaths(t, baseURL)
+	resp, err := http.Get(baseURL + jsPath)
+	if err != nil {
+		t.Fatalf("GET %s: %v", jsPath, err)
+	}
+	_ = resp.Body.Close()
+	got := resp.Header.Get("Cache-Control")
+	if !strings.Contains(got, "immutable") || !strings.Contains(got, "max-age=31536000") {
+		t.Errorf("expected Cache-Control to include immutable and max-age=31536000 on /assets/*, got %q", got)
 	}
 }
 
@@ -445,8 +557,7 @@ func TestHTTPStreamPlayer_Play_ClipEventEmptyText(t *testing.T) {
 
 func newStartedPlayerWithOpts(t *testing.T, opts ...HTTPStreamOption) *HTTPStreamPlayer {
 	t.Helper()
-	allOpts := append([]HTTPStreamOption{}, opts...)
-	p, err := NewHTTPStreamPlayer("127.0.0.1:0", allOpts...)
+	p, err := NewHTTPStreamPlayer("127.0.0.1:0", newTestStreamAssets(), opts...)
 	if err != nil {
 		t.Fatalf("NewHTTPStreamPlayer: %v", err)
 	}
@@ -656,7 +767,7 @@ func TestHTTPStreamPlayer_Play_InvalidWAVHeaderReturnsWithoutSleep(t *testing.T)
 
 	var logBuf bytes.Buffer
 	logger := slog.New(slog.NewTextHandler(&logBuf, &slog.HandlerOptions{Level: slog.LevelWarn}))
-	p, err := NewHTTPStreamPlayer("127.0.0.1:0", WithHTTPStreamLogger(logger))
+	p, err := NewHTTPStreamPlayer("127.0.0.1:0", newTestStreamAssets(), WithHTTPStreamLogger(logger))
 	if err != nil {
 		t.Fatalf("NewHTTPStreamPlayer: %v", err)
 	}
