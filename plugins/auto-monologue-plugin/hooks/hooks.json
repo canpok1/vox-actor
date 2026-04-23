@@ -1,11 +1,11 @@
 {
   "hooks": {
-    "Stop": [
+    "SessionStart": [
       {
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/monologue-stop.sh"
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/monologue-session-start.sh"
           }
         ]
       }
