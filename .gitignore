@@ -33,12 +33,14 @@ go.work.sum
 /vox-actor
 
 # GoReleaser
-dist/
+/dist/
 
 # 一時ファイル（作業メモ・通知・ロック等）
 .tmp/
 .vox-actor/
 
 # フロントエンド（Vite）
-frontend/dist/
+# ビルド成果物は無視するが、//go:embed のために空ディレクトリを維持する .gitkeep は例外的にコミットする
+frontend/dist/*
+!frontend/dist/.gitkeep
 frontend/node_modules/
