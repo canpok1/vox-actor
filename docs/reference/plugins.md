@@ -4,7 +4,7 @@ claude code に `vox-actor-plugin` を導入すると、以下のスラッシュ
 
 ## 対応キャラクター一覧
 
-`monologue` / `speak` / `talk` スキルで利用できるキャラクターは `plugins/vox-actor-plugin/characters/` に設定ファイルとして同梱されています。キャラクター名（`<name>`）は `/vox-actor-plugin:monologue <name>` の引数や、`monologue` / `speak` 共通の `default_character`、`talk` 用の `talk_characters` メモリ設定で指定します。
+`monologue` / `speak` / `talk` スキルで利用できるキャラクターは `plugins/vox-actor-plugin/skills/act/characters/` に設定ファイルとして同梱されています。キャラクター名（`<name>`）は `/vox-actor-plugin:monologue <name>` の引数や、`monologue` / `speak` 共通の `default_character`、`talk` 用の `talk_characters` メモリ設定で指定します。
 
 | キャラクター名 | `<name>` | 分類 | 特徴 |
 |---|---|---|---|
