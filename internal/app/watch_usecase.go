@@ -62,6 +62,26 @@ func (u *WatchUsecase) broadcastError(e StreamError) {
 	}
 }
 
+// broadcastSynthesisError は synthesis カテゴリのエラーを対象スクリプト情報付きで配信する。
+func (u *WatchUsecase) broadcastSynthesisError(script entity.Script, speakerID int, err error) {
+	u.broadcastError(StreamError{
+		Category:  StreamErrorCategorySynthesis,
+		Message:   err.Error(),
+		Path:      script.Path,
+		Text:      script.Text,
+		SpeakerID: speakerID,
+	})
+}
+
+// broadcastFileError は file カテゴリのエラーをファイルパス付きで配信する。
+func (u *WatchUsecase) broadcastFileError(path string, err error) {
+	u.broadcastError(StreamError{
+		Category: StreamErrorCategoryFile,
+		Message:  err.Error(),
+		Path:     path,
+	})
+}
+
 // WatchUsecase はディレクトリ監視モードのユースケース。
 type WatchUsecase struct {
 	reader     ScriptReader
@@ -209,22 +229,14 @@ func (u *WatchUsecase) processFile(ctx context.Context, path string, params Watc
 		if u.deleteMode {
 			if delErr := u.mover.Delete(path); delErr != nil {
 				u.logger.Error("delete error", "path", path, "error", delErr)
-				u.broadcastError(StreamError{
-					Category: StreamErrorCategoryFile,
-					Message:  delErr.Error(),
-					Path:     path,
-				})
+				u.broadcastFileError(path, delErr)
 			} else {
 				u.logger.Debug("file deleted", "path", path)
 			}
 		} else {
 			if moveErr := u.mover.MoveToDone(path); moveErr != nil {
 				u.logger.Error("move error", "path", path, "error", moveErr)
-				u.broadcastError(StreamError{
-					Category: StreamErrorCategoryFile,
-					Message:  moveErr.Error(),
-					Path:     path,
-				})
+				u.broadcastFileError(path, moveErr)
 			} else {
 				u.logger.Debug("file moved to done", "path", path)
 			}
@@ -234,11 +246,7 @@ func (u *WatchUsecase) processFile(ctx context.Context, path string, params Watc
 	scripts, err := u.reader.Read(path)
 	if err != nil {
 		u.logger.Error("read error (skipping)", "path", path, "error", err)
-		u.broadcastError(StreamError{
-			Category: StreamErrorCategoryFile,
-			Message:  err.Error(),
-			Path:     path,
-		})
+		u.broadcastFileError(path, err)
 		return
 	}
 
@@ -273,23 +281,11 @@ func (u *WatchUsecase) processFile(ctx context.Context, path string, params Watc
 		switch result.stage {
 		case synthStageQueryFailed:
 			u.logger.Error("create query error (skipping script)", "path", result.script.Path, "error", result.err)
-			u.broadcastError(StreamError{
-				Category:  StreamErrorCategorySynthesis,
-				Message:   result.err.Error(),
-				Path:      result.script.Path,
-				Text:      result.script.Text,
-				SpeakerID: speakerID,
-			})
+			u.broadcastSynthesisError(result.script, speakerID, result.err)
 			continue
 		case synthStageSynthesizeFailed:
 			u.logger.Error("synthesize error (skipping script)", "path", result.script.Path, "error", result.err)
-			u.broadcastError(StreamError{
-				Category:  StreamErrorCategorySynthesis,
-				Message:   result.err.Error(),
-				Path:      result.script.Path,
-				Text:      result.script.Text,
-				SpeakerID: speakerID,
-			})
+			u.broadcastSynthesisError(result.script, speakerID, result.err)
 			continue
 		}
 
@@ -297,13 +293,7 @@ func (u *WatchUsecase) processFile(ctx context.Context, path string, params Watc
 
 		if err := u.player.Play(ctx, result.wav, PlayMeta{Text: result.script.Text, SpeakerID: speakerID}); err != nil {
 			u.logger.Error("play error (skipping script)", "path", result.script.Path, "error", err)
-			u.broadcastError(StreamError{
-				Category:  StreamErrorCategorySynthesis,
-				Message:   err.Error(),
-				Path:      result.script.Path,
-				Text:      result.script.Text,
-				SpeakerID: speakerID,
-			})
+			u.broadcastSynthesisError(result.script, speakerID, err)
 			continue
 		}
 		u.logger.Info(fmt.Sprintf("[%d/%d] playback completed", result.index, total), "text", truncateAndEscapeText(result.script.Text))
@@ -337,13 +327,7 @@ func (u *WatchUsecase) processScriptsSilent(ctx context.Context, scripts []entit
 		speakerID := script.ResolveSpeakerID(params.SpeakerID)
 		if err := tp.PlayText(ctx, PlayMeta{Text: script.Text, SpeakerID: speakerID}); err != nil {
 			u.logger.Error("silent play error (skipping script)", "path", script.Path, "error", err)
-			u.broadcastError(StreamError{
-				Category:  StreamErrorCategorySynthesis,
-				Message:   err.Error(),
-				Path:      script.Path,
-				Text:      script.Text,
-				SpeakerID: speakerID,
-			})
+			u.broadcastSynthesisError(script, speakerID, err)
 			continue
 		}
 		u.logger.Info(fmt.Sprintf("[%d/%d] playback completed (silent)", current, total), "text", truncateAndEscapeText(script.Text))

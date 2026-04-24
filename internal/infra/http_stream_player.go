@@ -442,7 +442,6 @@ func (p *HTTPStreamPlayer) BroadcastError(e app.StreamError) {
 	case app.StreamErrorCategoryFile:
 		ev.Path = e.Path
 	case app.StreamErrorCategoryConnection:
-		// message / timestamp / id のみ
 	}
 
 	payload, err := json.Marshal(ev)

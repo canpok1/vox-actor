@@ -49,9 +49,7 @@ const parseBool = (raw: string): boolean | null =>
 
 const passthrough = (v: string): string => v;
 
-// 履歴件数上限に合わせて古い項目から削除する。
-// 再生中のクリップ項目（kind:"clip" かつ id が playingId と一致）は削除しない。
-// エラー項目は再生対象ではないため、常に削除対象となる。
+// 再生中のクリップ項目は削除しない（playingId と一致する clip に出会ったら停止）。
 function trimTimeline(
   entries: TimelineEntry[],
   size: number,
