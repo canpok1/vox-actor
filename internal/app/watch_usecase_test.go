@@ -1212,3 +1212,129 @@ func TestWatchUsecase_Run_OneWatcherError_OthersContinue(t *testing.T) {
 		t.Errorf("expected watcher error log, got: %s", output)
 	}
 }
+
+// --- #284 無音モード ---
+
+// silentModePlayer は WithSilent 経路で使われる PlayText 対応の AudioPlayer。
+type silentModePlayer struct {
+	mu            sync.Mutex
+	playCalls     int
+	playTextCalls int
+	playTextMetas []app.PlayMeta
+}
+
+func (p *silentModePlayer) Play(_ context.Context, _ []byte, _ app.PlayMeta) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.playCalls++
+	return nil
+}
+
+func (p *silentModePlayer) PlayText(_ context.Context, meta app.PlayMeta) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.playTextCalls++
+	p.playTextMetas = append(p.playTextMetas, meta)
+	return nil
+}
+
+func TestWatchUsecase_Run_SilentMode_SkipsSynthAndCallsPlayText(t *testing.T) {
+	overrideID := 11
+	reader := &mockScriptReader{
+		scripts: []entity.Script{
+			{Path: "a.txt", Text: "default", IsEmpty: false},
+			{Path: "b.txt", Text: "override", IsEmpty: false, SpeakerID: &overrideID},
+		},
+	}
+	client := &mockVoicevoxClient{
+		query:   &entity.AudioQuery{},
+		wavData: []byte("fake-wav"),
+	}
+	player := &silentModePlayer{}
+	mover := &mockFileMover{}
+	watcher := &mockDirWatcher{
+		files: []string{"/tmp/watch/a.txt"},
+	}
+
+	uc := app.NewWatchUsecase(reader, client, player, mover, watcher, app.WithSilent())
+	params := app.WatchParams{
+		Paths:     []string{"/tmp/watch"},
+		SpeakerID: 3,
+	}
+
+	if err := uc.Run(context.Background(), params); err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	// 無音モードでは CreateQuery / Synthesize は呼ばれない
+	if client.createQueryCalls != 0 {
+		t.Errorf("expected 0 CreateQuery calls in silent mode, got: %d", client.createQueryCalls)
+	}
+	if client.synthesizeCalls != 0 {
+		t.Errorf("expected 0 Synthesize calls in silent mode, got: %d", client.synthesizeCalls)
+	}
+	// Play も呼ばれない
+	if player.playCalls != 0 {
+		t.Errorf("expected 0 Play calls in silent mode, got: %d", player.playCalls)
+	}
+	// 各スクリプトが PlayText で1回ずつ配信される
+	if player.playTextCalls != 2 {
+		t.Fatalf("expected 2 PlayText calls, got: %d", player.playTextCalls)
+	}
+	if player.playTextMetas[0].SpeakerID != 3 || player.playTextMetas[0].Text != "default" {
+		t.Errorf("unexpected meta[0]: %+v", player.playTextMetas[0])
+	}
+	if player.playTextMetas[1].SpeakerID != 11 || player.playTextMetas[1].Text != "override" {
+		t.Errorf("unexpected meta[1]: %+v", player.playTextMetas[1])
+	}
+	// done/ 移動も従来通り行われる
+	if len(mover.movedFiles) != 1 {
+		t.Errorf("expected 1 file moved to done, got: %d", len(mover.movedFiles))
+	}
+}
+
+func TestWatchUsecase_Run_SilentMode_SkipsHealthCheck(t *testing.T) {
+	reader := &mockScriptReader{
+		scripts: []entity.Script{{Path: "a.txt", Text: "x", IsEmpty: false}},
+	}
+	// 無音モードでは HealthCheck すら呼ばないので、HealthCheck でエラーを返しても処理が進むこと
+	client := &mockVoicevoxClient{
+		healthCheckErr: errors.New("engine down"),
+	}
+	player := &silentModePlayer{}
+	mover := &mockFileMover{}
+	watcher := &mockDirWatcher{files: []string{"/tmp/watch/a.txt"}}
+
+	uc := app.NewWatchUsecase(reader, client, player, mover, watcher, app.WithSilent())
+	params := app.WatchParams{Paths: []string{"/tmp/watch"}, SpeakerID: 3}
+
+	if err := uc.Run(context.Background(), params); err != nil {
+		t.Fatalf("expected no error in silent mode even with HealthCheck error, got: %v", err)
+	}
+	if player.playTextCalls != 1 {
+		t.Errorf("expected 1 PlayText call, got: %d", player.playTextCalls)
+	}
+}
+
+func TestWatchUsecase_Run_SilentMode_EmptyScriptsSkipped(t *testing.T) {
+	reader := &mockScriptReader{
+		scripts: []entity.Script{
+			{Path: "empty.txt", Text: "", IsEmpty: true},
+			{Path: "full.txt", Text: "こんにちは", IsEmpty: false},
+		},
+	}
+	client := &mockVoicevoxClient{}
+	player := &silentModePlayer{}
+	mover := &mockFileMover{}
+	watcher := &mockDirWatcher{files: []string{"/tmp/watch/a.txt"}}
+
+	uc := app.NewWatchUsecase(reader, client, player, mover, watcher, app.WithSilent())
+	params := app.WatchParams{Paths: []string{"/tmp/watch"}, SpeakerID: 3}
+
+	if err := uc.Run(context.Background(), params); err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+	if player.playTextCalls != 1 {
+		t.Errorf("expected 1 PlayText call (empty script skipped), got: %d", player.playTextCalls)
+	}
+}

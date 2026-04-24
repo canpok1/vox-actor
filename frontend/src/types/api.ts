@@ -56,3 +56,22 @@ export function isSpeaker(value: unknown): value is Speaker {
 export function isSpeakerArray(value: unknown): value is Speaker[] {
   return Array.isArray(value) && value.every(isSpeaker);
 }
+
+export interface ApiStatus {
+  silent: boolean;
+  // 無音モード時の理由文面（改行を含む）。通常モードでは空文字。
+  silentReason: string;
+  speakers: Speaker[];
+}
+
+export function isApiStatus(value: unknown): value is ApiStatus {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+  const v = value as Record<string, unknown>;
+  return (
+    typeof v.silent === "boolean" &&
+    typeof v.silentReason === "string" &&
+    isSpeakerArray(v.speakers)
+  );
+}

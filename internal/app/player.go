@@ -29,4 +29,11 @@ type StreamPlayer interface {
 	Shutdown(ctx context.Context) error
 	// Addr はサーバーがリッスンしているアドレスを返す。Start 前の値は未定義。
 	Addr() string
+	// SetSilent は無音モードと silentReason を設定する。Start 前に呼び出すこと。
+	// reason が空文字なら通常モードとして扱う。
+	SetSilent(reason string)
+	// PlayText は WAV 合成をスキップしたセリフ配信を行う。
+	// 無音モードでの利用を想定し、内部で固定待機してから return することで
+	// タイムラインが一瞬で流れ去らないようにする。
+	PlayText(ctx context.Context, meta PlayMeta) error
 }

@@ -15,6 +15,18 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// 無音モード通知用の固定文面（#284）。
+// silentLogMessage は WARN ログ、silentReason* はフロントに返す `silentReason` 本文。
+const (
+	silentLogMessage = "VOICEVOX engine unreachable, continuing in silent mode (no audio will be played)"
+
+	silentReasonHealthCheckFailed = `VOICEVOXに接続できないため無音モードで起動しました。
+音を再生したい場合はVOICEVOXに接続できる状態で起動し直してください。`
+
+	silentReasonGetSpeakersFailed = `VOICEVOXから話者一覧を取得できなかったため無音モードで起動しました。
+音を再生したい場合はVOICEVOXを正常に応答する状態にして起動し直してください。`
+)
+
 // WatchDeps はwatchコマンドの依存を保持する。
 type WatchDeps struct {
 	Reader            app.ScriptReader
@@ -129,26 +141,43 @@ func runWatch(cmd *cobra.Command, args []string, deps *WatchDeps) error {
 	}
 
 	player := deps.Player
+	silent := false
 	if stream {
 		if deps.StreamPlayerFactory == nil {
 			return fmt.Errorf("stream player factory is not initialized")
 		}
 
 		// HealthCheck → /speakers 取得 → lookup を組み立ててから stream player を起動する。
-		// /speakers の失敗は watch 起動エラーとして即終了する。
+		// どちらかが失敗した場合は無音モードにフォールバックして起動を継続する（#284）。
+		var (
+			lookup       map[int]entity.SpeakerStyleInfo
+			silentReason string
+		)
 		if err := client.HealthCheck(ctx); err != nil {
-			return fmt.Errorf("engine health check failed: %w", err)
+			silent = true
+			silentReason = silentReasonHealthCheckFailed
+			logger.Warn(silentLogMessage, "error", fmt.Errorf("health check failed: %w", err))
+		} else {
+			speakers, err := client.GetSpeakers(ctx)
+			if err != nil {
+				silent = true
+				silentReason = silentReasonGetSpeakersFailed
+				logger.Warn(silentLogMessage, "error", fmt.Errorf("get speakers failed: %w", err))
+			} else {
+				lookup = entity.BuildSpeakerStyleLookup(speakers)
+				logger.Info("speakers loaded", "speakerCount", len(speakers), "styleCount", len(lookup))
+			}
 		}
-		speakers, err := client.GetSpeakers(ctx)
-		if err != nil {
-			return fmt.Errorf("failed to get speakers: %w", err)
+		if silent {
+			lookup = map[int]entity.SpeakerStyleInfo{}
 		}
-		lookup := entity.BuildSpeakerStyleLookup(speakers)
-		logger.Info("speakers loaded", "speakerCount", len(speakers), "styleCount", len(lookup))
 
 		sp, err := deps.StreamPlayerFactory(streamAddr, logger, lookup, client)
 		if err != nil {
 			return fmt.Errorf("failed to create stream player: %w", err)
+		}
+		if silent {
+			sp.SetSilent(silentReason)
 		}
 		if err := sp.Start(ctx); err != nil {
 			return fmt.Errorf("failed to start stream server: %w", err)
@@ -160,7 +189,7 @@ func runWatch(cmd *cobra.Command, args []string, deps *WatchDeps) error {
 				logger.Error("stream server shutdown error", "error", err)
 			}
 		}()
-		logger.Info("stream server listening", "addr", sp.Addr())
+		logger.Info("stream server listening", "addr", sp.Addr(), "silent", silent)
 		player = sp
 	}
 
@@ -168,6 +197,9 @@ func runWatch(cmd *cobra.Command, args []string, deps *WatchDeps) error {
 	opts := []app.WatchOption{app.WithWatchLogger(logger)}
 	if deleteMode {
 		opts = append(opts, app.WithDeleteMode())
+	}
+	if silent {
+		opts = append(opts, app.WithSilent())
 	}
 
 	uc := app.NewWatchUsecase(deps.Reader, client, player, deps.Mover, watcher, opts...)

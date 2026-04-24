@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { SilentBadge } from "./components/SilentBadge";
 import { StatusBadge } from "./components/StatusBadge";
 import { StreamPanel } from "./components/StreamPanel";
 import { type TabName, Tabs } from "./components/Tabs";
@@ -9,8 +10,8 @@ import { usePersistedState } from "./hooks/usePersistedState";
 import { usePlaybackQueue } from "./hooks/usePlaybackQueue";
 import {
   type ClipEvent,
+  isApiStatus,
   isClipEvent,
-  isSpeakerArray,
   type Speaker,
 } from "./types/api";
 
@@ -108,6 +109,8 @@ export function App() {
   );
 
   const [speakers, setSpeakers] = useState<Speaker[]>([]);
+  const [silent, setSilent] = useState(false);
+  const [silentReason, setSilentReason] = useState("");
   const [clips, setClips] = useState<ClipEvent[]>([]);
   const [testError, setTestError] = useState<string>("");
   const testErrorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -159,16 +162,19 @@ export function App() {
     let cancelled = false;
     const load = async (): Promise<void> => {
       try {
-        const resp = await fetch("/speakers.json");
+        const resp = await fetch("/api/status");
         if (!resp.ok) throw new Error(`status ${resp.status}`);
         const data: unknown = await resp.json();
-        if (!isSpeakerArray(data)) {
-          throw new Error("invalid speakers payload");
+        if (!isApiStatus(data)) {
+          throw new Error("invalid api status payload");
         }
-        if (!cancelled) setSpeakers(data);
+        if (cancelled) return;
+        setSpeakers(data.speakers);
+        setSilent(data.silent);
+        setSilentReason(data.silentReason);
       } catch (err) {
-        console.error("failed to load speakers", err);
-        if (!cancelled) showTestError("話者一覧の取得に失敗しました");
+        console.error("failed to load api status", err);
+        if (!cancelled) showTestError("サーバー状態の取得に失敗しました");
       }
     };
     void load();
@@ -184,6 +190,13 @@ export function App() {
       setTestSpeakerId(String(speakers[0].id));
     }
   }, [speakers, testSpeakerId, setTestSpeakerId]);
+
+  // 無音モード時は「音声テスト」タブを非表示にするため、選択中だった場合は配信タブに戻す。
+  useEffect(() => {
+    if (silent && activeTab === "test") {
+      setActiveTab("stream");
+    }
+  }, [silent, activeTab, setActiveTab]);
 
   const handleClip = useCallback(
     (data: string): void => {
@@ -202,7 +215,10 @@ export function App() {
       setClips((prev) =>
         trimClips([...prev, clip], historySize, playingClipIdRef.current),
       );
-      enqueue(clip);
+      // clip.url が空の場合は無音モード配信なのでタイムラインには載せつつ再生キューには積まない。
+      if (clip.url !== "") {
+        enqueue(clip);
+      }
     },
     [historySize, enqueue],
   );
@@ -230,6 +246,7 @@ export function App() {
       <div className="mb-2 flex flex-wrap items-center gap-3">
         <h1 className="m-0 text-[1.1rem] md:text-[1.4rem]">vox-actor stream</h1>
         <StatusBadge connected={connected} />
+        {silent && <SilentBadge reason={silentReason} />}
       </div>
       <VolumeControls
         volume={volume}
@@ -237,7 +254,7 @@ export function App() {
         onVolumeChange={setVolume}
         onMuteChange={setMuted}
       />
-      <Tabs active={activeTab} onChange={setActiveTab} />
+      <Tabs active={activeTab} onChange={setActiveTab} hideTest={silent} />
       <StreamPanel
         hidden={activeTab !== "stream"}
         clips={clips}
@@ -252,14 +269,16 @@ export function App() {
         onShowStyleNameChange={setShowStyleName}
         onShowTimestampChange={setShowTimestamp}
       />
-      <TestPanel
-        hidden={activeTab !== "test"}
-        speakers={speakers}
-        selectedSpeakerId={testSpeakerId}
-        onSpeakerChange={setTestSpeakerId}
-        onPlay={handleTestPlay}
-        error={testError}
-      />
+      {!silent && (
+        <TestPanel
+          hidden={activeTab !== "test"}
+          speakers={speakers}
+          selectedSpeakerId={testSpeakerId}
+          onSpeakerChange={setTestSpeakerId}
+          onPlay={handleTestPlay}
+          error={testError}
+        />
+      )}
       <audio ref={audioRef} muted />
     </main>
   );
