@@ -54,6 +54,34 @@ type textPlayer interface {
 	PlayText(ctx context.Context, meta PlayMeta) error
 }
 
+// broadcastError は player が ErrorBroadcaster を実装している場合のみ、
+// 配信画面向けのエラー通知をブロードキャストする。それ以外は no-op。
+func (u *WatchUsecase) broadcastError(e StreamError) {
+	if b, ok := u.player.(ErrorBroadcaster); ok {
+		b.BroadcastError(e)
+	}
+}
+
+// broadcastSynthesisError は synthesis カテゴリのエラーを対象スクリプト情報付きで配信する。
+func (u *WatchUsecase) broadcastSynthesisError(script entity.Script, speakerID int, err error) {
+	u.broadcastError(StreamError{
+		Category:  StreamErrorCategorySynthesis,
+		Message:   err.Error(),
+		Path:      script.Path,
+		Text:      script.Text,
+		SpeakerID: speakerID,
+	})
+}
+
+// broadcastFileError は file カテゴリのエラーをファイルパス付きで配信する。
+func (u *WatchUsecase) broadcastFileError(path string, err error) {
+	u.broadcastError(StreamError{
+		Category: StreamErrorCategoryFile,
+		Message:  err.Error(),
+		Path:     path,
+	})
+}
+
 // WatchUsecase はディレクトリ監視モードのユースケース。
 type WatchUsecase struct {
 	reader     ScriptReader
@@ -93,6 +121,10 @@ func (u *WatchUsecase) Run(ctx context.Context, params WatchParams) error {
 
 	if !params.DryRun && !u.silent {
 		if err := u.client.HealthCheck(ctx); err != nil {
+			u.broadcastError(StreamError{
+				Category: StreamErrorCategoryConnection,
+				Message:  err.Error(),
+			})
 			return err
 		}
 		u.logger.Info("engine health check passed")
@@ -197,12 +229,14 @@ func (u *WatchUsecase) processFile(ctx context.Context, path string, params Watc
 		if u.deleteMode {
 			if delErr := u.mover.Delete(path); delErr != nil {
 				u.logger.Error("delete error", "path", path, "error", delErr)
+				u.broadcastFileError(path, delErr)
 			} else {
 				u.logger.Debug("file deleted", "path", path)
 			}
 		} else {
 			if moveErr := u.mover.MoveToDone(path); moveErr != nil {
 				u.logger.Error("move error", "path", path, "error", moveErr)
+				u.broadcastFileError(path, moveErr)
 			} else {
 				u.logger.Debug("file moved to done", "path", path)
 			}
@@ -212,6 +246,7 @@ func (u *WatchUsecase) processFile(ctx context.Context, path string, params Watc
 	scripts, err := u.reader.Read(path)
 	if err != nil {
 		u.logger.Error("read error (skipping)", "path", path, "error", err)
+		u.broadcastFileError(path, err)
 		return
 	}
 
@@ -242,20 +277,23 @@ func (u *WatchUsecase) processFile(ctx context.Context, path string, params Watc
 	ch := startSynthPipeline(ctx, u.client, u.logger, scripts, cfg)
 
 	for result := range ch {
+		speakerID := result.script.ResolveSpeakerID(params.SpeakerID)
 		switch result.stage {
 		case synthStageQueryFailed:
 			u.logger.Error("create query error (skipping script)", "path", result.script.Path, "error", result.err)
+			u.broadcastSynthesisError(result.script, speakerID, result.err)
 			continue
 		case synthStageSynthesizeFailed:
 			u.logger.Error("synthesize error (skipping script)", "path", result.script.Path, "error", result.err)
+			u.broadcastSynthesisError(result.script, speakerID, result.err)
 			continue
 		}
 
 		u.logger.Debug("processing script", "path", result.script.Path)
 
-		speakerID := result.script.ResolveSpeakerID(params.SpeakerID)
 		if err := u.player.Play(ctx, result.wav, PlayMeta{Text: result.script.Text, SpeakerID: speakerID}); err != nil {
 			u.logger.Error("play error (skipping script)", "path", result.script.Path, "error", err)
+			u.broadcastSynthesisError(result.script, speakerID, err)
 			continue
 		}
 		u.logger.Info(fmt.Sprintf("[%d/%d] playback completed", result.index, total), "text", truncateAndEscapeText(result.script.Text))
@@ -289,6 +327,7 @@ func (u *WatchUsecase) processScriptsSilent(ctx context.Context, scripts []entit
 		speakerID := script.ResolveSpeakerID(params.SpeakerID)
 		if err := tp.PlayText(ctx, PlayMeta{Text: script.Text, SpeakerID: speakerID}); err != nil {
 			u.logger.Error("silent play error (skipping script)", "path", script.Path, "error", err)
+			u.broadcastSynthesisError(script, speakerID, err)
 			continue
 		}
 		u.logger.Info(fmt.Sprintf("[%d/%d] playback completed (silent)", current, total), "text", truncateAndEscapeText(script.Text))

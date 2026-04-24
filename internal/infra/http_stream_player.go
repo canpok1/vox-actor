@@ -62,11 +62,15 @@ type HTTPStreamPlayer struct {
 	started     bool
 	shutdown    bool
 	nextClipID  atomic.Uint64
+	nextErrorID atomic.Uint64
 	clips       *clipRingBuffer
 	subscribers *subscriberRegistry
 }
 
-var _ app.StreamPlayer = (*HTTPStreamPlayer)(nil)
+var (
+	_ app.StreamPlayer     = (*HTTPStreamPlayer)(nil)
+	_ app.ErrorBroadcaster = (*HTTPStreamPlayer)(nil)
+)
 
 const (
 	// streamHistorySize はサーバー側 WAV リングバッファの容量（固定値）。
@@ -75,6 +79,7 @@ const (
 	clipPathPrefix      = "/clips/"
 	clipPathSuffix      = ".wav"
 	sseEventClip        = "clip"
+	sseEventError       = "error"
 	sseSubscriberBuffer = 16
 	// defaultTestPhrase は /test-clip で合成するデフォルトフレーズ。
 	defaultTestPhrase = "音量テストです"
@@ -92,6 +97,24 @@ type clipEvent struct {
 	StyleName   string `json:"styleName"`
 	// Timestamp は配信時刻の Unix ms（UTC）。ブラウザ側で HH:MM:SS に整形する。
 	Timestamp int64 `json:"timestamp"`
+}
+
+// errorEvent は SSE で配信する error イベントのペイロード。
+// Category に応じて一部フィールドは省略される（omitempty）。
+type errorEvent struct {
+	// ID はエラーイベントの連番（1 始まり、clipEvent とは独立）。
+	ID       uint64 `json:"id"`
+	Category string `json:"category"`
+	Message  string `json:"message"`
+	// Timestamp は配信時刻の Unix ms（UTC）。
+	Timestamp int64 `json:"timestamp"`
+	// Path は synthesis / file カテゴリで対象ファイル情報を伝える。
+	Path string `json:"path,omitempty"`
+	// Text は synthesis カテゴリでの読み上げテキスト。
+	Text string `json:"text,omitempty"`
+	// SpeakerName / StyleName は synthesis カテゴリで speakerLookup から解決される。
+	SpeakerName string `json:"speakerName,omitempty"`
+	StyleName   string `json:"styleName,omitempty"`
 }
 
 // HTTPStreamOption は HTTPStreamPlayer の生成時に指定するオプション。
@@ -397,6 +420,41 @@ func (p *HTTPStreamPlayer) Play(ctx context.Context, wavData []byte, meta app.Pl
 	case <-ctx.Done():
 		return ctx.Err()
 	}
+}
+
+// BroadcastError はサーバー側エラーを SSE "error" イベントとして購読者に配信する。
+// Category が StreamErrorCategorySynthesis のときのみ speakerLookup を参照して
+// speakerName / styleName を解決する。それ以外のカテゴリでは該当フィールドを空にする。
+// Start 前の呼び出しは no-op となる（subscribers は空、clip と同様）。
+func (p *HTTPStreamPlayer) BroadcastError(e app.StreamError) {
+	id := p.nextErrorID.Add(1)
+	ev := errorEvent{
+		ID:        id,
+		Category:  string(e.Category),
+		Message:   e.Message,
+		Timestamp: p.nowFunc().UnixMilli(),
+	}
+	switch e.Category {
+	case app.StreamErrorCategorySynthesis:
+		ev.Path = e.Path
+		ev.Text = e.Text
+		ev.SpeakerName, ev.StyleName = p.resolveSpeaker(e.SpeakerID)
+	case app.StreamErrorCategoryFile:
+		ev.Path = e.Path
+	case app.StreamErrorCategoryConnection:
+	}
+
+	payload, err := json.Marshal(ev)
+	if err != nil {
+		p.logger.Error("failed to marshal error payload", "error", err, "category", ev.Category)
+		return
+	}
+
+	n, dropped := p.subscribers.broadcast(sseEventError, payload)
+	if dropped > 0 {
+		p.logger.Warn("stream error event dropped for slow subscribers", "errorId", id, "dropped", dropped)
+	}
+	p.logger.Debug("stream error event delivered", "errorId", id, "category", ev.Category, "subscribers", n)
 }
 
 func (p *HTTPStreamPlayer) handleClip(w http.ResponseWriter, r *http.Request) {

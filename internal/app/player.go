@@ -2,6 +2,37 @@ package app
 
 import "context"
 
+// StreamErrorCategory は配信画面に表示するサーバー側エラーの種別。
+type StreamErrorCategory string
+
+const (
+	// StreamErrorCategorySynthesis は CreateQuery / Synthesize / Play など合成・再生系エラー。
+	StreamErrorCategorySynthesis StreamErrorCategory = "synthesis"
+	// StreamErrorCategoryFile は監視対象スクリプトファイルの読込・移動・削除の失敗。
+	StreamErrorCategoryFile StreamErrorCategory = "file"
+	// StreamErrorCategoryConnection は VOICEVOX エンジンへの接続に関わる失敗（HealthCheck 等）。
+	StreamErrorCategoryConnection StreamErrorCategory = "connection"
+)
+
+// StreamError は配信画面に通知するサーバー側エラーの情報。
+// Category が StreamErrorCategorySynthesis の場合のみ Text / SpeakerID が使われ、
+// broadcaster 側で speakerLookup を参照して speakerName / styleName が解決される。
+// file / connection カテゴリでは該当しないフィールドは無視される。
+type StreamError struct {
+	Category  StreamErrorCategory
+	Message   string
+	Path      string
+	Text      string
+	SpeakerID int
+}
+
+// ErrorBroadcaster は配信画面向けにサーバー側エラーをブロードキャストする。
+// StreamPlayer 実装が同時に実装することを想定し、WatchUsecase からは
+// textPlayer と同じく type assertion で取得する。
+type ErrorBroadcaster interface {
+	BroadcastError(e StreamError)
+}
+
 // PlayMeta は AudioPlayer.Play に付随させる補助情報。
 // 再生の実装（ローカルスピーカー/HTTPストリーム等）によっては利用しない場合もある。
 type PlayMeta struct {

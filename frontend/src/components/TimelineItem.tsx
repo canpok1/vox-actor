@@ -1,8 +1,8 @@
 import { useEffect, useRef } from "react";
-import type { ClipEvent } from "../types/api";
+import type { ErrorCategory, TimelineEntry } from "../types/api";
 
 interface TimelineItemProps {
-  clip: ClipEvent;
+  entry: TimelineEntry;
   playing: boolean;
   showSpeakerName: boolean;
   showStyleName: boolean;
@@ -14,8 +14,14 @@ function formatTimestamp(ms: number): string {
   return new Date(ms).toLocaleTimeString("ja-JP", { hour12: false });
 }
 
+const ERROR_CATEGORY_LABEL: Record<ErrorCategory, string> = {
+  synthesis: "合成エラー",
+  file: "ファイルエラー",
+  connection: "接続エラー",
+};
+
 export function TimelineItem({
-  clip,
+  entry,
   playing,
   showSpeakerName,
   showStyleName,
@@ -36,25 +42,62 @@ export function TimelineItem({
 
   const base =
     "my-1 flex flex-col gap-[0.15rem] rounded break-words px-2 py-1 sm:px-[0.6rem] sm:py-[0.4rem]";
-  const playingCls = playing ? "bg-ctp-overlay font-bold" : "";
   const showMeta = showSpeakerName || showStyleName || showTimestamp;
 
+  if (entry.kind === "error") {
+    const categoryLabel = ERROR_CATEGORY_LABEL[entry.category];
+    return (
+      <li
+        ref={ref}
+        data-error-id={entry.id}
+        data-error-category={entry.category}
+        className={`${base} text-ctp-red`}
+      >
+        <div className="flex flex-wrap items-baseline gap-2 text-[0.8rem] text-ctp-red">
+          {showTimestamp && (
+            <span className="tabular-nums">{formatTimestamp(entry.timestamp)}</span>
+          )}
+          <span className="font-semibold">{categoryLabel}</span>
+          {entry.path && <span className="break-all">{entry.path}</span>}
+        </div>
+        <div className="flex items-start gap-2">
+          <span aria-hidden className="inline-block w-[1em] flex-none">
+            ⚠
+          </span>
+          <span>{entry.message}</span>
+        </div>
+        {entry.text && (
+          <div className="flex flex-wrap items-baseline gap-2 text-[0.8rem] text-ctp-subtext">
+            {showSpeakerName && entry.speakerName && (
+              <span className="font-semibold text-ctp-text">{entry.speakerName}</span>
+            )}
+            {showStyleName && entry.styleName && (
+              <span className="text-ctp-blue">[{entry.styleName}]</span>
+            )}
+            <span className="break-all">{entry.text}</span>
+          </div>
+        )}
+      </li>
+    );
+  }
+
+  const playingCls = playing ? "bg-ctp-overlay font-bold" : "";
   return (
     <li
       ref={ref}
-      data-clip-id={clip.id}
+      data-clip-id={entry.id}
       className={`${base} ${playingCls} text-ctp-text`}
     >
       {showMeta && (
         <div className="flex flex-wrap items-baseline gap-2 text-[0.8rem] text-ctp-subtext">
           {showTimestamp && (
-            <span className="tabular-nums">{formatTimestamp(clip.timestamp)}</span>
+            <span className="tabular-nums">{formatTimestamp(entry.timestamp)}</span>
           )}
           {showSpeakerName && (
-            <span className="font-semibold text-ctp-text">{clip.speakerName}</span>
+            <span className="font-semibold text-ctp-text">{entry.speakerName}</span>
           )}
-          {showStyleName && clip.styleName && (
-            <span className="text-ctp-blue">[{clip.styleName}]</span>
+          {showStyleName && entry.styleName && (
+            <span className="text-ctp-blue">[{entry.styleName}]</span>
           )}
         </div>
       )}
@@ -62,7 +105,7 @@ export function TimelineItem({
         <span aria-hidden className="inline-block w-[1em] flex-none text-ctp-blue">
           {playing ? "▶" : ""}
         </span>
-        <span>{clip.text}</span>
+        <span>{entry.text}</span>
       </div>
     </li>
   );
