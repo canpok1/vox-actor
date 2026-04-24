@@ -1,8 +1,8 @@
-import type { ClipEvent } from "../types/api";
+import type { TimelineEntry } from "../types/api";
 import { TimelineItem } from "./TimelineItem";
 
 interface TimelineProps {
-  clips: ClipEvent[];
+  entries: TimelineEntry[];
   playingClipId: number | null;
   showSpeakerName: boolean;
   showStyleName: boolean;
@@ -10,7 +10,7 @@ interface TimelineProps {
 }
 
 export function Timeline({
-  clips,
+  entries,
   playingClipId,
   showSpeakerName,
   showStyleName,
@@ -22,11 +22,11 @@ export function Timeline({
         aria-live="polite"
         className="m-0 max-h-[65vh] list-none overflow-y-auto p-0 md:max-h-[60vh]"
       >
-        {clips.map((clip) => (
+        {entries.map((entry) => (
           <TimelineItem
-            key={clip.id}
-            clip={clip}
-            playing={clip.id === playingClipId}
+            key={`${entry.kind}-${entry.id}`}
+            entry={entry}
+            playing={entry.kind === "clip" && entry.id === playingClipId}
             showSpeakerName={showSpeakerName}
             showStyleName={showStyleName}
             showTimestamp={showTimestamp}

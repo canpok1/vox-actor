@@ -9,10 +9,11 @@ import { useEventSource } from "./hooks/useEventSource";
 import { usePersistedState } from "./hooks/usePersistedState";
 import { usePlaybackQueue } from "./hooks/usePlaybackQueue";
 import {
-  type ClipEvent,
   isApiStatus,
   isClipEvent,
+  isErrorEventPayload,
   type Speaker,
+  type TimelineEntry,
 } from "./types/api";
 
 const STORAGE_KEYS = {
@@ -48,14 +49,18 @@ const parseBool = (raw: string): boolean | null =>
 
 const passthrough = (v: string): string => v;
 
-function trimClips(
-  clips: ClipEvent[],
+// 履歴件数上限に合わせて古い項目から削除する。
+// 再生中のクリップ項目（kind:"clip" かつ id が playingId と一致）は削除しない。
+// エラー項目は再生対象ではないため、常に削除対象となる。
+function trimTimeline(
+  entries: TimelineEntry[],
   size: number,
   playingId: number | null,
-): ClipEvent[] {
-  let next = clips;
+): TimelineEntry[] {
+  let next = entries;
   while (next.length > size) {
-    if (next[0].id === playingId) break;
+    const head = next[0];
+    if (head.kind === "clip" && head.id === playingId) break;
     next = next.slice(1);
   }
   return next;
@@ -111,7 +116,7 @@ export function App() {
   const [speakers, setSpeakers] = useState<Speaker[]>([]);
   const [silent, setSilent] = useState(false);
   const [silentReason, setSilentReason] = useState("");
-  const [clips, setClips] = useState<ClipEvent[]>([]);
+  const [entries, setEntries] = useState<TimelineEntry[]>([]);
   const [testError, setTestError] = useState<string>("");
   const testErrorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -135,7 +140,7 @@ export function App() {
   // 履歴上限の変更時のみトリム。再生状態の変化ではトリムしない
   // （再生終了直後の playingClipId=null 経由で過去のハイライト対象が消えるのを防ぐ）。
   useEffect(() => {
-    setClips((prev) => trimClips(prev, historySize, playingClipIdRef.current));
+    setEntries((prev) => trimTimeline(prev, historySize, playingClipIdRef.current));
   }, [historySize]);
 
   const showTestError = useCallback((msg: string): void => {
@@ -212,8 +217,12 @@ export function App() {
         return;
       }
       const clip = parsed;
-      setClips((prev) =>
-        trimClips([...prev, clip], historySize, playingClipIdRef.current),
+      setEntries((prev) =>
+        trimTimeline(
+          [...prev, { kind: "clip", ...clip }],
+          historySize,
+          playingClipIdRef.current,
+        ),
       );
       // clip.url が空の場合は無音モード配信なのでタイムラインには載せつつ再生キューには積まない。
       if (clip.url !== "") {
@@ -223,7 +232,31 @@ export function App() {
     [historySize, enqueue],
   );
 
-  const connected = useEventSource("/events", handleClip);
+  const handleServerError = useCallback(
+    (data: string): void => {
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(data);
+      } catch (err) {
+        console.error("invalid error payload", err);
+        return;
+      }
+      if (!isErrorEventPayload(parsed)) {
+        console.error("invalid error payload", parsed);
+        return;
+      }
+      setEntries((prev) =>
+        trimTimeline(
+          [...prev, { kind: "error", ...parsed }],
+          historySize,
+          playingClipIdRef.current,
+        ),
+      );
+    },
+    [historySize],
+  );
+
+  const connected = useEventSource("/events", handleClip, handleServerError);
 
   const handleTestPlay = useCallback((): void => {
     if (!testSpeakerId) {
@@ -257,7 +290,7 @@ export function App() {
       <Tabs active={activeTab} onChange={setActiveTab} hideTest={silent} />
       <StreamPanel
         hidden={activeTab !== "stream"}
-        clips={clips}
+        entries={entries}
         playingClipId={playingClipId}
         historySize={historySize}
         historySizeOptions={HISTORY_SIZE_OPTIONS}

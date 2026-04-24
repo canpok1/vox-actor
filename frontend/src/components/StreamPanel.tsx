@@ -1,10 +1,10 @@
-import type { ClipEvent } from "../types/api";
+import type { TimelineEntry } from "../types/api";
 import { Timeline } from "./Timeline";
 import { TimelineControls } from "./TimelineControls";
 
 interface StreamPanelProps {
   hidden: boolean;
-  clips: ClipEvent[];
+  entries: TimelineEntry[];
   playingClipId: number | null;
   historySize: number;
   historySizeOptions: readonly number[];
@@ -20,7 +20,7 @@ interface StreamPanelProps {
 export function StreamPanel(props: StreamPanelProps) {
   const {
     hidden,
-    clips,
+    entries,
     playingClipId,
     historySize,
     historySizeOptions,
@@ -52,7 +52,7 @@ export function StreamPanel(props: StreamPanelProps) {
         onShowTimestampChange={onShowTimestampChange}
       />
       <Timeline
-        clips={clips}
+        entries={entries}
         playingClipId={playingClipId}
         showSpeakerName={showSpeakerName}
         showStyleName={showStyleName}
