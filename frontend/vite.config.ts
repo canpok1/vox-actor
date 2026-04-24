@@ -24,7 +24,7 @@ export default defineConfig({
         target: backendTarget,
         changeOrigin: true,
       },
-      "/speakers.json": {
+      "/api": {
         target: backendTarget,
         changeOrigin: true,
       },

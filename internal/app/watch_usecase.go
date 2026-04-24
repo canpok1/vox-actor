@@ -39,6 +39,21 @@ func WithDeleteMode() WatchOption {
 	}
 }
 
+// WithSilent は無音モード（合成パイプラインを使わずテキストのみ配信するモード）を有効にする。
+// player は AudioPlayer に加えて textPlayer（PlayText(ctx, meta)）を実装している必要がある。
+// 無音モードでは HealthCheck / CreateQuery / Synthesize を一切呼ばない。
+func WithSilent() WatchOption {
+	return func(u *WatchUsecase) {
+		u.silent = true
+	}
+}
+
+// textPlayer は無音モードで WAV を伴わないセリフ配信を受け取るインターフェース。
+// WithSilent を有効にした場合、player はこのインターフェースを実装している必要がある。
+type textPlayer interface {
+	PlayText(ctx context.Context, meta PlayMeta) error
+}
+
 // WatchUsecase はディレクトリ監視モードのユースケース。
 type WatchUsecase struct {
 	reader     ScriptReader
@@ -48,6 +63,9 @@ type WatchUsecase struct {
 	watcher    DirWatcher
 	logger     *slog.Logger
 	deleteMode bool
+	// silent が true の場合、HealthCheck / 合成パイプラインを一切呼ばず
+	// player.PlayText 経由でテキストのみ配信する。
+	silent bool
 }
 
 // NewWatchUsecase は新しいWatchUsecaseを生成する。
@@ -68,10 +86,12 @@ func NewWatchUsecase(reader ScriptReader, client VoicevoxClient, player AudioPla
 
 // Run はディレクトリ監視モードを実行する。
 // 疎通確認後、指定された全ディレクトリを並列監視してファイルを fan-in で順次処理する。
+// 無音モード（WithSilent）では HealthCheck を一切呼ばず、ファイル検知時も合成パイプラインを使わず
+// player.PlayText 経由でテキストのみ配信する。
 func (u *WatchUsecase) Run(ctx context.Context, params WatchParams) error {
-	u.logger.Debug("watch mode starting", "paths", params.Paths, "speakerID", params.SpeakerID)
+	u.logger.Debug("watch mode starting", "paths", params.Paths, "speakerID", params.SpeakerID, "silent", u.silent)
 
-	if !params.DryRun {
+	if !params.DryRun && !u.silent {
 		if err := u.client.HealthCheck(ctx); err != nil {
 			return err
 		}
@@ -207,6 +227,11 @@ func (u *WatchUsecase) processFile(ctx context.Context, path string, params Watc
 		return
 	}
 
+	if u.silent {
+		u.processScriptsSilent(ctx, scripts, total, params)
+		return
+	}
+
 	cfg := synthPipelineConfig{
 		defaultSpeakerID:  params.SpeakerID,
 		defaultSpeed:      params.Speed,
@@ -239,6 +264,34 @@ func (u *WatchUsecase) processFile(ctx context.Context, path string, params Watc
 		if ctx.Err() != nil {
 			return
 		}
+	}
+}
+
+// processScriptsSilent は無音モードで1ファイル分のスクリプト群を処理する。
+// VOICEVOX の合成を一切呼ばず、各スクリプトを player.PlayText 経由で SSE 配信する。
+// player が textPlayer を実装していない場合はエラーログを出してスキップする。
+func (u *WatchUsecase) processScriptsSilent(ctx context.Context, scripts []entity.Script, total int, params WatchParams) {
+	tp, ok := u.player.(textPlayer)
+	if !ok {
+		u.logger.Error("silent mode requires a player that implements PlayText; skipping")
+		return
+	}
+	current := 0
+	for _, script := range scripts {
+		if ctx.Err() != nil {
+			return
+		}
+		if script.IsEmpty {
+			u.logger.Debug("skipping empty script", "path", script.Path)
+			continue
+		}
+		current++
+		speakerID := script.ResolveSpeakerID(params.SpeakerID)
+		if err := tp.PlayText(ctx, PlayMeta{Text: script.Text, SpeakerID: speakerID}); err != nil {
+			u.logger.Error("silent play error (skipping script)", "path", script.Path, "error", err)
+			continue
+		}
+		u.logger.Info(fmt.Sprintf("[%d/%d] playback completed (silent)", current, total), "text", truncateAndEscapeText(script.Text))
 	}
 }
 

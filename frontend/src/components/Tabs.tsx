@@ -3,6 +3,8 @@ export type TabName = "stream" | "test";
 interface TabsProps {
   active: TabName;
   onChange: (tab: TabName) => void;
+  // hideTest が true の場合「音声テスト」タブは描画しない（無音モード向け）。
+  hideTest?: boolean;
 }
 
 interface TabButtonProps {
@@ -33,7 +35,7 @@ function TabButton({ id, panelId, active, label, onClick }: TabButtonProps) {
   );
 }
 
-export function Tabs({ active, onChange }: TabsProps) {
+export function Tabs({ active, onChange, hideTest = false }: TabsProps) {
   return (
     <div role="tablist" className="mt-4 flex gap-[0.15rem] border-b border-ctp-overlay sm:gap-1">
       <TabButton
@@ -43,13 +45,15 @@ export function Tabs({ active, onChange }: TabsProps) {
         label="配信"
         onClick={() => onChange("stream")}
       />
-      <TabButton
-        id="tab-test"
-        panelId="panel-test"
-        active={active === "test"}
-        label="音声テスト"
-        onClick={() => onChange("test")}
-      />
+      {!hideTest && (
+        <TabButton
+          id="tab-test"
+          panelId="panel-test"
+          active={active === "test"}
+          label="音声テスト"
+          onClick={() => onChange("test")}
+        />
+      )}
     </div>
   );
 }

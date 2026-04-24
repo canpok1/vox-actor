@@ -49,14 +49,21 @@ package infra
 // #237 音声テストタブ / 接続バッジ / speakers.json / test-clip:
 // DONE: index.html に配信/音声テストのタブ要素と接続バッジ要素が含まれる
 // DONE: index.html から `.status` 行が削除されている
-// DONE: /speakers.json が speakerLookup を id 昇順で配列化して返す
-// DONE: /speakers.json は lookup 未設定時に空配列を返す
 // DONE: /test-clip が VoicevoxClient 未注入時に 503 を返す
 // DONE: /test-clip が speaker パラメータ欠落・不正・未登録IDで 400 を返す
 // DONE: /test-clip が成功時に 200 WAV を返す
 // DONE: /test-clip が 2 回目の呼び出しで VoicevoxClient を呼ばずキャッシュから返す
 // DONE: /test-clip が VOICEVOX 合成失敗時に 502 を返す
 // DONE: /test-clip は WithTestPhrase のフレーズを CreateQuery に渡す
+//
+// #284 無音モードフォールバック / /api/status:
+// DONE: /speakers.json は 404 (エンドポイント廃止)
+// DONE: /api/status が speakerLookup を id 昇順で配列化し silent=false で返す
+// DONE: /api/status は lookup 未設定時に speakers=[] silent=false を返す
+// DONE: SetSilent + Start 後の /api/status が silent=true, silentReason 付き, speakers=[] を返す
+// DONE: PlayText が url="" で clipEvent を配信し silentInterval ぶん待機する
+// DONE: PlayText はキャンセル済み ctx で即エラー
+// DONE: PlayText は Start 前だとエラー
 
 import (
 	"bufio"
@@ -923,17 +930,21 @@ func TestHTTPStreamPlayer_Index_NoStatusRow(t *testing.T) {
 	}
 }
 
-func TestHTTPStreamPlayer_Speakers_ReturnsSortedByID(t *testing.T) {
-	t.Parallel()
-	lookup := map[int]entity.SpeakerStyleInfo{
-		7: {SpeakerName: "四国めたん", StyleName: "ノーマル"},
-		3: {SpeakerName: "ずんだもん", StyleName: "ノーマル"},
-		1: {SpeakerName: "四国めたん", StyleName: "あまあま"},
-	}
-	p := newStartedPlayerWithOpts(t, WithSpeakerLookup(lookup))
-	resp, err := http.Get("http://" + p.Addr() + "/speakers.json")
+type apiStatusBody struct {
+	Silent       bool   `json:"silent"`
+	SilentReason string `json:"silentReason"`
+	Speakers     []struct {
+		ID          int    `json:"id"`
+		SpeakerName string `json:"speakerName"`
+		StyleName   string `json:"styleName"`
+	} `json:"speakers"`
+}
+
+func fetchAPIStatus(t *testing.T, p *HTTPStreamPlayer) apiStatusBody {
+	t.Helper()
+	resp, err := http.Get("http://" + p.Addr() + "/api/status")
 	if err != nil {
-		t.Fatalf("GET /speakers.json: %v", err)
+		t.Fatalf("GET /api/status: %v", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
@@ -946,32 +957,94 @@ func TestHTTPStreamPlayer_Speakers_ReturnsSortedByID(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read: %v", err)
 	}
-	var got []struct {
-		ID          int    `json:"id"`
-		SpeakerName string `json:"speakerName"`
-		StyleName   string `json:"styleName"`
-	}
+	var got apiStatusBody
 	if err := json.Unmarshal(body, &got); err != nil {
 		t.Fatalf("unmarshal: %v body=%s", err, string(body))
 	}
-	if len(got) != 3 {
-		t.Fatalf("expected 3 entries, got %d: %s", len(got), string(body))
+	return got
+}
+
+func TestHTTPStreamPlayer_APIStatus_ReturnsSortedSpeakers(t *testing.T) {
+	t.Parallel()
+	lookup := map[int]entity.SpeakerStyleInfo{
+		7: {SpeakerName: "四国めたん", StyleName: "ノーマル"},
+		3: {SpeakerName: "ずんだもん", StyleName: "ノーマル"},
+		1: {SpeakerName: "四国めたん", StyleName: "あまあま"},
+	}
+	p := newStartedPlayerWithOpts(t, WithSpeakerLookup(lookup))
+	got := fetchAPIStatus(t, p)
+	if got.Silent {
+		t.Errorf("expected silent=false, got true")
+	}
+	if got.SilentReason != "" {
+		t.Errorf("expected silentReason empty, got %q", got.SilentReason)
+	}
+	if len(got.Speakers) != 3 {
+		t.Fatalf("expected 3 speakers, got %d: %+v", len(got.Speakers), got)
 	}
 	wantIDs := []int{1, 3, 7}
 	for i, w := range wantIDs {
-		if got[i].ID != w {
-			t.Errorf("entry %d: expected id=%d, got %d", i, w, got[i].ID)
+		if got.Speakers[i].ID != w {
+			t.Errorf("entry %d: expected id=%d, got %d", i, w, got.Speakers[i].ID)
 		}
 	}
-	if got[0].SpeakerName != "四国めたん" || got[0].StyleName != "あまあま" {
-		t.Errorf("entry 0: %+v", got[0])
+	if got.Speakers[0].SpeakerName != "四国めたん" || got.Speakers[0].StyleName != "あまあま" {
+		t.Errorf("entry 0: %+v", got.Speakers[0])
 	}
-	if got[1].SpeakerName != "ずんだもん" || got[1].StyleName != "ノーマル" {
-		t.Errorf("entry 1: %+v", got[1])
+	if got.Speakers[1].SpeakerName != "ずんだもん" || got.Speakers[1].StyleName != "ノーマル" {
+		t.Errorf("entry 1: %+v", got.Speakers[1])
 	}
 }
 
-func TestHTTPStreamPlayer_Speakers_NoLookupReturnsEmptyArray(t *testing.T) {
+func TestHTTPStreamPlayer_APIStatus_NoLookupReturnsEmptySpeakers(t *testing.T) {
+	t.Parallel()
+	p := newStartedPlayer(t)
+	got := fetchAPIStatus(t, p)
+	if got.Silent {
+		t.Errorf("expected silent=false, got true")
+	}
+	if got.SilentReason != "" {
+		t.Errorf("expected silentReason empty, got %q", got.SilentReason)
+	}
+	if len(got.Speakers) != 0 {
+		t.Errorf("expected empty speakers, got %+v", got.Speakers)
+	}
+}
+
+func TestHTTPStreamPlayer_APIStatus_SilentModeReturnsReasonAndEmpty(t *testing.T) {
+	t.Parallel()
+	lookup := map[int]entity.SpeakerStyleInfo{
+		3: {SpeakerName: "ずんだもん", StyleName: "ノーマル"},
+	}
+	reason := "VOICEVOXに接続できないため無音モードで起動しました。\n音を再生したい場合はVOICEVOXに接続できる状態で起動し直してください。"
+	p, err := NewHTTPStreamPlayer("127.0.0.1:0", newTestStreamAssets(), WithSpeakerLookup(lookup))
+	if err != nil {
+		t.Fatalf("NewHTTPStreamPlayer: %v", err)
+	}
+	p.SetSilent(reason)
+	if err := p.Start(context.Background()); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	t.Cleanup(func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		_ = p.Shutdown(shutdownCtx)
+	})
+
+	got := fetchAPIStatus(t, p)
+	if !got.Silent {
+		t.Errorf("expected silent=true, got false")
+	}
+	if got.SilentReason != reason {
+		t.Errorf("silentReason mismatch\nwant: %q\ngot:  %q", reason, got.SilentReason)
+	}
+	if len(got.Speakers) != 0 {
+		t.Errorf("expected speakers=[] in silent mode, got %+v", got.Speakers)
+	}
+}
+
+// /speakers.json は廃止されたので 404 を返すことを検証する。
+func TestHTTPStreamPlayer_SpeakersJSON_Removed(t *testing.T) {
 	t.Parallel()
 	p := newStartedPlayer(t)
 	resp, err := http.Get("http://" + p.Addr() + "/speakers.json")
@@ -979,16 +1052,128 @@ func TestHTTPStreamPlayer_Speakers_NoLookupReturnsEmptyArray(t *testing.T) {
 		t.Fatalf("GET /speakers.json: %v", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status: %d", resp.StatusCode)
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("expected 404 for deprecated /speakers.json, got %d", resp.StatusCode)
 	}
-	body, err := io.ReadAll(resp.Body)
+}
+
+// PlayText は clipEvent を url="" で配信し、silentInterval ぶん待機してから return する。
+func TestHTTPStreamPlayer_PlayText_EmptyURLAndSilentInterval(t *testing.T) {
+	t.Parallel()
+	lookup := map[int]entity.SpeakerStyleInfo{
+		3: {SpeakerName: "ずんだもん", StyleName: "ノーマル"},
+	}
+	p, err := NewHTTPStreamPlayer("127.0.0.1:0", newTestStreamAssets(),
+		WithSpeakerLookup(lookup),
+	)
 	if err != nil {
-		t.Fatalf("read: %v", err)
+		t.Fatalf("NewHTTPStreamPlayer: %v", err)
 	}
-	trimmed := strings.TrimSpace(string(body))
-	if trimmed != "[]" {
-		t.Errorf("expected empty array, got %s", trimmed)
+	p.SetSilent("reason")
+	p.silentInterval = 40 * time.Millisecond // テスト高速化
+	if err := p.Start(context.Background()); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	t.Cleanup(func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		_ = p.Shutdown(shutdownCtx)
+	})
+
+	baseURL := "http://" + p.Addr()
+	events := subscribeSSE(t, baseURL)
+	time.Sleep(50 * time.Millisecond) // 購読確立待ち
+
+	start := time.Now()
+	if err := p.PlayText(context.Background(), app.PlayMeta{Text: "こんにちは", SpeakerID: 3}); err != nil {
+		t.Fatalf("PlayText: %v", err)
+	}
+	elapsed := time.Since(start)
+	if elapsed < 30*time.Millisecond {
+		t.Errorf("PlayText returned too early: %v < 30ms", elapsed)
+	}
+
+	select {
+	case data := <-events:
+		var ev clipEvent
+		if err := json.Unmarshal([]byte(data), &ev); err != nil {
+			t.Fatalf("unmarshal: %v data=%s", err, data)
+		}
+		if ev.URL != "" {
+			t.Errorf("expected url empty in silent mode, got %q", ev.URL)
+		}
+		if ev.Text != "こんにちは" {
+			t.Errorf("unexpected Text: %q", ev.Text)
+		}
+		if ev.SpeakerName != "ずんだもん" {
+			t.Errorf("unexpected SpeakerName: %q", ev.SpeakerName)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("no clip event delivered within 2s")
+	}
+}
+
+func TestHTTPStreamPlayer_PlayText_CtxCancelled(t *testing.T) {
+	t.Parallel()
+	p := newStartedPlayer(t)
+	p.silentInterval = 2 * time.Second
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := p.PlayText(ctx, app.PlayMeta{Text: "x", SpeakerID: 3}); err == nil {
+		t.Fatal("expected error for cancelled ctx")
+	}
+}
+
+func TestHTTPStreamPlayer_PlayText_BeforeStart(t *testing.T) {
+	t.Parallel()
+	p, err := NewHTTPStreamPlayer("127.0.0.1:0", newTestStreamAssets())
+	if err != nil {
+		t.Fatalf("NewHTTPStreamPlayer: %v", err)
+	}
+	if err := p.PlayText(context.Background(), app.PlayMeta{}); err == nil {
+		t.Fatal("expected error when PlayText is called before Start()")
+	}
+}
+
+// PlayText で未登録 SpeakerID は `話者#<ID>` にフォールバックする。
+func TestHTTPStreamPlayer_PlayText_UnknownSpeakerFallback(t *testing.T) {
+	t.Parallel()
+	p, err := NewHTTPStreamPlayer("127.0.0.1:0", newTestStreamAssets())
+	if err != nil {
+		t.Fatalf("NewHTTPStreamPlayer: %v", err)
+	}
+	p.SetSilent("reason")
+	p.silentInterval = 10 * time.Millisecond
+	if err := p.Start(context.Background()); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		_ = p.Shutdown(ctx)
+	})
+
+	baseURL := "http://" + p.Addr()
+	events := subscribeSSE(t, baseURL)
+	time.Sleep(50 * time.Millisecond)
+	if err := p.PlayText(context.Background(), app.PlayMeta{Text: "hello", SpeakerID: 42}); err != nil {
+		t.Fatalf("PlayText: %v", err)
+	}
+	select {
+	case data := <-events:
+		var ev clipEvent
+		if err := json.Unmarshal([]byte(data), &ev); err != nil {
+			t.Fatalf("unmarshal: %v", err)
+		}
+		if ev.SpeakerName != "話者#42" {
+			t.Errorf("expected fallback SpeakerName '話者#42', got %q", ev.SpeakerName)
+		}
+		if ev.StyleName != "" {
+			t.Errorf("expected StyleName empty, got %q", ev.StyleName)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("no event")
 	}
 }
 

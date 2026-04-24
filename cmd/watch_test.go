@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io"
 	"log/slog"
 	"os"
 	"strings"
@@ -255,19 +256,170 @@ type stubAudioPlayer struct{}
 
 func (stubAudioPlayer) Play(_ context.Context, _ []byte, _ app.PlayMeta) error { return nil }
 
-type stubStreamPlayer struct{}
+type stubStreamPlayer struct {
+	silentReason string
+	playTextCall int
+}
 
-func (stubStreamPlayer) Start(_ context.Context) error                          { return nil }
-func (stubStreamPlayer) Shutdown(_ context.Context) error                       { return nil }
-func (stubStreamPlayer) Addr() string                                           { return "127.0.0.1:0" }
-func (stubStreamPlayer) Play(_ context.Context, _ []byte, _ app.PlayMeta) error { return nil }
+func (p *stubStreamPlayer) Start(_ context.Context) error                          { return nil }
+func (p *stubStreamPlayer) Shutdown(_ context.Context) error                       { return nil }
+func (p *stubStreamPlayer) Addr() string                                           { return "127.0.0.1:0" }
+func (p *stubStreamPlayer) Play(_ context.Context, _ []byte, _ app.PlayMeta) error { return nil }
+func (p *stubStreamPlayer) SetSilent(reason string)                                { p.silentReason = reason }
+func (p *stubStreamPlayer) PlayText(_ context.Context, _ app.PlayMeta) error {
+	p.playTextCall++
+	return nil
+}
 
-func TestWatchCmd_Stream_GetSpeakersFailure_ReturnsError(t *testing.T) {
+// captureStderr は関数実行中の os.Stderr への出力を文字列として収集する。
+// buildLoggerFromFlags が os.Stderr に書くため、WARN ログの検証に使う。
+func captureStderr(t *testing.T, fn func()) string {
+	t.Helper()
+	orig := os.Stderr
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("os.Pipe: %v", err)
+	}
+	os.Stderr = w
+
+	done := make(chan string, 1)
+	go func() {
+		var out bytes.Buffer
+		_, _ = io.Copy(&out, r)
+		done <- out.String()
+	}()
+
+	fn()
+
+	_ = w.Close()
+	os.Stderr = orig
+	return <-done
+}
+
+// runStreamWatchWithDeps は --stream 実行用の共通ヘルパー。cancelled な ctx を渡して usecase.Run を即座に抜けさせる。
+// captureStderr と組み合わせて WARN ログを検証する。
+func runStreamWatchWithDeps(t *testing.T, deps *Deps, args ...string) error {
+	t.Helper()
+	rootCmd := makeRootCmd(deps)
+	buf := new(bytes.Buffer)
+	rootCmd.SetOut(buf)
+	rootCmd.SetErr(buf)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	rootCmd.SetContext(ctx)
+	rootCmd.SetArgs(args)
+	return rootCmd.Execute()
+}
+
+func TestWatchCmd_Stream_GetSpeakersFailure_FallsBackToSilent(t *testing.T) {
 	dir := t.TempDir()
 
 	stubClient := &stubVoicevoxClient{
 		getSpeakersErr: errors.New("speakers endpoint down"),
 	}
+	var capturedLookup map[int]entity.SpeakerStyleInfo
+	sp := &stubStreamPlayer{}
+	deps := &Deps{
+		Watch: &WatchDeps{
+			Reader:            stubScriptReader{},
+			ClientFactory:     func(_ string) app.VoicevoxClient { return stubClient },
+			Player:            stubAudioPlayer{},
+			Mover:             stubFileMover{},
+			DirWatcherFactory: func(_ *slog.Logger) app.DirWatcher { return stubDirWatcher{} },
+			StreamPlayerFactory: func(_ string, _ *slog.Logger, lookup map[int]entity.SpeakerStyleInfo, _ app.VoicevoxClient) (app.StreamPlayer, error) {
+				capturedLookup = lookup
+				return sp, nil
+			},
+		},
+	}
+
+	var err error
+	logs := captureStderr(t, func() {
+		err = runStreamWatchWithDeps(t, deps, "watch", "--stream", dir)
+	})
+	if err != nil {
+		t.Fatalf("expected no error (fallback to silent), got: %v", err)
+	}
+
+	if stubClient.getSpeakersCall != 1 {
+		t.Errorf("expected GetSpeakers to be called once, got %d", stubClient.getSpeakersCall)
+	}
+	if len(capturedLookup) != 0 {
+		t.Errorf("expected empty lookup in silent fallback, got %+v", capturedLookup)
+	}
+	if sp.silentReason == "" {
+		t.Errorf("expected SetSilent called with non-empty reason")
+	}
+	if !strings.Contains(sp.silentReason, "話者一覧") {
+		t.Errorf("expected silentReason to mention 話者一覧 (GetSpeakers case), got %q", sp.silentReason)
+	}
+
+	if !strings.Contains(logs, "VOICEVOX engine unreachable") {
+		t.Errorf("expected WARN log 'VOICEVOX engine unreachable', got: %s", logs)
+	}
+	if strings.Count(logs, "VOICEVOX engine unreachable") != 1 {
+		t.Errorf("expected WARN log to fire exactly once, got: %s", logs)
+	}
+}
+
+func TestWatchCmd_Stream_HealthCheckFailure_FallsBackToSilent(t *testing.T) {
+	dir := t.TempDir()
+
+	stubClient := &stubVoicevoxClient{
+		healthCheckErr: errors.New("engine down"),
+	}
+	var capturedLookup map[int]entity.SpeakerStyleInfo
+	sp := &stubStreamPlayer{}
+	deps := &Deps{
+		Watch: &WatchDeps{
+			Reader:            stubScriptReader{},
+			ClientFactory:     func(_ string) app.VoicevoxClient { return stubClient },
+			Player:            stubAudioPlayer{},
+			Mover:             stubFileMover{},
+			DirWatcherFactory: func(_ *slog.Logger) app.DirWatcher { return stubDirWatcher{} },
+			StreamPlayerFactory: func(_ string, _ *slog.Logger, lookup map[int]entity.SpeakerStyleInfo, _ app.VoicevoxClient) (app.StreamPlayer, error) {
+				capturedLookup = lookup
+				return sp, nil
+			},
+		},
+	}
+
+	var err error
+	logs := captureStderr(t, func() {
+		err = runStreamWatchWithDeps(t, deps, "watch", "--stream", dir)
+	})
+	if err != nil {
+		t.Fatalf("expected no error (fallback to silent), got: %v", err)
+	}
+
+	// HealthCheck 失敗時は GetSpeakers は呼ばれない
+	if stubClient.getSpeakersCall != 0 {
+		t.Errorf("expected GetSpeakers not to be called when HealthCheck fails, got %d", stubClient.getSpeakersCall)
+	}
+	if len(capturedLookup) != 0 {
+		t.Errorf("expected empty lookup in silent fallback, got %+v", capturedLookup)
+	}
+	if sp.silentReason == "" {
+		t.Errorf("expected SetSilent called with non-empty reason")
+	}
+	if !strings.Contains(sp.silentReason, "接続できない") {
+		t.Errorf("expected silentReason to mention 接続できない (HealthCheck case), got %q", sp.silentReason)
+	}
+
+	if !strings.Contains(logs, "VOICEVOX engine unreachable") {
+		t.Errorf("expected WARN log 'VOICEVOX engine unreachable', got: %s", logs)
+	}
+}
+
+func TestWatchCmd_Stream_EngineHealthy_DoesNotEnterSilent(t *testing.T) {
+	dir := t.TempDir()
+
+	stubClient := &stubVoicevoxClient{
+		speakers: []entity.Speaker{
+			{Name: "ずんだもん", Styles: []entity.SpeakerStyle{{ID: 3, Name: "ノーマル"}}},
+		},
+	}
+	sp := &stubStreamPlayer{}
 	deps := &Deps{
 		Watch: &WatchDeps{
 			Reader:            stubScriptReader{},
@@ -276,26 +428,23 @@ func TestWatchCmd_Stream_GetSpeakersFailure_ReturnsError(t *testing.T) {
 			Mover:             stubFileMover{},
 			DirWatcherFactory: func(_ *slog.Logger) app.DirWatcher { return stubDirWatcher{} },
 			StreamPlayerFactory: func(_ string, _ *slog.Logger, _ map[int]entity.SpeakerStyleInfo, _ app.VoicevoxClient) (app.StreamPlayer, error) {
-				t.Error("StreamPlayerFactory should not be called when GetSpeakers fails")
-				return stubStreamPlayer{}, nil
+				return sp, nil
 			},
 		},
 	}
-	rootCmd := makeRootCmd(deps)
-	buf := new(bytes.Buffer)
-	rootCmd.SetOut(buf)
-	rootCmd.SetErr(buf)
-	rootCmd.SetArgs([]string{"watch", "--stream", dir})
 
-	err := rootCmd.Execute()
-	if err == nil {
-		t.Fatal("expected error when GetSpeakers fails")
+	var err error
+	logs := captureStderr(t, func() {
+		err = runStreamWatchWithDeps(t, deps, "watch", "--stream", dir)
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
-	if !strings.Contains(err.Error(), "failed to get speakers") {
-		t.Errorf("expected wrapped 'failed to get speakers', got: %v", err)
+	if sp.silentReason != "" {
+		t.Errorf("expected SetSilent not called in normal mode, got %q", sp.silentReason)
 	}
-	if stubClient.getSpeakersCall != 1 {
-		t.Errorf("expected GetSpeakers to be called once, got %d", stubClient.getSpeakersCall)
+	if strings.Contains(logs, "VOICEVOX engine unreachable") {
+		t.Errorf("expected no WARN log in normal mode")
 	}
 }
 
@@ -319,7 +468,7 @@ func TestWatchCmd_Stream_PassesSpeakerLookupToFactory(t *testing.T) {
 			StreamPlayerFactory: func(_ string, _ *slog.Logger, lookup map[int]entity.SpeakerStyleInfo, _ app.VoicevoxClient) (app.StreamPlayer, error) {
 				captured = lookup
 				// usecase.Run まで進ませず、watch loop から確実に抜けるためにキャンセルを返す。
-				return stubStreamPlayer{}, nil
+				return &stubStreamPlayer{}, nil
 			},
 		},
 	}

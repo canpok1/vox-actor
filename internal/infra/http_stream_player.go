@@ -30,15 +30,23 @@ type HTTPStreamPlayer struct {
 
 	// staticFS は配信画面用の静的ファイル FS（Vite の dist 出力を想定）。
 	staticFS fs.FS
-	// speakersJSON は Start 時に speakerLookup から一度だけマーシャルしたレスポンス。
-	speakersJSON []byte
+	// apiStatusJSON は Start 時に speakerLookup と silent 状態から一度だけマーシャルしたレスポンス。
+	apiStatusJSON []byte
 
 	// speakerLookup は SpeakerID → 話者名/スタイル名 の解決マップ。
 	// nil または未ヒットの場合は `話者#<ID>` / 空文字 にフォールバックする。
 	speakerLookup map[int]entity.SpeakerStyleInfo
 
+	// silent が true の場合、Play() / PlayText() は WAV を配信せずテキストのみを配信する。
+	// silentReason は /api/status でフロントに伝える文面（改行を含んでよい）。
+	silent       bool
+	silentReason string
+
 	// nowFunc は clipEvent の timestamp 生成に使う時刻取得関数（テスト差し替え用）。
 	nowFunc func() time.Time
+
+	// silentInterval は PlayText で使う固定待機時間（backpressure の暫定値）。
+	silentInterval time.Duration
 
 	// voicevoxClient はテスト再生 (/test-clip) で合成に使うクライアント。
 	// 未注入時は /test-clip が 503 を返す。
@@ -70,6 +78,9 @@ const (
 	sseSubscriberBuffer = 16
 	// defaultTestPhrase は /test-clip で合成するデフォルトフレーズ。
 	defaultTestPhrase = "音量テストです"
+	// defaultSilentInterval は無音モードで PlayText が固定的に待機する時間。
+	// タイムラインが一瞬で流れ去らないようにするための暫定値。
+	defaultSilentInterval = 500 * time.Millisecond
 )
 
 // clipEvent は SSE で配信する clip イベントのペイロード。
@@ -145,13 +156,14 @@ func NewHTTPStreamPlayer(addr string, staticFS fs.FS, opts ...HTTPStreamOption) 
 		return nil, fmt.Errorf("stream staticFS must not be nil")
 	}
 	p := &HTTPStreamPlayer{
-		addr:          addr,
-		logger:        slog.New(slog.DiscardHandler),
-		staticFS:      staticFS,
-		subscribers:   newSubscriberRegistry(),
-		nowFunc:       time.Now,
-		testPhrase:    defaultTestPhrase,
-		testClipCache: make(map[int][]byte),
+		addr:           addr,
+		logger:         slog.New(slog.DiscardHandler),
+		staticFS:       staticFS,
+		subscribers:    newSubscriberRegistry(),
+		nowFunc:        time.Now,
+		silentInterval: defaultSilentInterval,
+		testPhrase:     defaultTestPhrase,
+		testClipCache:  make(map[int][]byte),
 	}
 	for _, opt := range opts {
 		opt(p)
@@ -169,7 +181,7 @@ func (p *HTTPStreamPlayer) Start(_ context.Context) error {
 		return fmt.Errorf("HTTPStreamPlayer already started")
 	}
 
-	if err := p.buildSpeakersJSON(); err != nil {
+	if err := p.buildAPIStatusJSON(); err != nil {
 		return err
 	}
 
@@ -184,7 +196,7 @@ func (p *HTTPStreamPlayer) Start(_ context.Context) error {
 	mux := http.NewServeMux()
 	mux.Handle("/", withStaticCacheControl(fileServer))
 	mux.HandleFunc("/events", p.handleEvents)
-	mux.HandleFunc("/speakers.json", p.handleSpeakers)
+	mux.HandleFunc("/api/status", p.handleAPIStatus)
 	mux.HandleFunc("/test-clip", p.handleTestClip)
 	mux.HandleFunc(clipPathPrefix, p.handleClip)
 
@@ -255,6 +267,71 @@ func (p *HTTPStreamPlayer) Addr() string {
 		return ""
 	}
 	return p.listener.Addr().String()
+}
+
+// SetSilent は無音モードへの切り替えと silentReason を設定する。
+// Start 前に呼び出すこと（Start で /api/status をキャッシュするため）。
+// reason が空文字なら通常モードとして扱う。
+func (p *HTTPStreamPlayer) SetSilent(reason string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if reason == "" {
+		p.silent = false
+		p.silentReason = ""
+		return
+	}
+	p.silent = true
+	p.silentReason = reason
+}
+
+// PlayText は WAV 合成を伴わないテキストのみの SSE 配信を行う。
+// clipEvent.url は空文字で配信され、ブラウザ側は再生をスキップする。
+// 配信後は固定 silentInterval だけブロックして backpressure として働く。
+func (p *HTTPStreamPlayer) PlayText(ctx context.Context, meta app.PlayMeta) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+	}
+
+	p.mu.Lock()
+	started := p.started
+	p.mu.Unlock()
+	if !started {
+		return fmt.Errorf("HTTPStreamPlayer is not started")
+	}
+
+	id := p.nextClipID.Add(1)
+	speakerName, styleName := p.resolveSpeaker(meta.SpeakerID)
+	payload, err := json.Marshal(clipEvent{
+		ID:          id,
+		URL:         "",
+		Text:        meta.Text,
+		SpeakerName: speakerName,
+		StyleName:   styleName,
+		Timestamp:   p.nowFunc().UnixMilli(),
+	})
+	if err != nil {
+		return fmt.Errorf("failed to marshal clip payload: %w", err)
+	}
+
+	n, dropped := p.subscribers.broadcast(sseEventClip, payload)
+	if dropped > 0 {
+		p.logger.Warn("stream clip dropped for slow subscribers", "clipId", id, "dropped", dropped)
+	}
+	p.logger.Info("stream clip delivered (silent)", "clipId", id, "subscribers", n)
+
+	if p.silentInterval <= 0 {
+		return nil
+	}
+	timer := time.NewTimer(p.silentInterval)
+	defer timer.Stop()
+	select {
+	case <-timer.C:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 // Play はWAVバイト列をキューに積み、SSE購読者にブロードキャストする。
@@ -348,40 +425,58 @@ func parseClipID(path string) (uint64, bool) {
 	return id, true
 }
 
-// speakerJSON は /speakers.json のレスポンス1要素分のペイロード。
+// speakerJSON は /api/status の speakers 配列要素のペイロード。
 type speakerJSON struct {
 	ID          int    `json:"id"`
 	SpeakerName string `json:"speakerName"`
 	StyleName   string `json:"styleName"`
 }
 
-// buildSpeakersJSON は speakerLookup を id 昇順で配列化し Start 時に一度だけマーシャルする。
-func (p *HTTPStreamPlayer) buildSpeakersJSON() error {
-	ids := make([]int, 0, len(p.speakerLookup))
-	for id := range p.speakerLookup {
-		ids = append(ids, id)
+// apiStatusJSON は GET /api/status のレスポンスペイロード。
+type apiStatusJSON struct {
+	Silent       bool          `json:"silent"`
+	SilentReason string        `json:"silentReason"`
+	Speakers     []speakerJSON `json:"speakers"`
+}
+
+// buildAPIStatusJSON は speakerLookup と silent 状態から /api/status のレスポンスを
+// Start 時に一度だけマーシャルしてキャッシュする。
+// 無音モードでは speakers は空配列として固定する。
+func (p *HTTPStreamPlayer) buildAPIStatusJSON() error {
+	var items []speakerJSON
+	if p.silent {
+		items = []speakerJSON{}
+	} else {
+		ids := make([]int, 0, len(p.speakerLookup))
+		for id := range p.speakerLookup {
+			ids = append(ids, id)
+		}
+		sort.Ints(ids)
+		items = make([]speakerJSON, 0, len(ids))
+		for _, id := range ids {
+			info := p.speakerLookup[id]
+			items = append(items, speakerJSON{
+				ID:          id,
+				SpeakerName: info.SpeakerName,
+				StyleName:   info.StyleName,
+			})
+		}
 	}
-	sort.Ints(ids)
-	items := make([]speakerJSON, 0, len(ids))
-	for _, id := range ids {
-		info := p.speakerLookup[id]
-		items = append(items, speakerJSON{
-			ID:          id,
-			SpeakerName: info.SpeakerName,
-			StyleName:   info.StyleName,
-		})
-	}
-	payload, err := json.Marshal(items)
+	payload, err := json.Marshal(apiStatusJSON{
+		Silent:       p.silent,
+		SilentReason: p.silentReason,
+		Speakers:     items,
+	})
 	if err != nil {
-		return fmt.Errorf("failed to marshal speakers.json: %w", err)
+		return fmt.Errorf("failed to marshal api status: %w", err)
 	}
-	p.speakersJSON = payload
+	p.apiStatusJSON = payload
 	return nil
 }
 
-func (p *HTTPStreamPlayer) handleSpeakers(w http.ResponseWriter, _ *http.Request) {
+func (p *HTTPStreamPlayer) handleAPIStatus(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	_, _ = w.Write(p.speakersJSON)
+	_, _ = w.Write(p.apiStatusJSON)
 }
 
 func (p *HTTPStreamPlayer) handleTestClip(w http.ResponseWriter, r *http.Request) {
