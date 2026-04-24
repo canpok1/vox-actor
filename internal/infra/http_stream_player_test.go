@@ -64,6 +64,14 @@ package infra
 // DONE: PlayText が url="" で clipEvent を配信し silentInterval ぶん待機する
 // DONE: PlayText はキャンセル済み ctx で即エラー
 // DONE: PlayText は Start 前だとエラー
+//
+// #285 サーバー側エラー配信:
+// TODO: BroadcastError が SSE "error" イベントで errorEvent を配信する（synthesis カテゴリ）
+// TODO: synthesis カテゴリは path/text/speakerName/styleName を含み lookup から解決される
+// TODO: file カテゴリは path を含み text/speakerName/styleName を省略する
+// TODO: connection カテゴリは message のみを含む
+// TODO: errorEvent.id はクリップIDと独立に 1 から単調増加する
+// TODO: BroadcastError は複数購読者にブロードキャストされる
 
 import (
 	"bufio"
@@ -365,6 +373,12 @@ func TestHTTPStreamPlayer_Play_CancelledContext(t *testing.T) {
 // テスト終了時にクリーンアップされる。
 func subscribeSSE(t *testing.T, baseURL string) <-chan string {
 	t.Helper()
+	return subscribeSSEByEvent(t, baseURL, "clip")
+}
+
+// subscribeSSEByEvent は /events に接続し、指定したイベント名の data のみをチャネルに流す。
+func subscribeSSEByEvent(t *testing.T, baseURL, wantEvent string) <-chan string {
+	t.Helper()
 
 	req, err := http.NewRequest(http.MethodGet, baseURL+"/events", nil)
 	if err != nil {
@@ -401,7 +415,7 @@ func subscribeSSE(t *testing.T, baseURL string) <-chan string {
 				eventName = strings.TrimSpace(strings.TrimPrefix(line, "event:"))
 			case strings.HasPrefix(line, "data:"):
 				data := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
-				if eventName == "clip" {
+				if eventName == wantEvent {
 					select {
 					case events <- data:
 					case <-ctx.Done():
@@ -1342,4 +1356,229 @@ func TestHTTPStreamPlayer_TestClip_CreateQueryFailureReturns502(t *testing.T) {
 	if resp.StatusCode != http.StatusBadGateway {
 		t.Errorf("expected 502, got %d", resp.StatusCode)
 	}
+}
+
+// --- #285 サーバー側エラー配信 ---
+
+func TestHTTPStreamPlayer_BroadcastError_SynthesisCategory(t *testing.T) {
+	t.Parallel()
+	lookup := map[int]entity.SpeakerStyleInfo{
+		3: {SpeakerName: "ずんだもん", StyleName: "ノーマル"},
+	}
+	fixed := time.Date(2026, 4, 24, 12, 0, 0, 456_000_000, time.UTC)
+	p := newStartedPlayerWithOpts(t,
+		WithSpeakerLookup(lookup),
+		withNowFunc(func() time.Time { return fixed }),
+	)
+	baseURL := "http://" + p.Addr()
+
+	events := subscribeSSEByEvent(t, baseURL, "error")
+	time.Sleep(50 * time.Millisecond)
+
+	p.BroadcastError(app.StreamError{
+		Category:  app.StreamErrorCategorySynthesis,
+		Message:   "synthesize failed",
+		Path:      "/tmp/script.txt",
+		Text:      "こんにちは",
+		SpeakerID: 3,
+	})
+
+	select {
+	case data := <-events:
+		var ev errorEvent
+		if err := json.Unmarshal([]byte(data), &ev); err != nil {
+			t.Fatalf("unmarshal: %v data=%s", err, data)
+		}
+		if ev.ID != 1 {
+			t.Errorf("expected id=1, got %d", ev.ID)
+		}
+		if ev.Category != "synthesis" {
+			t.Errorf("expected category=synthesis, got %q", ev.Category)
+		}
+		if ev.Message != "synthesize failed" {
+			t.Errorf("unexpected message: %q", ev.Message)
+		}
+		if ev.Path != "/tmp/script.txt" {
+			t.Errorf("unexpected path: %q", ev.Path)
+		}
+		if ev.Text != "こんにちは" {
+			t.Errorf("unexpected text: %q", ev.Text)
+		}
+		if ev.SpeakerName != "ずんだもん" {
+			t.Errorf("expected speakerName=ずんだもん, got %q", ev.SpeakerName)
+		}
+		if ev.StyleName != "ノーマル" {
+			t.Errorf("expected styleName=ノーマル, got %q", ev.StyleName)
+		}
+		if ev.Timestamp != fixed.UnixMilli() {
+			t.Errorf("expected timestamp=%d, got %d", fixed.UnixMilli(), ev.Timestamp)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timeout waiting for error event")
+	}
+}
+
+func TestHTTPStreamPlayer_BroadcastError_FileCategory(t *testing.T) {
+	t.Parallel()
+	p := newStartedPlayer(t)
+	baseURL := "http://" + p.Addr()
+
+	events := subscribeSSEByEvent(t, baseURL, "error")
+	time.Sleep(50 * time.Millisecond)
+
+	p.BroadcastError(app.StreamError{
+		Category: app.StreamErrorCategoryFile,
+		Message:  "failed to read script",
+		Path:     "/tmp/script.txt",
+	})
+
+	select {
+	case data := <-events:
+		var ev errorEvent
+		if err := json.Unmarshal([]byte(data), &ev); err != nil {
+			t.Fatalf("unmarshal: %v data=%s", err, data)
+		}
+		if ev.Category != "file" {
+			t.Errorf("expected category=file, got %q", ev.Category)
+		}
+		if ev.Path != "/tmp/script.txt" {
+			t.Errorf("unexpected path: %q", ev.Path)
+		}
+		if ev.Text != "" {
+			t.Errorf("expected empty text, got %q", ev.Text)
+		}
+		if ev.SpeakerName != "" {
+			t.Errorf("expected empty speakerName, got %q", ev.SpeakerName)
+		}
+		if ev.StyleName != "" {
+			t.Errorf("expected empty styleName, got %q", ev.StyleName)
+		}
+		// 省略フィールドは JSON 上に出現しないこと（omitempty の確認）
+		if strings.Contains(data, `"text":`) {
+			t.Errorf("expected text to be omitted for file category, got: %s", data)
+		}
+		if strings.Contains(data, `"speakerName":`) {
+			t.Errorf("expected speakerName to be omitted for file category, got: %s", data)
+		}
+		if strings.Contains(data, `"styleName":`) {
+			t.Errorf("expected styleName to be omitted for file category, got: %s", data)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timeout waiting for error event")
+	}
+}
+
+func TestHTTPStreamPlayer_BroadcastError_ConnectionCategory(t *testing.T) {
+	t.Parallel()
+	p := newStartedPlayer(t)
+	baseURL := "http://" + p.Addr()
+
+	events := subscribeSSEByEvent(t, baseURL, "error")
+	time.Sleep(50 * time.Millisecond)
+
+	p.BroadcastError(app.StreamError{
+		Category: app.StreamErrorCategoryConnection,
+		Message:  "VOICEVOX unreachable",
+	})
+
+	select {
+	case data := <-events:
+		var ev errorEvent
+		if err := json.Unmarshal([]byte(data), &ev); err != nil {
+			t.Fatalf("unmarshal: %v data=%s", err, data)
+		}
+		if ev.Category != "connection" {
+			t.Errorf("expected category=connection, got %q", ev.Category)
+		}
+		if ev.Message != "VOICEVOX unreachable" {
+			t.Errorf("unexpected message: %q", ev.Message)
+		}
+		if strings.Contains(data, `"path":`) {
+			t.Errorf("expected path to be omitted for connection category, got: %s", data)
+		}
+		if strings.Contains(data, `"text":`) {
+			t.Errorf("expected text to be omitted for connection category, got: %s", data)
+		}
+		if strings.Contains(data, `"speakerName":`) {
+			t.Errorf("expected speakerName to be omitted for connection category, got: %s", data)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timeout waiting for error event")
+	}
+}
+
+func TestHTTPStreamPlayer_BroadcastError_IDMonotonicAndIndependentFromClip(t *testing.T) {
+	t.Parallel()
+	p := newStartedPlayer(t)
+	baseURL := "http://" + p.Addr()
+
+	clipEvents := subscribeSSEByEvent(t, baseURL, "clip")
+	errorEvents := subscribeSSEByEvent(t, baseURL, "error")
+	time.Sleep(80 * time.Millisecond)
+
+	// clip を 2 回、error を 3 回交互に配信して、それぞれが独立に 1 始まりで連番になること
+	if err := p.Play(context.Background(), []byte("RIFFa"), app.PlayMeta{}); err != nil {
+		t.Fatalf("Play: %v", err)
+	}
+	p.BroadcastError(app.StreamError{Category: app.StreamErrorCategoryFile, Message: "e1"})
+	p.BroadcastError(app.StreamError{Category: app.StreamErrorCategoryFile, Message: "e2"})
+	if err := p.Play(context.Background(), []byte("RIFFb"), app.PlayMeta{}); err != nil {
+		t.Fatalf("Play: %v", err)
+	}
+	p.BroadcastError(app.StreamError{Category: app.StreamErrorCategoryFile, Message: "e3"})
+
+	for i := 1; i <= 2; i++ {
+		select {
+		case data := <-clipEvents:
+			needle := fmt.Sprintf(`"id":%d`, i)
+			if !strings.Contains(data, needle) {
+				t.Errorf("clip event #%d: expected %s, got %s", i, needle, data)
+			}
+		case <-time.After(2 * time.Second):
+			t.Fatalf("timeout waiting for clip #%d", i)
+		}
+	}
+	for i := 1; i <= 3; i++ {
+		select {
+		case data := <-errorEvents:
+			needle := fmt.Sprintf(`"id":%d`, i)
+			if !strings.Contains(data, needle) {
+				t.Errorf("error event #%d: expected %s, got %s", i, needle, data)
+			}
+		case <-time.After(2 * time.Second):
+			t.Fatalf("timeout waiting for error #%d", i)
+		}
+	}
+}
+
+func TestHTTPStreamPlayer_BroadcastError_MultipleSubscribers(t *testing.T) {
+	t.Parallel()
+	p := newStartedPlayer(t)
+	baseURL := "http://" + p.Addr()
+
+	const subscribers = 3
+	channels := make([]<-chan string, subscribers)
+	for i := range subscribers {
+		channels[i] = subscribeSSEByEvent(t, baseURL, "error")
+	}
+	time.Sleep(80 * time.Millisecond)
+
+	p.BroadcastError(app.StreamError{Category: app.StreamErrorCategoryFile, Message: "oh"})
+
+	for i, ch := range channels {
+		select {
+		case data := <-ch:
+			if !strings.Contains(data, `"id":1`) {
+				t.Errorf("subscriber %d got %s", i, data)
+			}
+		case <-time.After(2 * time.Second):
+			t.Errorf("subscriber %d timeout", i)
+		}
+	}
+}
+
+// HTTPStreamPlayer は app.ErrorBroadcaster を実装する。
+func TestHTTPStreamPlayer_ImplementsErrorBroadcaster(t *testing.T) {
+	t.Parallel()
+	var _ app.ErrorBroadcaster = (*HTTPStreamPlayer)(nil)
 }

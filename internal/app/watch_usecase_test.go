@@ -1338,3 +1338,266 @@ func TestWatchUsecase_Run_SilentMode_EmptyScriptsSkipped(t *testing.T) {
 		t.Errorf("expected 1 PlayText call (empty script skipped), got: %d", player.playTextCalls)
 	}
 }
+
+// --- #285 サーバー側エラー配信 ---
+
+// recordingErrorPlayer は AudioPlayer + textPlayer + ErrorBroadcaster を実装し、
+// watch_usecase から broadcast されたエラーを記録する。
+type recordingErrorPlayer struct {
+	mu              sync.Mutex
+	playErr         error
+	playTextErr     error
+	playCalls       int
+	playTextCalls   int
+	broadcastErrors []app.StreamError
+}
+
+func (p *recordingErrorPlayer) Play(_ context.Context, _ []byte, _ app.PlayMeta) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.playCalls++
+	return p.playErr
+}
+
+func (p *recordingErrorPlayer) PlayText(_ context.Context, _ app.PlayMeta) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.playTextCalls++
+	return p.playTextErr
+}
+
+func (p *recordingErrorPlayer) BroadcastError(e app.StreamError) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.broadcastErrors = append(p.broadcastErrors, e)
+}
+
+func (p *recordingErrorPlayer) errors() []app.StreamError {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	out := make([]app.StreamError, len(p.broadcastErrors))
+	copy(out, p.broadcastErrors)
+	return out
+}
+
+func findError(errs []app.StreamError, category app.StreamErrorCategory) (app.StreamError, bool) {
+	for _, e := range errs {
+		if e.Category == category {
+			return e, true
+		}
+	}
+	return app.StreamError{}, false
+}
+
+func TestWatchUsecase_Run_BroadcastsFileError_OnReadFailure(t *testing.T) {
+	reader := &mockScriptReader{err: errors.New("read denied")}
+	client := &mockVoicevoxClient{query: &entity.AudioQuery{}, wavData: []byte("w")}
+	player := &recordingErrorPlayer{}
+	mover := &mockFileMover{}
+	watcher := &mockDirWatcher{files: []string{"/tmp/watch/a.txt"}}
+
+	uc := app.NewWatchUsecase(reader, client, player, mover, watcher)
+	params := app.WatchParams{Paths: []string{"/tmp/watch"}, SpeakerID: 3}
+
+	if err := uc.Run(context.Background(), params); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	errs := player.errors()
+	e, ok := findError(errs, app.StreamErrorCategoryFile)
+	if !ok {
+		t.Fatalf("expected file category error, got: %+v", errs)
+	}
+	if e.Path != "/tmp/watch/a.txt" {
+		t.Errorf("expected path=/tmp/watch/a.txt, got %q", e.Path)
+	}
+	if !strings.Contains(e.Message, "read denied") {
+		t.Errorf("expected message to contain underlying error, got %q", e.Message)
+	}
+}
+
+func TestWatchUsecase_Run_BroadcastsFileError_OnMoveFailure(t *testing.T) {
+	reader := &mockScriptReader{
+		scripts: []entity.Script{{Path: "a.txt", Text: "hi", IsEmpty: false}},
+	}
+	client := &mockVoicevoxClient{query: &entity.AudioQuery{}, wavData: []byte("w")}
+	player := &recordingErrorPlayer{}
+	mover := &mockFileMover{err: errors.New("permission denied")}
+	watcher := &mockDirWatcher{files: []string{"/tmp/watch/a.txt"}}
+
+	uc := app.NewWatchUsecase(reader, client, player, mover, watcher)
+	params := app.WatchParams{Paths: []string{"/tmp/watch"}, SpeakerID: 3}
+	if err := uc.Run(context.Background(), params); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	errs := player.errors()
+	e, ok := findError(errs, app.StreamErrorCategoryFile)
+	if !ok {
+		t.Fatalf("expected file category error, got: %+v", errs)
+	}
+	if e.Path != "/tmp/watch/a.txt" {
+		t.Errorf("expected path=/tmp/watch/a.txt, got %q", e.Path)
+	}
+	if !strings.Contains(e.Message, "permission denied") {
+		t.Errorf("expected message to contain underlying error, got %q", e.Message)
+	}
+}
+
+func TestWatchUsecase_Run_BroadcastsFileError_OnDeleteFailure(t *testing.T) {
+	reader := &mockScriptReader{
+		scripts: []entity.Script{{Path: "a.txt", Text: "hi", IsEmpty: false}},
+	}
+	client := &mockVoicevoxClient{query: &entity.AudioQuery{}, wavData: []byte("w")}
+	player := &recordingErrorPlayer{}
+	mover := &mockFileMover{deleteErr: errors.New("unlink failed")}
+	watcher := &mockDirWatcher{files: []string{"/tmp/watch/a.txt"}}
+
+	uc := app.NewWatchUsecase(reader, client, player, mover, watcher, app.WithDeleteMode())
+	params := app.WatchParams{Paths: []string{"/tmp/watch"}, SpeakerID: 3}
+	if err := uc.Run(context.Background(), params); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	errs := player.errors()
+	e, ok := findError(errs, app.StreamErrorCategoryFile)
+	if !ok {
+		t.Fatalf("expected file category error, got: %+v", errs)
+	}
+	if !strings.Contains(e.Message, "unlink failed") {
+		t.Errorf("expected message to contain underlying error, got %q", e.Message)
+	}
+}
+
+func TestWatchUsecase_Run_BroadcastsSynthesisError_OnCreateQueryFailure(t *testing.T) {
+	reader := &mockScriptReader{
+		scripts: []entity.Script{{Path: "a.txt", Text: "hi", IsEmpty: false}},
+	}
+	client := &mockVoicevoxClient{createQueryErr: errors.New("bad query")}
+	player := &recordingErrorPlayer{}
+	mover := &mockFileMover{}
+	watcher := &mockDirWatcher{files: []string{"/tmp/watch/a.txt"}}
+
+	uc := app.NewWatchUsecase(reader, client, player, mover, watcher)
+	params := app.WatchParams{Paths: []string{"/tmp/watch"}, SpeakerID: 3}
+	if err := uc.Run(context.Background(), params); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	errs := player.errors()
+	e, ok := findError(errs, app.StreamErrorCategorySynthesis)
+	if !ok {
+		t.Fatalf("expected synthesis category error, got: %+v", errs)
+	}
+	if e.Path != "a.txt" {
+		t.Errorf("expected path=a.txt, got %q", e.Path)
+	}
+	if e.Text != "hi" {
+		t.Errorf("expected text=hi, got %q", e.Text)
+	}
+	if e.SpeakerID != 3 {
+		t.Errorf("expected speakerID=3, got %d", e.SpeakerID)
+	}
+	if !strings.Contains(e.Message, "bad query") {
+		t.Errorf("expected message to contain underlying error, got %q", e.Message)
+	}
+}
+
+func TestWatchUsecase_Run_BroadcastsSynthesisError_OnSynthesizeFailure(t *testing.T) {
+	reader := &mockScriptReader{
+		scripts: []entity.Script{{Path: "a.txt", Text: "hi", IsEmpty: false}},
+	}
+	client := &mockVoicevoxClient{query: &entity.AudioQuery{}, synthesizeErr: errors.New("synth fail")}
+	player := &recordingErrorPlayer{}
+	mover := &mockFileMover{}
+	watcher := &mockDirWatcher{files: []string{"/tmp/watch/a.txt"}}
+
+	uc := app.NewWatchUsecase(reader, client, player, mover, watcher)
+	params := app.WatchParams{Paths: []string{"/tmp/watch"}, SpeakerID: 3}
+	if err := uc.Run(context.Background(), params); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	errs := player.errors()
+	e, ok := findError(errs, app.StreamErrorCategorySynthesis)
+	if !ok {
+		t.Fatalf("expected synthesis category error, got: %+v", errs)
+	}
+	if !strings.Contains(e.Message, "synth fail") {
+		t.Errorf("expected message to contain underlying error, got %q", e.Message)
+	}
+}
+
+func TestWatchUsecase_Run_BroadcastsSynthesisError_OnPlayFailure(t *testing.T) {
+	reader := &mockScriptReader{
+		scripts: []entity.Script{{Path: "a.txt", Text: "hi", IsEmpty: false}},
+	}
+	client := &mockVoicevoxClient{query: &entity.AudioQuery{}, wavData: []byte("w")}
+	player := &recordingErrorPlayer{playErr: errors.New("play fail")}
+	mover := &mockFileMover{}
+	watcher := &mockDirWatcher{files: []string{"/tmp/watch/a.txt"}}
+
+	uc := app.NewWatchUsecase(reader, client, player, mover, watcher)
+	params := app.WatchParams{Paths: []string{"/tmp/watch"}, SpeakerID: 3}
+	if err := uc.Run(context.Background(), params); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	errs := player.errors()
+	e, ok := findError(errs, app.StreamErrorCategorySynthesis)
+	if !ok {
+		t.Fatalf("expected synthesis category error, got: %+v", errs)
+	}
+	if !strings.Contains(e.Message, "play fail") {
+		t.Errorf("expected message to contain underlying error, got %q", e.Message)
+	}
+}
+
+func TestWatchUsecase_Run_BroadcastsSynthesisError_OnSilentPlayTextFailure(t *testing.T) {
+	reader := &mockScriptReader{
+		scripts: []entity.Script{{Path: "a.txt", Text: "hi", IsEmpty: false}},
+	}
+	client := &mockVoicevoxClient{}
+	player := &recordingErrorPlayer{playTextErr: errors.New("silent play fail")}
+	mover := &mockFileMover{}
+	watcher := &mockDirWatcher{files: []string{"/tmp/watch/a.txt"}}
+
+	uc := app.NewWatchUsecase(reader, client, player, mover, watcher, app.WithSilent())
+	params := app.WatchParams{Paths: []string{"/tmp/watch"}, SpeakerID: 3}
+	if err := uc.Run(context.Background(), params); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	errs := player.errors()
+	e, ok := findError(errs, app.StreamErrorCategorySynthesis)
+	if !ok {
+		t.Fatalf("expected synthesis category error, got: %+v", errs)
+	}
+	if !strings.Contains(e.Message, "silent play fail") {
+		t.Errorf("expected message to contain underlying error, got %q", e.Message)
+	}
+}
+
+func TestWatchUsecase_Run_BroadcastsConnectionError_OnHealthCheckFailure(t *testing.T) {
+	reader := &mockScriptReader{}
+	client := &mockVoicevoxClient{healthCheckErr: errors.New("engine unreachable")}
+	player := &recordingErrorPlayer{}
+	mover := &mockFileMover{}
+	watcher := &mockDirWatcher{}
+
+	uc := app.NewWatchUsecase(reader, client, player, mover, watcher)
+	params := app.WatchParams{Paths: []string{"/tmp/watch"}, SpeakerID: 3}
+
+	if err := uc.Run(context.Background(), params); err == nil {
+		t.Fatal("expected error from HealthCheck, got nil")
+	}
+
+	errs := player.errors()
+	e, ok := findError(errs, app.StreamErrorCategoryConnection)
+	if !ok {
+		t.Fatalf("expected connection category error, got: %+v", errs)
+	}
+	if !strings.Contains(e.Message, "engine unreachable") {
+		t.Errorf("expected message to contain underlying error, got %q", e.Message)
+	}
+}
