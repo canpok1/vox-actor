@@ -31,7 +31,10 @@ fmt:
 typecheck: frontend/node_modules
 	cd frontend && npm run typecheck
 
-lint: build-frontend typecheck
+lint-frontend: frontend/node_modules
+	cd frontend && npm run lint
+
+lint: build-frontend typecheck lint-frontend
 	golangci-lint run ./...
 
 depcheck: build-frontend
@@ -68,4 +71,4 @@ install: build-frontend
 
 all: build
 
-.PHONY: all setup build build-frontend clean test test-e2e test-frontend-e2e fmt lint typecheck depcheck run-stream dev dev-frontend dev-backend install
+.PHONY: all setup build build-frontend clean test test-e2e test-frontend-e2e fmt lint lint-frontend typecheck depcheck run-stream dev dev-frontend dev-backend install
