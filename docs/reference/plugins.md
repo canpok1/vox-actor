@@ -6,14 +6,19 @@ claude code に `vox-actor-plugin` を導入すると、以下のスラッシュ
 
 `monologue` / `speak` / `talk` スキルで利用できるキャラクターは `plugins/vox-actor-plugin/skills/act/characters/` に設定ファイルとして同梱されています。キャラクター名（`<name>`）は `/vox-actor-plugin:monologue <name>` の引数や、`monologue` / `speak` 共通の `default_character`、`talk` 用の `talk_characters` メモリ設定で指定します。
 
+同梱キャラクターはいずれも [東北ずん子・ずんだもんプロジェクト 音源利用規約](https://zunko.jp/con_ongen_kiyaku.html) の対象です。生成音声を公開・配布する際のクレジット表記については [クレジット表記](../credits.md) を参照してください。
+
 | キャラクター名 | `<name>` | 分類 | 特徴 |
 |---|---|---|---|
 | ずんだもん（既定） | `zundamon` | — | 元気で明るい／語尾「〜のだ」 |
 | 四国めたん | `metan` | 女性 | お嬢様口調／ずんだもんの定番相方 |
-| 春日部つむぎ | `tsumugi` | 女性 | 元気な女子高生／親しみやすい |
-| 青山龍星 | `ryusei` | 男性 | 低音ボイス／落ち着いた口調 |
-| 玄野武宏 | `takehiro` | 男性 | 熱血系／感情バリエーション豊富 |
-| ナースロボ＿タイプＴ | `nurserobo_t` | 機械 | 無感情寄り／ロボット的 |
+| 九州そら | `sora` | 女性 | 上品で大人っぽい／物腰やわらか |
+| 中国うさぎ | `usagi` | — | 天真爛漫／表情豊かで素直 |
+| 中部つるぎ | `tsurugi` | 男性 | 真面目でクール／芯のある短い言い回し |
+| あんこもん | `ankomon` | 女性 | マイペース／強気と弱気の二面性 |
+| 東北ずん子 | `zunko` | 女性 | 明るくしっかり者／親しみやすい |
+| 東北きりたん | `kiritan` | 女性 | 真面目で礼儀正しい／落ち着いた丁寧口調 |
+| 東北イタコ | `itako` | 女性 | おっとり優しい／包容力のあるお姉さん |
 
 ## `/vox-actor-plugin:monologue`
 
