@@ -82,8 +82,34 @@ vox-actor say <text>
 | `--speed` | — | `1.0` | 話速 |
 | `--pitch` | — | `0.0` | 音高 |
 | `--intonation` | — | `1.0` | 抑揚 |
+| `-o`, `--output` | — | （未指定） | 指定時、音声再生せずセリフをファイル出力（[詳細](#--outputモード)） |
 | `--verbose` | — | `false` | 詳細ログを出力 |
 | `--dry-run` | — | `false` | VOICEVOX・音声再生を行わず、読み上げ対象をログ出力（[詳細](#dry-runモード)） |
+
+### --outputモード
+
+`-o <パス>` または `--output <パス>` を指定すると、**音声合成・音声再生を行わず**にセリフをファイルへ書き出します。`vox-actor watch --queue` と組み合わせ、別プロセスで再生させたいユースケースに利用できます。
+
+- `-o` 指定時は **VOICEVOX エンジンへ接続しません**（`HealthCheck` / `CreateQuery` / `Synthesize` を呼ばない）。エンジンが起動していなくても成功します。
+- 出力ファイルの拡張子で書き出し形式を自動判定します。
+  - `.json` → 1ファイル1スクリプトのJSON。`text` に加え、明示指定された `--speaker` / `--speed` / `--pitch` / `--intonation` を `speaker` / `speedScale` / `pitchScale` / `intonationScale` として保存
+  - `.jsonl` → 1行JSON（フィールドは `.json` と同じ）
+  - `.txt` および **未知の拡張子** → 本文のみのテキストファイル（拡張子はそのまま）
+    - このとき `--speaker` / `--speed` / `--pitch` / `--intonation` がコマンドラインで明示指定されていたら、これらは保存できない旨を WARN ログで通知します（処理は継続）
+- **既存ファイルとの衝突回避**: 出力先に同名ファイルが存在する場合は、`<name>_<UnixNano><ext>` の形式で連番を付与してユニーク化します。
+- **親ディレクトリの扱い**: 親ディレクトリが存在しない場合はエラーになります（任意の深さを自動作成しません）。
+- **`--dry-run` との併用は禁止**です（起動時に `ErrUsage` で終了）。
+
+```bash
+# ホスト側 / 別ターミナル: queue を監視
+vox-actor watch --queue
+
+# claude code 等から: queue にテキストを書き出すと watch が拾って読み上げる
+vox-actor say -o "$(vox-actor config path.queue)/01.txt" "こんにちは"
+
+# パラメータを保持したい場合は .json / .jsonl で書き出す
+vox-actor say -o "$(vox-actor config path.queue)/01.json" --speaker 5 --speed 1.2 "こんにちは"
+```
 
 ## `act` サブコマンド
 
