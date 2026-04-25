@@ -5,6 +5,7 @@ argument-hint: "[キャラクター名]"
 allowed-tools:
   - "Bash(echo $((RANDOM % 100 + 1)))"
   - "Skill"
+model: Haiku
 ---
 
 作業の開始時や終了時に、キャラクターになりきった独り言を通知する入口スキルです。生成種別「独り言」の演出指示とメモリ参照のみを担い、台本生成や再生実行などの技術処理は `vox-actor-plugin:act` スキルへ委譲します。
