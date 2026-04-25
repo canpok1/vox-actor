@@ -19,5 +19,5 @@
     "verbatimModuleSyntax": true,
     "useDefineForClassFields": true
   },
-  "include": ["src/**/*", "vite.config.ts"]
+  "include": ["src/**/*", "vite.config.ts", "playwright.config.ts", "test/**/*"]
 }

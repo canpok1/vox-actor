@@ -5,7 +5,8 @@ import { defineConfig } from "vite";
 // 配信画面は Go バックエンド (`vox-actor watch --stream`) 提供の SSE / API と
 // 同一オリジンで通信する前提なので、dev server からバックエンドへプロキシする。
 // バックエンドの既定バインドは `--stream-addr 127.0.0.1:8080`。
-const backendTarget = "http://localhost:8080";
+// E2E テスト等でスタブを別ポートに立てる場合は VITE_BACKEND_URL でオーバーライドする。
+const backendTarget = process.env.VITE_BACKEND_URL ?? "http://localhost:8080";
 
 export default defineConfig({
   root: ".",

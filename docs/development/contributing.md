@@ -19,8 +19,11 @@ make build
 # テスト
 make test
 
-# E2Eテスト
+# E2Eテスト（Go: CLI レイヤー）
 make test-e2e
+
+# 配信画面の E2E テスト（Playwright + Chromium）
+make test-frontend-e2e
 
 # フォーマット
 make fmt
@@ -101,6 +104,40 @@ make dev-frontend
 | `frontend/src/types/api.ts` | サーバー（`internal/infra/http_stream_player.go`）と対応する JSON 型と型ガード |
 
 状態は原則 `App` で集中管理し、子コンポーネントは props で受け取る。`localStorage` のキーは `usePersistedState` に集約され、既存キー（`vox-actor.stream.*`）と互換です。
+
+## 配信画面の E2E テスト（Playwright）
+
+`frontend/test/e2e/` 以下に Playwright + Chromium による配信画面の E2E テストがあります。実バックエンド（`vox-actor watch --stream`）の代わりに `frontend/test/stub-server.mjs` のスタブを使い、SSE / `/api/status` / `/test-clip` / `/clips/*.wav` を決定的にエミュレートします。
+
+### 実行
+
+```bash
+make test-frontend-e2e
+# 直接実行する場合:
+cd frontend && npm run test:e2e
+```
+
+`playwright.config.ts` の `webServer` がスタブ（既定 `127.0.0.1:8080`）と Vite dev server（既定 `127.0.0.1:5173`）を自動起動します。`8080` が既に使われている場合（例: `make dev-backend` を起動中）は、`VOX_STUB_PORT` と `PLAYWRIGHT_BASE_URL` で別ポートに振り分けてください。
+
+```bash
+cd frontend
+VOX_STUB_PORT=18080 PLAYWRIGHT_BASE_URL=http://127.0.0.1:15173 \
+  npx playwright test --reporter=list
+```
+
+`vite.config.ts` の `server.proxy` の転送先は環境変数 `VITE_BACKEND_URL` で上書きできます（既定 `http://localhost:8080`）。`playwright.config.ts` はこれを利用してスタブのポートを Vite に伝えます。
+
+### スタブの制御エンドポイント
+
+テストは `APIRequestContext` でスタブの制御チャネルを叩き、SSE 配信内容や `/api/status` の応答を切り替えます（`frontend/test/e2e/helpers.ts`）。
+
+| メソッド・パス | 用途 |
+|---|---|
+| `POST /__stub/clip` | SSE で `clip` イベントを配信 |
+| `POST /__stub/error` | SSE で `error` イベントを配信 |
+| `POST /__stub/disconnect` | 全 SSE 接続を一斉切断（再接続テスト用） |
+| `POST /__stub/api-status` | `/api/status` の応答を上書き |
+| `POST /__stub/reset` | 内部状態を初期化 |
 
 ## アーキテクチャ
 
