@@ -41,7 +41,11 @@ export function TestControls({
       >
         ▶ テスト再生
       </button>
-      <span role="status" aria-live="polite" className="text-[0.85rem] text-ctp-red">
+      <span
+        role="status"
+        aria-live="polite"
+        className="text-[0.85rem] text-ctp-red"
+      >
         {error}
       </span>
     </div>

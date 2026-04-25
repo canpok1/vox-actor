@@ -61,7 +61,9 @@ export function isClipEvent(value: unknown): value is ClipEvent {
   );
 }
 
-export function isErrorEventPayload(value: unknown): value is ErrorEventPayload {
+export function isErrorEventPayload(
+  value: unknown,
+): value is ErrorEventPayload {
   if (typeof value !== "object" || value === null) {
     return false;
   }
@@ -73,13 +75,19 @@ export function isErrorEventPayload(value: unknown): value is ErrorEventPayload 
   ) {
     return false;
   }
-  if (v.category !== "synthesis" && v.category !== "file" && v.category !== "connection") {
+  if (
+    v.category !== "synthesis" &&
+    v.category !== "file" &&
+    v.category !== "connection"
+  ) {
     return false;
   }
   if (v.path !== undefined && typeof v.path !== "string") return false;
   if (v.text !== undefined && typeof v.text !== "string") return false;
-  if (v.speakerName !== undefined && typeof v.speakerName !== "string") return false;
-  if (v.styleName !== undefined && typeof v.styleName !== "string") return false;
+  if (v.speakerName !== undefined && typeof v.speakerName !== "string")
+    return false;
+  if (v.styleName !== undefined && typeof v.styleName !== "string")
+    return false;
   return true;
 }
 

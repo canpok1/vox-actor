@@ -16,7 +16,8 @@ interface TabButtonProps {
 }
 
 function TabButton({ id, panelId, active, label, onClick }: TabButtonProps) {
-  const base = "cursor-pointer rounded-t-md px-2 py-[0.4rem] font-inherit sm:px-[0.9rem] sm:py-[0.45rem]";
+  const base =
+    "cursor-pointer rounded-t-md px-2 py-[0.4rem] font-inherit sm:px-[0.9rem] sm:py-[0.45rem]";
   const colors = active
     ? "border border-ctp-overlay border-b-ctp-base bg-ctp-base text-ctp-text"
     : "border-0 bg-transparent text-ctp-subtext hover:text-ctp-text";
@@ -37,7 +38,10 @@ function TabButton({ id, panelId, active, label, onClick }: TabButtonProps) {
 
 export function Tabs({ active, onChange, hideTest = false }: TabsProps) {
   return (
-    <div role="tablist" className="mt-4 flex gap-[0.15rem] border-b border-ctp-overlay sm:gap-1">
+    <div
+      role="tablist"
+      className="mt-4 flex gap-[0.15rem] border-b border-ctp-overlay sm:gap-1"
+    >
       <TabButton
         id="tab-stream"
         panelId="panel-stream"

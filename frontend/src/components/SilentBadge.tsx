@@ -27,6 +27,7 @@ export function SilentBadge({ reason }: SilentBadgeProps) {
   }, [open]);
 
   return (
+    // biome-ignore lint/a11y/noStaticElementInteractions: ホバー検知用ラッパー。インタラクティブな操作はネスト先の <button> が担う
     <span
       ref={rootRef}
       className="relative inline-flex"

@@ -31,8 +31,14 @@ test.describe("各種設定の localStorage 永続化", () => {
 
     await page.reload();
     await expect(page.getByLabel("履歴上限")).toHaveValue("50");
-    await expect(page.getByRole("checkbox", { name: "話者名" })).not.toBeChecked();
-    await expect(page.getByRole("checkbox", { name: "スタイル" })).not.toBeChecked();
-    await expect(page.getByRole("checkbox", { name: "時刻" })).not.toBeChecked();
+    await expect(
+      page.getByRole("checkbox", { name: "話者名" }),
+    ).not.toBeChecked();
+    await expect(
+      page.getByRole("checkbox", { name: "スタイル" }),
+    ).not.toBeChecked();
+    await expect(
+      page.getByRole("checkbox", { name: "時刻" }),
+    ).not.toBeChecked();
   });
 });

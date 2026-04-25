@@ -138,7 +138,9 @@ export function App() {
   // 履歴上限の変更時のみトリム。再生状態の変化ではトリムしない
   // （再生終了直後の playingClipId=null 経由で過去のハイライト対象が消えるのを防ぐ）。
   useEffect(() => {
-    setEntries((prev) => trimTimeline(prev, historySize, playingClipIdRef.current));
+    setEntries((prev) =>
+      trimTimeline(prev, historySize, playingClipIdRef.current),
+    );
   }, [historySize]);
 
   const showTestError = useCallback((msg: string): void => {

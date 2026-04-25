@@ -6,7 +6,10 @@ test.describe("配信タブ: SSE と Timeline", () => {
     await resetStub(request);
   });
 
-  test("SSE 接続後、clip イベントが Timeline に反映される", async ({ page, request }) => {
+  test("SSE 接続後、clip イベントが Timeline に反映される", async ({
+    page,
+    request,
+  }) => {
     await page.goto("/");
     await expect(page.getByText("● 接続中")).toBeVisible();
 
@@ -24,7 +27,10 @@ test.describe("配信タブ: SSE と Timeline", () => {
     await expect(item).toContainText("ずんだもん");
   });
 
-  test("error イベントが Timeline にエラーとして表示される", async ({ page, request }) => {
+  test("error イベントが Timeline にエラーとして表示される", async ({
+    page,
+    request,
+  }) => {
     await page.goto("/");
     await expect(page.getByText("● 接続中")).toBeVisible();
 

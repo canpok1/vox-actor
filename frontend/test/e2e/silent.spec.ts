@@ -11,14 +11,21 @@ test.describe("無音モード", () => {
     });
   });
 
-  test("SilentBadge が表示され、音声テストタブは描画されない", async ({ page }) => {
+  test("SilentBadge が表示され、音声テストタブは描画されない", async ({
+    page,
+  }) => {
     await page.goto("/");
-    await expect(page.getByRole("button", { name: /無音モード/ })).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: /無音モード/ }),
+    ).toBeVisible();
     await expect(page.getByRole("tab", { name: "配信" })).toBeVisible();
     await expect(page.getByRole("tab", { name: "音声テスト" })).toHaveCount(0);
   });
 
-  test("URL 空の clip イベントもタイムラインに表示される", async ({ page, request }) => {
+  test("URL 空の clip イベントもタイムラインに表示される", async ({
+    page,
+    request,
+  }) => {
     await page.goto("/");
     await expect(page.getByText("● 接続中")).toBeVisible();
 

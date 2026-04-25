@@ -1,10 +1,11 @@
-import { type APIRequestContext, type Page, expect } from "@playwright/test";
+import { type APIRequestContext, expect, type Page } from "@playwright/test";
 
 // stub-server.mjs の制御用エンドポイントは Vite dev server (`/`) からは proxy されない。
 // テストでは APIRequestContext を使って stub の素のポートに直接叩く。
 // VOX_STUB_PORT を変えた場合は同じ値を渡すこと（playwright.config.ts と揃える）。
 const STUB_PORT = process.env.VOX_STUB_PORT ?? "8080";
-const STUB_BASE_URL = process.env.VOX_STUB_BASE_URL ?? `http://127.0.0.1:${STUB_PORT}`;
+const STUB_BASE_URL =
+  process.env.VOX_STUB_BASE_URL ?? `http://127.0.0.1:${STUB_PORT}`;
 
 export interface ClipPayload {
   id?: number;
@@ -51,7 +52,9 @@ export async function pushClip(
   request: APIRequestContext,
   payload: ClipPayload,
 ): Promise<void> {
-  const resp = await request.post(`${STUB_BASE_URL}/__stub/clip`, { data: payload });
+  const resp = await request.post(`${STUB_BASE_URL}/__stub/clip`, {
+    data: payload,
+  });
   expect(resp.ok()).toBeTruthy();
 }
 
@@ -59,7 +62,9 @@ export async function pushError(
   request: APIRequestContext,
   payload: ErrorPayload,
 ): Promise<void> {
-  const resp = await request.post(`${STUB_BASE_URL}/__stub/error`, { data: payload });
+  const resp = await request.post(`${STUB_BASE_URL}/__stub/error`, {
+    data: payload,
+  });
   expect(resp.ok()).toBeTruthy();
 }
 
@@ -69,6 +74,9 @@ export async function disconnectAll(request: APIRequestContext): Promise<void> {
 }
 
 // localStorage を読み取るユーティリティ。永続化テストで利用する。
-export async function readLocalStorage(page: Page, key: string): Promise<string | null> {
+export async function readLocalStorage(
+  page: Page,
+  key: string,
+): Promise<string | null> {
   return page.evaluate((k) => window.localStorage.getItem(k), key);
 }

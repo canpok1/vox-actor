@@ -55,7 +55,9 @@ export function TimelineItem({
       >
         <div className="flex flex-wrap items-baseline gap-2 text-[0.8rem] text-ctp-red">
           {showTimestamp && (
-            <span className="tabular-nums">{formatTimestamp(entry.timestamp)}</span>
+            <span className="tabular-nums">
+              {formatTimestamp(entry.timestamp)}
+            </span>
           )}
           <span className="font-semibold">{categoryLabel}</span>
           {entry.path && <span className="break-all">{entry.path}</span>}
@@ -69,7 +71,9 @@ export function TimelineItem({
         {entry.text && (
           <div className="flex flex-wrap items-baseline gap-2 text-[0.8rem] text-ctp-subtext">
             {showSpeakerName && entry.speakerName && (
-              <span className="font-semibold text-ctp-text">{entry.speakerName}</span>
+              <span className="font-semibold text-ctp-text">
+                {entry.speakerName}
+              </span>
             )}
             {showStyleName && entry.styleName && (
               <span className="text-ctp-blue">[{entry.styleName}]</span>
@@ -91,10 +95,14 @@ export function TimelineItem({
       {showMeta && (
         <div className="flex flex-wrap items-baseline gap-2 text-[0.8rem] text-ctp-subtext">
           {showTimestamp && (
-            <span className="tabular-nums">{formatTimestamp(entry.timestamp)}</span>
+            <span className="tabular-nums">
+              {formatTimestamp(entry.timestamp)}
+            </span>
           )}
           {showSpeakerName && (
-            <span className="font-semibold text-ctp-text">{entry.speakerName}</span>
+            <span className="font-semibold text-ctp-text">
+              {entry.speakerName}
+            </span>
           )}
           {showStyleName && entry.styleName && (
             <span className="text-ctp-blue">[{entry.styleName}]</span>
@@ -102,7 +110,10 @@ export function TimelineItem({
         </div>
       )}
       <div className="flex items-start gap-2">
-        <span aria-hidden className="inline-block w-[1em] flex-none text-ctp-blue">
+        <span
+          aria-hidden
+          className="inline-block w-[1em] flex-none text-ctp-blue"
+        >
           {playing ? "▶" : ""}
         </span>
         <span>{entry.text}</span>

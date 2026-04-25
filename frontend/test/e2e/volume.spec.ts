@@ -21,7 +21,9 @@ test.describe("音量・消音コントロール", () => {
     await expect(page.getByRole("slider", { name: "音量" })).toHaveValue("23");
   });
 
-  test("消音チェックボックスの操作で audio.muted が連動する", async ({ page }) => {
+  test("消音チェックボックスの操作で audio.muted が連動する", async ({
+    page,
+  }) => {
     await page.goto("/");
 
     await expect(page.locator("audio")).toHaveJSProperty("muted", true);

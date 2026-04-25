@@ -6,7 +6,9 @@ test.describe("音声テストタブ", () => {
     await resetStub(request);
   });
 
-  test("話者選択は localStorage に保存され、リロード後も復元される", async ({ page }) => {
+  test("話者選択は localStorage に保存され、リロード後も復元される", async ({
+    page,
+  }) => {
     await page.goto("/");
     await page.getByRole("tab", { name: "音声テスト" }).click();
 
