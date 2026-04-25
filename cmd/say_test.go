@@ -2,23 +2,31 @@ package cmd
 
 import (
 	"bytes"
+	"context"
 	"errors"
+	"log/slog"
+	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/canpok1/vox-actor/internal/app"
+	"github.com/canpok1/vox-actor/internal/domain/entity"
 	"github.com/spf13/cobra"
 )
 
 // say コマンド テストリスト
 // DONE: sayサブコマンドがrootに登録されている
 // DONE: 引数なしでErrUsageを返す
-// DONE: ヘルプ出力に全フラグが含まれる（--engine-url, --speaker, --speed, --pitch, --intonation, --verbose）
+// DONE: ヘルプ出力に全フラグが含まれる（--engine-url, --speaker, --speed, --pitch, --intonation, --verbose, --output）
 // DONE: ヘルプ出力に--watchフラグが含まれない
 // DONE: デフォルトオプション値の確認（engine-url, speaker, speed, pitch, intonation）
 // DONE: 環境変数VOX_ENGINE_URLがデフォルト値に反映される
 // DONE: 環境変数VOX_SPEAKERがデフォルト値に反映される
 // DONE: VOX_SPEAKERに不正な値が設定されている場合デフォルト値が使われる
 // DONE: --verboseフラグのデフォルト値がfalse
+// DONE: --output と --dry-run の併用は ErrUsage
+// DONE: --output 指定時、Writer.Write が呼ばれる
+// DONE: --output 指定時、ClientFactory/Player は呼ばれない
 
 // findSayCmd はrootCmdからsayサブコマンドを検索して返すテストヘルパー。
 func findSayCmd(t *testing.T, rootCmd *cobra.Command) *cobra.Command {
@@ -75,7 +83,7 @@ func TestSayCmd_HelpContainsFlags(t *testing.T) {
 	}
 
 	output := buf.String()
-	flags := []string{"--engine-url", "--speaker", "--speed", "--pitch", "--intonation", "--verbose", "--dry-run"}
+	flags := []string{"--engine-url", "--speaker", "--speed", "--pitch", "--intonation", "--verbose", "--dry-run", "--output"}
 	for _, flag := range flags {
 		if !strings.Contains(output, flag) {
 			t.Errorf("expected help output to contain '%s'", flag)
@@ -177,4 +185,117 @@ func TestSayCmd_VerboseFlag_DefaultFalse(t *testing.T) {
 	if verbose {
 		t.Error("expected --verbose default to be false")
 	}
+}
+
+// --- --output (-o) フラグ テスト ---
+
+type fakeScriptWriter struct {
+	calls []fakeWriterCall
+}
+
+type fakeWriterCall struct {
+	path string
+	text string
+}
+
+func (w *fakeScriptWriter) Write(path string, script entity.Script) (string, error) {
+	w.calls = append(w.calls, fakeWriterCall{path: path, text: script.Text})
+	return path, nil
+}
+
+func TestSayCmd_OutputFlag_HasShortAndLong(t *testing.T) {
+	rootCmd := makeRootCmd()
+	sayCmd := findSayCmd(t, rootCmd)
+
+	if f := sayCmd.Flags().Lookup("output"); f == nil {
+		t.Fatal("expected --output flag to be registered")
+	} else if f.Shorthand != "o" {
+		t.Errorf("expected --output shorthand to be 'o', got: %q", f.Shorthand)
+	}
+}
+
+func TestSayCmd_OutputAndDryRun_ReturnsUsageError(t *testing.T) {
+	writer := &fakeScriptWriter{}
+	deps := &Deps{
+		Say: &SayDeps{
+			ClientFactory: func(_ string) app.VoicevoxClient { return nil },
+			Player:        nil,
+			WriterFactory: func(_ *slog.Logger) app.ScriptWriter { return writer },
+		},
+	}
+	rootCmd := makeRootCmd(deps)
+
+	buf := new(bytes.Buffer)
+	rootCmd.SetOut(buf)
+	rootCmd.SetErr(buf)
+	rootCmd.SetArgs([]string{"say", "--output", "/tmp/out.txt", "--dry-run", "hello"})
+
+	err := rootCmd.Execute()
+	if err == nil {
+		t.Fatal("expected error for --output + --dry-run, got nil")
+	}
+	if !errors.Is(err, ErrUsage) {
+		t.Errorf("expected ErrUsage, got: %v", err)
+	}
+}
+
+func TestSayCmd_OutputFlag_CallsWriter_NotClient(t *testing.T) {
+	writer := &fakeScriptWriter{}
+	clientFactoryCalled := false
+
+	deps := &Deps{
+		Say: &SayDeps{
+			ClientFactory: func(_ string) app.VoicevoxClient {
+				clientFactoryCalled = true
+				return &noopClient{}
+			},
+			Player:        &noopPlayer{},
+			WriterFactory: func(_ *slog.Logger) app.ScriptWriter { return writer },
+		},
+	}
+	rootCmd := makeRootCmd(deps)
+
+	tmpDir := t.TempDir()
+	dest := filepath.Join(tmpDir, "out.txt")
+	buf := new(bytes.Buffer)
+	rootCmd.SetOut(buf)
+	rootCmd.SetErr(buf)
+	rootCmd.SetArgs([]string{"say", "--output", dest, "hello"})
+
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(writer.calls) != 1 {
+		t.Fatalf("expected 1 Writer.Write call, got: %d", len(writer.calls))
+	}
+	if writer.calls[0].path != dest {
+		t.Errorf("expected path=%q, got %q", dest, writer.calls[0].path)
+	}
+	if writer.calls[0].text != "hello" {
+		t.Errorf("expected text=hello, got %q", writer.calls[0].text)
+	}
+	if clientFactoryCalled {
+		t.Error("expected ClientFactory NOT to be called when --output is set")
+	}
+}
+
+// noopClient / noopPlayer は --output 経路では呼ばれないことを保証するためのスタブ。
+type noopClient struct{}
+
+func (n *noopClient) HealthCheck(_ context.Context) error { return errors.New("must not be called") }
+func (n *noopClient) CreateQuery(_ context.Context, _ string, _ int) (*entity.AudioQuery, error) {
+	return nil, errors.New("must not be called")
+}
+func (n *noopClient) Synthesize(_ context.Context, _ *entity.AudioQuery, _ int) ([]byte, error) {
+	return nil, errors.New("must not be called")
+}
+func (n *noopClient) GetSpeakers(_ context.Context) ([]entity.Speaker, error) {
+	return nil, errors.New("must not be called")
+}
+
+type noopPlayer struct{}
+
+func (n *noopPlayer) Play(_ context.Context, _ []byte, _ app.PlayMeta) error {
+	return errors.New("must not be called")
 }

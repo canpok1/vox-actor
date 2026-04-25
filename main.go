@@ -62,6 +62,9 @@ func main() {
 		Say: &cmd.SayDeps{
 			ClientFactory: clientFactory,
 			Player:        player,
+			WriterFactory: func(logger *slog.Logger) app.ScriptWriter {
+				return infra.NewFileWriter(infra.WithFileWriterLogger(logger))
+			},
 		},
 		AudioCheck: &cmd.AudioCheckDeps{
 			CheckFunc: func() (string, error) {
