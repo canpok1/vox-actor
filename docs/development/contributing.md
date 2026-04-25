@@ -22,6 +22,9 @@ make test
 # E2Eテスト（Go: CLI レイヤー）
 make test-e2e
 
+# 配信画面の単体テスト（Vitest + jsdom + Testing Library）
+make test-frontend-unit
+
 # 配信画面の E2E テスト（Playwright + Chromium）
 make test-frontend-e2e
 
@@ -104,6 +107,26 @@ make dev-frontend
 | `frontend/src/types/api.ts` | サーバー（`internal/infra/http_stream_player.go`）と対応する JSON 型と型ガード |
 
 状態は原則 `App` で集中管理し、子コンポーネントは props で受け取る。`localStorage` のキーは `usePersistedState` に集約され、既存キー（`vox-actor.stream.*`）と互換です。
+
+## 配信画面のコンポーネント／フック単体テスト（Vitest）
+
+`frontend/src/` 配下のコンポーネント・カスタムフックに対する単体テストです。Vitest + jsdom + Testing Library を使用し、`localStorage` 復元やレンダリング分岐など E2E では踏みにくいロジックを検証します。
+
+### 実行
+
+```bash
+make test-frontend-unit
+# 直接実行する場合:
+cd frontend && npm run test:unit
+# ローカル開発時のウォッチモード:
+cd frontend && npm run test:unit:watch
+```
+
+### テストファイルの配置ルール
+
+テスト対象のソースと同じディレクトリに横並びで配置します（`Foo.tsx` ↔ `Foo.test.tsx`、`useFoo.ts` ↔ `useFoo.test.ts`）。
+
+セットアップは `frontend/test/setup.ts`（`@testing-library/jest-dom` の matcher を有効化）と `frontend/vitest.config.ts` にまとめています。
 
 ## 配信画面の E2E テスト（Playwright）
 

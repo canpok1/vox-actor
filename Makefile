@@ -43,6 +43,10 @@ depcheck: build-frontend
 test-e2e: build-frontend
 	go test -tags=e2e ./test/e2e/...
 
+# 配信画面のコンポーネント／フック単体テスト（Vitest + jsdom + Testing Library）。
+test-frontend-unit: frontend/node_modules
+	cd frontend && npm run test:unit
+
 # Playwright による配信画面のE2Eテスト。
 # `npx playwright install --with-deps chromium` 済みを前提とする（dev container では post-create.sh で導入済み）。
 test-frontend-e2e: frontend/node_modules
@@ -71,4 +75,4 @@ install: build-frontend
 
 all: build
 
-.PHONY: all setup build build-frontend clean test test-e2e test-frontend-e2e fmt lint lint-frontend typecheck depcheck run-stream dev dev-frontend dev-backend install
+.PHONY: all setup build build-frontend clean test test-e2e test-frontend-unit test-frontend-e2e fmt lint lint-frontend typecheck depcheck run-stream dev dev-frontend dev-backend install

@@ -48,6 +48,9 @@ jobs:
     - name: Test
       run: make test
 
+    - name: Frontend unit test
+      run: make test-frontend-unit
+
     - name: Build
       run: make build
 
