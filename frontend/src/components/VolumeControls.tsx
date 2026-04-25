@@ -5,7 +5,12 @@ interface VolumeControlsProps {
   onMuteChange: (muted: boolean) => void;
 }
 
-export function VolumeControls({ volume, muted, onVolumeChange, onMuteChange }: VolumeControlsProps) {
+export function VolumeControls({
+  volume,
+  muted,
+  onVolumeChange,
+  onMuteChange,
+}: VolumeControlsProps) {
   const icon = muted || volume === 0 ? "🔇" : "🔊";
   return (
     <div className="mt-4 mb-1 flex flex-wrap items-center gap-4">

@@ -141,7 +141,8 @@ async function handleStubClip(req, res) {
     id: typeof body.id === "number" ? body.id : nextClipId,
     url: typeof body.url === "string" ? body.url : `/clips/${nextClipId}.wav`,
     text: typeof body.text === "string" ? body.text : "",
-    speakerName: typeof body.speakerName === "string" ? body.speakerName : "ずんだもん",
+    speakerName:
+      typeof body.speakerName === "string" ? body.speakerName : "ずんだもん",
     styleName: typeof body.styleName === "string" ? body.styleName : "ノーマル",
     timestamp: typeof body.timestamp === "number" ? body.timestamp : Date.now(),
   };
@@ -160,7 +161,8 @@ async function handleStubError(req, res) {
   };
   if (typeof body.path === "string") payload.path = body.path;
   if (typeof body.text === "string") payload.text = body.text;
-  if (typeof body.speakerName === "string") payload.speakerName = body.speakerName;
+  if (typeof body.speakerName === "string")
+    payload.speakerName = body.speakerName;
   if (typeof body.styleName === "string") payload.styleName = body.styleName;
   broadcast("error", payload);
   writeJSON(res, 200, { ok: true, payload });
@@ -177,10 +179,17 @@ function handleStubDisconnect(_req, res) {
 async function handleStubApiStatus(req, res) {
   const body = await readJSON(req);
   apiStatus = {
-    silent: typeof body.silent === "boolean" ? body.silent : DEFAULT_API_STATUS.silent,
+    silent:
+      typeof body.silent === "boolean"
+        ? body.silent
+        : DEFAULT_API_STATUS.silent,
     silentReason:
-      typeof body.silentReason === "string" ? body.silentReason : DEFAULT_API_STATUS.silentReason,
-    speakers: Array.isArray(body.speakers) ? body.speakers : DEFAULT_API_STATUS.speakers,
+      typeof body.silentReason === "string"
+        ? body.silentReason
+        : DEFAULT_API_STATUS.silentReason,
+    speakers: Array.isArray(body.speakers)
+      ? body.speakers
+      : DEFAULT_API_STATUS.speakers,
   };
   writeJSON(res, 200, { ok: true, apiStatus });
 }
@@ -201,20 +210,29 @@ const server = http.createServer((req, res) => {
   const path = url.pathname;
 
   if (req.method === "GET" && path === "/events") return handleEvents(req, res);
-  if (req.method === "GET" && path === "/api/status") return handleApiStatus(req, res);
-  if (req.method === "GET" && path === "/test-clip") return handleTestClip(req, res);
-  if (req.method === "GET" && path.startsWith("/clips/") && path.endsWith(".wav")) {
+  if (req.method === "GET" && path === "/api/status")
+    return handleApiStatus(req, res);
+  if (req.method === "GET" && path === "/test-clip")
+    return handleTestClip(req, res);
+  if (
+    req.method === "GET" &&
+    path.startsWith("/clips/") &&
+    path.endsWith(".wav")
+  ) {
     return handleClipFile(req, res);
   }
-  if (req.method === "POST" && path === "/__stub/clip") return handleStubClip(req, res);
-  if (req.method === "POST" && path === "/__stub/error") return handleStubError(req, res);
+  if (req.method === "POST" && path === "/__stub/clip")
+    return handleStubClip(req, res);
+  if (req.method === "POST" && path === "/__stub/error")
+    return handleStubError(req, res);
   if (req.method === "POST" && path === "/__stub/disconnect") {
     return handleStubDisconnect(req, res);
   }
   if (req.method === "POST" && path === "/__stub/api-status") {
     return handleStubApiStatus(req, res);
   }
-  if (req.method === "POST" && path === "/__stub/reset") return handleStubReset(req, res);
+  if (req.method === "POST" && path === "/__stub/reset")
+    return handleStubReset(req, res);
 
   res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
   res.end("not found");

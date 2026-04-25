@@ -4,7 +4,8 @@ import { defineConfig, devices } from "@playwright/test";
 // webServer で「Vite dev server (5173)」と「スタブバックエンド (8080)」を順次起動し、
 // テストは Vite dev server を入口にして vite.config.ts の proxy 越しに stub と通信する。
 // CI では Chromium のみで実行する。`npx playwright install --with-deps chromium` 済みを前提。
-const FRONTEND_BASE_URL = process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:5173";
+const FRONTEND_BASE_URL =
+  process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:5173";
 const FRONTEND_PORT = new URL(FRONTEND_BASE_URL).port || "5173";
 const STUB_PORT = process.env.VOX_STUB_PORT ?? "8080";
 
