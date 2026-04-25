@@ -40,6 +40,11 @@ depcheck: build-frontend
 test-e2e: build-frontend
 	go test -tags=e2e ./test/e2e/...
 
+# Playwright による配信画面のE2Eテスト。
+# `npx playwright install --with-deps chromium` 済みを前提とする（dev container では post-create.sh で導入済み）。
+test-frontend-e2e: frontend/node_modules
+	cd frontend && npm run test:e2e
+
 run-stream: build-frontend
 	go run . watch --engine-url http://voicevox:50021 --stream --stream-addr 0.0.0.0:8080 --queue
 
@@ -63,4 +68,4 @@ install: build-frontend
 
 all: build
 
-.PHONY: all setup build build-frontend clean test test-e2e fmt lint typecheck depcheck run-stream dev dev-frontend dev-backend install
+.PHONY: all setup build build-frontend clean test test-e2e test-frontend-e2e fmt lint typecheck depcheck run-stream dev dev-frontend dev-backend install

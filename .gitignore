@@ -44,3 +44,8 @@ go.work.sum
 frontend/dist/*
 !frontend/dist/.gitkeep
 frontend/node_modules/
+
+# Playwright
+frontend/test-results/
+frontend/playwright-report/
+frontend/playwright/.cache/
