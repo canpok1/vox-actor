@@ -28,7 +28,7 @@ while $RUNNING; do
     ISSUE_TITLE=$(echo "$ISSUE" | jq -r '.title')
     echo ""
     echo "#${ISSUE_NUMBER} ${ISSUE_TITLE}"
-    "${SCRIPT_DIR}/solve-issue.sh" -p "$ISSUE_NUMBER" || true
+    "${SCRIPT_DIR}/solve-issue.sh" -p "$ISSUE_NUMBER"
   else
     printf "."
   fi

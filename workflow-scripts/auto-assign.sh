@@ -93,7 +93,7 @@ while $RUNNING; do
       echo ""
       echo "Queue: ${QUEUE_COUNT} (< ${MIN_QUEUE}), assigning..."
 
-      "${SCRIPT_DIR}/claude-stream.sh" -p "/base-tools:assign-issues --count ${ASSIGN_COUNT}" || true
+      "${SCRIPT_DIR}/claude-stream.sh" -p "/base-tools:assign-issues --count ${ASSIGN_COUNT}"
     fi
   fi
 
