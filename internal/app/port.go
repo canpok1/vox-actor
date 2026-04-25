@@ -14,6 +14,15 @@ type ScriptReader interface {
 	Read(path string) ([]entity.Script, error)
 }
 
+// ScriptWriter は entity.Script をファイルへ書き出すインターフェース。
+type ScriptWriter interface {
+	// Write は script を path に書き出す。
+	// 拡張子で書き出し形式を判定する: .json / .jsonl は感情制御パラメータも含めて、それ以外は本文のみ書き出す。
+	// 既存ファイルがある場合はリネームしてユニーク化する。
+	// 戻り値は実際の書き出し先パス。
+	Write(path string, script entity.Script) (string, error)
+}
+
 // FileMover はファイルを処理済みディレクトリに移動または削除するインターフェース。
 type FileMover interface {
 	// MoveToDone はファイルを親ディレクトリのdone/サブディレクトリに移動する。
