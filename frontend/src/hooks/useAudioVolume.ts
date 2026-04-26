@@ -7,7 +7,7 @@ import { useEffect, useRef, useState } from "react";
  */
 export function useAudioVolume(
   audioRef: React.RefObject<HTMLAudioElement>,
-  enabled: boolean = true
+  enabled: boolean = true,
 ): number {
   const [volume, setVolume] = useState(0);
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -51,7 +51,7 @@ export function useAudioVolume(
       }
 
       analyserRef.current.getByteTimeDomainData(
-        dataArrayRef.current as Uint8Array<ArrayBuffer>
+        dataArrayRef.current as Uint8Array<ArrayBuffer>,
       );
 
       // RMS (Root Mean Square) 計算

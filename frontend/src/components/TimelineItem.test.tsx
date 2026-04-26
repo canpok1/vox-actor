@@ -132,7 +132,9 @@ describe("TimelineItem - error", () => {
       text: "エラー時のテキスト",
       speakerName: "話者B",
     };
-    render(<TimelineItem {...defaultProps} entry={entry} showSpeakerName={true} />);
+    render(
+      <TimelineItem {...defaultProps} entry={entry} showSpeakerName={true} />,
+    );
     expect(screen.getByText("話者B")).toBeInTheDocument();
   });
 });

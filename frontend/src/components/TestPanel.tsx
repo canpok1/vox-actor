@@ -30,19 +30,18 @@ export function TestPanel({
   const volume = useAudioVolume(audioRef, !hidden && charactersEnabled);
 
   const selectedSpeaker = useMemo(
-    () =>
-      speakers.find((s) => s.id === Number(selectedSpeakerId)) ?? null,
+    () => speakers.find((s) => s.id === Number(selectedSpeakerId)) ?? null,
     [speakers, selectedSpeakerId],
   );
 
   const matchedCharacter = useMemo(
     () =>
       selectedSpeaker
-        ? characters.find(
+        ? (characters.find(
             (c) =>
               c.speakerName === selectedSpeaker.speakerName &&
               c.styleName === selectedSpeaker.styleName,
-          ) ?? null
+          ) ?? null)
         : null,
     [selectedSpeaker, characters],
   );
@@ -73,7 +72,10 @@ export function TestPanel({
           ) : (
             <div
               className="h-full w-auto max-w-full"
-              style={{ aspectRatio: "3 / 4", backgroundColor: "var(--ctp-base)" }}
+              style={{
+                aspectRatio: "3 / 4",
+                backgroundColor: "var(--ctp-base)",
+              }}
             />
           )}
         </div>

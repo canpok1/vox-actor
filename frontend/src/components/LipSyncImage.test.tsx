@@ -18,7 +18,7 @@ describe("LipSyncImage", () => {
         mouthClosedUrl="/closed.png"
         mouthOpenUrl="/open.png"
         volume={0}
-      />
+      />,
     );
 
     const closedImg = screen.getByAltText("character mouth closed");
@@ -34,7 +34,7 @@ describe("LipSyncImage", () => {
         mouthClosedUrl="/closed.png"
         mouthOpenUrl="/open.png"
         volume={0}
-      />
+      />,
     );
 
     // 高い音量を渡す（動的閾値より上）
@@ -43,7 +43,7 @@ describe("LipSyncImage", () => {
         mouthClosedUrl="/closed.png"
         mouthOpenUrl="/open.png"
         volume={0.1}
-      />
+      />,
     );
 
     const closedImg = screen.getByAltText("character mouth closed");
@@ -59,7 +59,7 @@ describe("LipSyncImage", () => {
         mouthClosedUrl="/closed.png"
         mouthOpenUrl="/open.png"
         volume={0.1}
-      />
+      />,
     );
 
     // 音量を低く
@@ -68,7 +68,7 @@ describe("LipSyncImage", () => {
         mouthClosedUrl="/closed.png"
         mouthOpenUrl="/open.png"
         volume={0}
-      />
+      />,
     );
 
     const openImg = screen.getByAltText("character mouth open");
@@ -92,7 +92,7 @@ describe("LipSyncImage", () => {
         mouthClosedUrl="/closed.png"
         mouthOpenUrl="/open.png"
         volume={0}
-      />
+      />,
     );
 
     // 変化なし
@@ -111,7 +111,7 @@ describe("LipSyncImage", () => {
         mouthClosedUrl="/closed.png"
         mouthOpenUrl="/open.png"
         volume={0.1}
-      />
+      />,
     );
 
     // 音量を低く
@@ -120,7 +120,7 @@ describe("LipSyncImage", () => {
         mouthClosedUrl="/closed.png"
         mouthOpenUrl="/open.png"
         volume={0}
-      />
+      />,
     );
 
     // 40ms進める（ヒステリシス80msの途中）
@@ -132,7 +132,7 @@ describe("LipSyncImage", () => {
         mouthClosedUrl="/closed.png"
         mouthOpenUrl="/open.png"
         volume={0.1}
-      />
+      />,
     );
 
     // タイマーがクリアされたので、さらに時間を進めても口は開いたまま
@@ -149,7 +149,7 @@ describe("LipSyncImage", () => {
         mouthOpenUrl="/open.png"
         volume={0.1}
         hysteresisMs={200}
-      />
+      />,
     );
 
     // 音量を低く
@@ -159,7 +159,7 @@ describe("LipSyncImage", () => {
         mouthOpenUrl="/open.png"
         volume={0}
         hysteresisMs={200}
-      />
+      />,
     );
 
     // 100ms進める（200ms未満）
@@ -186,7 +186,7 @@ describe("LipSyncImage", () => {
         mouthClosedUrl="/closed.png"
         mouthOpenUrl="/open.png"
         volume={0}
-      />
+      />,
     );
 
     // 高い音量: 動的閾値が設定される
@@ -195,7 +195,7 @@ describe("LipSyncImage", () => {
         mouthClosedUrl="/closed.png"
         mouthOpenUrl="/open.png"
         volume={0.1}
-      />
+      />,
     );
 
     const openImg = screen.getByAltText("character mouth open");
@@ -209,7 +209,7 @@ describe("LipSyncImage", () => {
         mouthClosedUrl="/closed.png"
         mouthOpenUrl="/open.png"
         volume={0.02}
-      />
+      />,
     );
 
     expect(openImg).toHaveStyle({ display: "block" });

@@ -63,7 +63,9 @@ describe("Timeline", () => {
       clipEntry(1, "テキスト1"),
       clipEntry(2, "テキスト2"),
     ];
-    render(<Timeline {...defaultProps} entries={entries} playingClipId={null} />);
+    render(
+      <Timeline {...defaultProps} entries={entries} playingClipId={null} />,
+    );
     expect(screen.queryByText("▶")).not.toBeInTheDocument();
   });
 

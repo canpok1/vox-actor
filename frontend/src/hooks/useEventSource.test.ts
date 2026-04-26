@@ -67,10 +67,7 @@ describe("useEventSource", () => {
     renderHook(() => useEventSource(URL, vi.fn(), onError));
     const countBefore = MockEventSource.instances.length;
     act(() => {
-      latestEs().emit(
-        "error",
-        new MessageEvent("error", { data: "err-data" }),
-      );
+      latestEs().emit("error", new MessageEvent("error", { data: "err-data" }));
     });
     expect(onError).toHaveBeenCalledWith("err-data");
     expect(MockEventSource.instances.length).toBe(countBefore);
@@ -98,9 +95,7 @@ describe("useEventSource", () => {
 
   it("アンマウントで close が呼ばれ再接続タイマーがキャンセルされる", () => {
     vi.useFakeTimers();
-    const { unmount } = renderHook(() =>
-      useEventSource(URL, vi.fn(), vi.fn()),
-    );
+    const { unmount } = renderHook(() => useEventSource(URL, vi.fn(), vi.fn()));
     const es = latestEs();
     act(() => {
       es.emit("error", new Event("error"));

@@ -313,7 +313,9 @@ export function App() {
     <main className="mx-auto flex h-dvh max-w-[1200px] flex-col overflow-hidden rounded-md bg-ctp-surface p-3 sm:p-4 md:rounded-lg md:p-6">
       <div className="shrink-0">
         <div className="mb-2 flex flex-wrap items-center gap-3">
-          <h1 className="m-0 text-[1.1rem] md:text-[1.4rem]">vox-actor stream</h1>
+          <h1 className="m-0 text-[1.1rem] md:text-[1.4rem]">
+            vox-actor stream
+          </h1>
           <StatusBadge connected={connected} />
           {silent && <SilentBadge reason={silentReason} />}
         </div>

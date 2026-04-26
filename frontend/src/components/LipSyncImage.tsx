@@ -33,7 +33,7 @@ export function LipSyncImage({
     // Ring buffer: 直近 WINDOW_MS のボリュームサンプルをトラッキング
     recentSamplesRef.current.push({ time: now, value: volume });
     recentSamplesRef.current = recentSamplesRef.current.filter(
-      (s) => now - s.time <= WINDOW_MS
+      (s) => now - s.time <= WINDOW_MS,
     );
 
     // 動的閾値: 直近のピークに係数を掛ける
@@ -41,7 +41,10 @@ export function LipSyncImage({
       recentSamplesRef.current.length > 0
         ? Math.max(...recentSamplesRef.current.map((s) => s.value))
         : 0;
-    const dynamicThreshold = Math.max(MIN_THRESHOLD, recentMax * THRESHOLD_RATIO);
+    const dynamicThreshold = Math.max(
+      MIN_THRESHOLD,
+      recentMax * THRESHOLD_RATIO,
+    );
 
     // 音量が動的閾値を超えたら口開
     if (volume >= dynamicThreshold) {

@@ -38,7 +38,12 @@ function TabButton({ id, panelId, active, label, onClick }: TabButtonProps) {
   );
 }
 
-export function Tabs({ active, onChange, hideTest = false, hideCharacter = false }: TabsProps) {
+export function Tabs({
+  active,
+  onChange,
+  hideTest = false,
+  hideCharacter = false,
+}: TabsProps) {
   return (
     <div
       role="tablist"
