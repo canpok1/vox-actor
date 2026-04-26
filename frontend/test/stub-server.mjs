@@ -1,13 +1,14 @@
 // Playwright E2E 用スタブサーバー。
 // バックエンド (internal/infra/http_stream_player.go) の /events, /api/status,
-// /test-clip, /clips/<id>.wav を Node 標準ライブラリだけでエミュレートする。
+// /api/characters, /test-clip, /clips/<id>.wav を Node 標準ライブラリだけでエミュレートする。
 //
 // テスト側からの制御チャネルとして以下を追加で提供する:
-// - POST /__stub/clip       { id?, url?, text, speakerName?, styleName?, timestamp? } → SSE clip 配信
-// - POST /__stub/error      { id?, category, message, ... } → SSE error 配信
-// - POST /__stub/disconnect → 全 SSE 接続を一斉切断（再接続テスト用）
-// - POST /__stub/api-status { silent, silentReason, speakers } → /api/status の応答を切替
-// - POST /__stub/reset      → 内部状態を初期化
+// - POST /__stub/clip             { id?, url?, text, speakerName?, styleName?, timestamp? } → SSE clip 配信
+// - POST /__stub/error            { id?, category, message, ... } → SSE error 配信
+// - POST /__stub/disconnect       → 全 SSE 接続を一斉切断（再接続テスト用）
+// - POST /__stub/api-status       { silent, silentReason, speakers } → /api/status の応答を切替
+// - POST /__stub/api-characters   { enabled, characters } → /api/characters の応答を切替
+// - POST /__stub/reset            → 内部状態を初期化
 //
 // VOX_STUB_PORT で待受ポートを変えられる（既定: 8080）。
 
@@ -44,7 +45,13 @@ const DEFAULT_API_STATUS = {
   ],
 };
 
+const DEFAULT_API_CHARACTERS = {
+  enabled: false,
+  characters: [],
+};
+
 let apiStatus = structuredClone(DEFAULT_API_STATUS);
+let apiCharacters = structuredClone(DEFAULT_API_CHARACTERS);
 let nextClipId = 0;
 let nextErrorId = 0;
 const subscribers = new Set();
@@ -98,6 +105,10 @@ function handleEvents(req, res) {
 
 function handleApiStatus(_req, res) {
   writeJSON(res, 200, apiStatus);
+}
+
+function handleApiCharacters(_req, res) {
+  writeJSON(res, 200, apiCharacters);
 }
 
 function handleTestClip(req, res) {
@@ -194,8 +205,23 @@ async function handleStubApiStatus(req, res) {
   writeJSON(res, 200, { ok: true, apiStatus });
 }
 
+async function handleStubApiCharacters(req, res) {
+  const body = await readJSON(req);
+  apiCharacters = {
+    enabled:
+      typeof body.enabled === "boolean"
+        ? body.enabled
+        : DEFAULT_API_CHARACTERS.enabled,
+    characters: Array.isArray(body.characters)
+      ? body.characters
+      : DEFAULT_API_CHARACTERS.characters,
+  };
+  writeJSON(res, 200, { ok: true, apiCharacters });
+}
+
 function handleStubReset(_req, res) {
   apiStatus = structuredClone(DEFAULT_API_STATUS);
+  apiCharacters = structuredClone(DEFAULT_API_CHARACTERS);
   nextClipId = 0;
   nextErrorId = 0;
   for (const sub of subscribers) {
@@ -212,6 +238,8 @@ const server = http.createServer((req, res) => {
   if (req.method === "GET" && path === "/events") return handleEvents(req, res);
   if (req.method === "GET" && path === "/api/status")
     return handleApiStatus(req, res);
+  if (req.method === "GET" && path === "/api/characters")
+    return handleApiCharacters(req, res);
   if (req.method === "GET" && path === "/test-clip")
     return handleTestClip(req, res);
   if (
@@ -230,6 +258,9 @@ const server = http.createServer((req, res) => {
   }
   if (req.method === "POST" && path === "/__stub/api-status") {
     return handleStubApiStatus(req, res);
+  }
+  if (req.method === "POST" && path === "/__stub/api-characters") {
+    return handleStubApiCharacters(req, res);
   }
   if (req.method === "POST" && path === "/__stub/reset")
     return handleStubReset(req, res);

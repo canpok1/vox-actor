@@ -46,44 +46,40 @@ export function CharacterPanel({
   return (
     <section
       id="panel-character"
-      className="panel"
-      style={{ display: hidden ? "none" : "block" }}
+      role="tabpanel"
+      aria-labelledby="tab-character"
+      className="flex h-full flex-col gap-4"
     >
-      <div className="flex flex-col gap-4">
-        {/* キャラクター表示エリア: 3:4 アスペクト比 */}
-        <div className="bg-ctp-surface rounded-md p-4">
-          {matchedCharacter ? (
-            <LipSyncImage
-              mouthClosedUrl={`/assets/images/characters/${encodeURIComponent(
-                matchedCharacter.mouthClosed
-              )}`}
-              mouthOpenUrl={`/assets/images/characters/${encodeURIComponent(
-                matchedCharacter.mouthOpen
-              )}`}
-              volume={volume}
-            />
-          ) : (
-            // マッチしないキャラクター時は背景のみ表示
-            <div
-              className="w-full"
-              style={{
-                aspectRatio: "3 / 4",
-                backgroundColor: "var(--ctp-base)",
-              }}
-            />
-          )}
-        </div>
+      <div className="flex min-h-0 flex-1 items-center justify-center rounded-md bg-ctp-surface p-4">
+        {matchedCharacter ? (
+          <LipSyncImage
+            mouthClosedUrl={`/assets/images/characters/${encodeURIComponent(
+              matchedCharacter.mouthClosed
+            )}`}
+            mouthOpenUrl={`/assets/images/characters/${encodeURIComponent(
+              matchedCharacter.mouthOpen
+            )}`}
+            volume={volume}
+          />
+        ) : (
+          <div
+            className="h-full w-auto max-w-full"
+            style={{
+              aspectRatio: "3 / 4",
+              backgroundColor: "var(--ctp-base)",
+            }}
+          />
+        )}
+      </div>
 
-        {/* セリフ表示エリア */}
-        <div className="bg-ctp-surface rounded-md p-4 min-h-[4rem] flex items-center">
-          {playingClipData ? (
-            <p className="text-lg font-medium text-ctp-text break-words">
-              {playingClipData.text}
-            </p>
-          ) : (
-            <p className="text-ctp-subtext">クリップを再生するとセリフが表示されます</p>
-          )}
-        </div>
+      <div className="flex max-h-32 min-h-[4rem] shrink-0 items-center overflow-y-auto rounded-md bg-ctp-surface p-4">
+        {playingClipData ? (
+          <p className="break-words text-lg font-medium text-ctp-text">
+            {playingClipData.text}
+          </p>
+        ) : (
+          <p className="text-ctp-subtext">クリップを再生するとセリフが表示されます</p>
+        )}
       </div>
     </section>
   );

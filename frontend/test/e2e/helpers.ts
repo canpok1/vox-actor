@@ -33,6 +33,16 @@ export interface ApiStatusOverride {
   speakers?: Array<{ id: number; speakerName: string; styleName: string }>;
 }
 
+export interface ApiCharactersOverride {
+  enabled?: boolean;
+  characters?: Array<{
+    speakerName: string;
+    styleName: string;
+    mouthClosed: string;
+    mouthOpen: string;
+  }>;
+}
+
 export async function resetStub(request: APIRequestContext): Promise<void> {
   const resp = await request.post(`${STUB_BASE_URL}/__stub/reset`);
   expect(resp.ok()).toBeTruthy();
@@ -43,6 +53,16 @@ export async function setApiStatus(
   override: ApiStatusOverride,
 ): Promise<void> {
   const resp = await request.post(`${STUB_BASE_URL}/__stub/api-status`, {
+    data: override,
+  });
+  expect(resp.ok()).toBeTruthy();
+}
+
+export async function setApiCharacters(
+  request: APIRequestContext,
+  override: ApiCharactersOverride,
+): Promise<void> {
+  const resp = await request.post(`${STUB_BASE_URL}/__stub/api-characters`, {
     data: override,
   });
   expect(resp.ok()).toBeTruthy();

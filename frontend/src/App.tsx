@@ -310,57 +310,61 @@ export function App() {
   }, [testSpeakerId, showTestError]);
 
   return (
-    <main className="mx-auto my-2 max-w-[1200px] rounded-md bg-ctp-surface p-3 sm:my-4 sm:p-4 md:my-8 md:rounded-lg md:p-6">
-      <div className="mb-2 flex flex-wrap items-center gap-3">
-        <h1 className="m-0 text-[1.1rem] md:text-[1.4rem]">vox-actor stream</h1>
-        <StatusBadge connected={connected} />
-        {silent && <SilentBadge reason={silentReason} />}
+    <main className="mx-auto flex h-dvh max-w-[1200px] flex-col overflow-hidden rounded-md bg-ctp-surface p-3 sm:p-4 md:rounded-lg md:p-6">
+      <div className="shrink-0">
+        <div className="mb-2 flex flex-wrap items-center gap-3">
+          <h1 className="m-0 text-[1.1rem] md:text-[1.4rem]">vox-actor stream</h1>
+          <StatusBadge connected={connected} />
+          {silent && <SilentBadge reason={silentReason} />}
+        </div>
+        <VolumeControls
+          volume={volume}
+          muted={muted}
+          onVolumeChange={setVolume}
+          onMuteChange={setMuted}
+        />
+        <Tabs
+          active={activeTab}
+          onChange={setActiveTab}
+          hideTest={silent}
+          hideCharacter={!charactersEnabled}
+        />
       </div>
-      <VolumeControls
-        volume={volume}
-        muted={muted}
-        onVolumeChange={setVolume}
-        onMuteChange={setMuted}
-      />
-      <Tabs
-        active={activeTab}
-        onChange={setActiveTab}
-        hideTest={silent}
-        hideCharacter={!charactersEnabled}
-      />
-      <StreamPanel
-        hidden={activeTab !== "stream"}
-        entries={entries}
-        playingClipId={playingClipId}
-        historySize={historySize}
-        historySizeOptions={HISTORY_SIZE_OPTIONS}
-        onHistorySizeChange={setHistorySize}
-        showSpeakerName={showSpeakerName}
-        showStyleName={showStyleName}
-        showTimestamp={showTimestamp}
-        onShowSpeakerNameChange={setShowSpeakerName}
-        onShowStyleNameChange={setShowStyleName}
-        onShowTimestampChange={setShowTimestamp}
-      />
-      {charactersEnabled && (
-        <CharacterPanel
-          hidden={activeTab !== "character"}
-          characters={characters}
-          playingClipId={playingClipId}
+      <div className="min-h-0 flex-1 overflow-hidden">
+        <StreamPanel
+          hidden={activeTab !== "stream"}
           entries={entries}
-          audioRef={audioRef}
+          playingClipId={playingClipId}
+          historySize={historySize}
+          historySizeOptions={HISTORY_SIZE_OPTIONS}
+          onHistorySizeChange={setHistorySize}
+          showSpeakerName={showSpeakerName}
+          showStyleName={showStyleName}
+          showTimestamp={showTimestamp}
+          onShowSpeakerNameChange={setShowSpeakerName}
+          onShowStyleNameChange={setShowStyleName}
+          onShowTimestampChange={setShowTimestamp}
         />
-      )}
-      {!silent && (
-        <TestPanel
-          hidden={activeTab !== "test"}
-          speakers={speakers}
-          selectedSpeakerId={testSpeakerId}
-          onSpeakerChange={setTestSpeakerId}
-          onPlay={handleTestPlay}
-          error={testError}
-        />
-      )}
+        {charactersEnabled && (
+          <CharacterPanel
+            hidden={activeTab !== "character"}
+            characters={characters}
+            playingClipId={playingClipId}
+            entries={entries}
+            audioRef={audioRef}
+          />
+        )}
+        {!silent && (
+          <TestPanel
+            hidden={activeTab !== "test"}
+            speakers={speakers}
+            selectedSpeakerId={testSpeakerId}
+            onSpeakerChange={setTestSpeakerId}
+            onPlay={handleTestPlay}
+            error={testError}
+          />
+        )}
+      </div>
       <audio ref={audioRef} muted />
     </main>
   );
