@@ -135,11 +135,14 @@ func freePort(t *testing.T) int {
 }
 
 // extractAddrFromLog は "stream server listening" ログ行からアドレスを抽出する。
-// ログ形式: INFO stream server listening addr=127.0.0.1:8080 silent=...
+// HumanHandler の形式: "... stream server listening (addr=127.0.0.1:8080, silent=...)"
 func extractAddrFromLog(line string) string {
 	for _, field := range strings.Fields(line) {
-		if strings.HasPrefix(field, "addr=") {
-			return strings.TrimPrefix(field, "addr=")
+		f := strings.TrimPrefix(field, "(")
+		f = strings.TrimSuffix(f, ")")
+		f = strings.TrimSuffix(f, ",")
+		if strings.HasPrefix(f, "addr=") {
+			return strings.TrimPrefix(f, "addr=")
 		}
 	}
 	return ""
