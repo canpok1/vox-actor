@@ -77,6 +77,11 @@ export function CharacterPanel({
     return null;
   }
 
+  const singleSlotChar = !isMultiSlot ? slots[0] : null;
+  const singleSlotUrls = singleSlotChar
+    ? getCharacterImageUrls(singleSlotChar.character)
+    : null;
+
   return (
     <section
       id="panel-character"
@@ -86,12 +91,11 @@ export function CharacterPanel({
     >
       <div className="flex min-h-0 flex-1 items-center justify-center rounded-md bg-ctp-surface p-4">
         {!isMultiSlot ? (
-          // Single character center layout
-          slots[0] ? (
+          singleSlotUrls && singleSlotChar ? (
             <LipSyncImage
-              mouthClosedUrl={getCharacterImageUrls(slots[0].character).closed}
-              mouthOpenUrl={getCharacterImageUrls(slots[0].character).open}
-              volume={isPlayingCharacter(slots[0].character) ? volume : 0}
+              mouthClosedUrl={singleSlotUrls.closed}
+              mouthOpenUrl={singleSlotUrls.open}
+              volume={isPlayingCharacter(singleSlotChar.character) ? volume : 0}
             />
           ) : (
             <div
@@ -100,22 +104,20 @@ export function CharacterPanel({
             />
           )
         ) : (
-          // Multi-slot 4-character layout
           <div className="grid h-full w-full grid-cols-4 gap-2">
             {MULTI_SLOT_LAYOUT.map(({ slotIndex, flip }) => {
               const slot = slots[slotIndex];
+              const urls = slot ? getCharacterImageUrls(slot.character) : null;
               const wrapperStyle: React.CSSProperties = flip
                 ? { transform: "scaleX(-1)" }
                 : {};
 
               return (
                 <div key={slotIndex} style={wrapperStyle}>
-                  {slot ? (
+                  {slot && urls ? (
                     <LipSyncImage
-                      mouthClosedUrl={
-                        getCharacterImageUrls(slot.character).closed
-                      }
-                      mouthOpenUrl={getCharacterImageUrls(slot.character).open}
+                      mouthClosedUrl={urls.closed}
+                      mouthOpenUrl={urls.open}
                       volume={isPlayingCharacter(slot.character) ? volume : 0}
                     />
                   ) : (
