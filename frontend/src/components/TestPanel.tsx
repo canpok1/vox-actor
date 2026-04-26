@@ -1,5 +1,8 @@
-import type { Speaker } from "../types/api";
+import { useMemo } from "react";
+import type { Speaker, CharacterEntry } from "../types/api";
 import { TestControls } from "./TestControls";
+import { LipSyncImage } from "./LipSyncImage";
+import { useAudioVolume } from "../hooks/useAudioVolume";
 
 interface TestPanelProps {
   hidden: boolean;
@@ -8,6 +11,9 @@ interface TestPanelProps {
   onSpeakerChange: (id: string) => void;
   onPlay: () => void;
   error: string;
+  charactersEnabled: boolean;
+  characters: CharacterEntry[];
+  audioRef: React.RefObject<HTMLAudioElement>;
 }
 
 export function TestPanel({
@@ -17,15 +23,54 @@ export function TestPanel({
   onSpeakerChange,
   onPlay,
   error,
+  charactersEnabled,
+  characters,
+  audioRef,
 }: TestPanelProps) {
+  const volume = useAudioVolume(audioRef, !hidden && charactersEnabled);
+
+  const selectedSpeaker = useMemo(
+    () =>
+      speakers.find((s) => s.id === Number(selectedSpeakerId)) ?? null,
+    [speakers, selectedSpeakerId],
+  );
+
+  const matchedCharacter = useMemo(
+    () =>
+      selectedSpeaker
+        ? characters.find(
+            (c) =>
+              c.speakerName === selectedSpeaker.speakerName &&
+              c.styleName === selectedSpeaker.styleName,
+          ) ?? null
+        : null,
+    [selectedSpeaker, characters],
+  );
+
   return (
     <section
       id="panel-test"
       role="tabpanel"
       aria-labelledby="tab-test"
       hidden={hidden}
-      className="mt-2"
+      className={charactersEnabled ? "flex h-full flex-col gap-4" : "mt-2"}
     >
+      {charactersEnabled && (
+        <div className="flex min-h-0 flex-1 items-center justify-center rounded-md bg-ctp-surface p-4">
+          {matchedCharacter ? (
+            <LipSyncImage
+              mouthClosedUrl={`/assets/images/characters/${encodeURIComponent(matchedCharacter.mouthClosed)}`}
+              mouthOpenUrl={`/assets/images/characters/${encodeURIComponent(matchedCharacter.mouthOpen)}`}
+              volume={volume}
+            />
+          ) : (
+            <div
+              className="h-full w-auto max-w-full"
+              style={{ aspectRatio: "3 / 4", backgroundColor: "var(--ctp-base)" }}
+            />
+          )}
+        </div>
+      )}
       <TestControls
         speakers={speakers}
         selectedSpeakerId={selectedSpeakerId}

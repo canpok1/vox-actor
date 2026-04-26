@@ -362,6 +362,9 @@ export function App() {
             onSpeakerChange={setTestSpeakerId}
             onPlay={handleTestPlay}
             error={testError}
+            charactersEnabled={charactersEnabled}
+            characters={characters}
+            audioRef={audioRef}
           />
         )}
       </div>

@@ -1,7 +1,12 @@
+import { createRef } from "react";
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import type { Speaker } from "../types/api";
+import type { Speaker, CharacterEntry } from "../types/api";
 import { TestPanel } from "./TestPanel";
+
+vi.mock("../hooks/useAudioVolume", () => ({
+  useAudioVolume: vi.fn(() => 0),
+}));
 
 describe("TestPanel", () => {
   const mockSpeakers: Speaker[] = [
@@ -14,32 +19,27 @@ describe("TestPanel", () => {
     onPlay: vi.fn(),
   };
 
+  const mockAudioRef = createRef<HTMLAudioElement>();
+
+  const baseProps = {
+    speakers: mockSpeakers,
+    selectedSpeakerId: "1",
+    onSpeakerChange: mockCallbacks.onSpeakerChange,
+    onPlay: mockCallbacks.onPlay,
+    error: "",
+    charactersEnabled: false,
+    characters: [] as CharacterEntry[],
+    audioRef: mockAudioRef,
+  };
+
   it("hidden=false で表示される", () => {
-    render(
-      <TestPanel
-        hidden={false}
-        speakers={mockSpeakers}
-        selectedSpeakerId="1"
-        onSpeakerChange={mockCallbacks.onSpeakerChange}
-        onPlay={mockCallbacks.onPlay}
-        error=""
-      />,
-    );
+    render(<TestPanel hidden={false} {...baseProps} />);
     const panel = screen.getByRole("tabpanel", { hidden: false });
     expect(panel).toBeInTheDocument();
   });
 
   it("hidden=true で非表示になる", () => {
-    render(
-      <TestPanel
-        hidden={true}
-        speakers={mockSpeakers}
-        selectedSpeakerId="1"
-        onSpeakerChange={mockCallbacks.onSpeakerChange}
-        onPlay={mockCallbacks.onPlay}
-        error=""
-      />,
-    );
+    render(<TestPanel hidden={true} {...baseProps} />);
     const panel = screen.queryByRole("tabpanel", { hidden: false });
     expect(panel).not.toBeInTheDocument();
   });
@@ -48,10 +48,8 @@ describe("TestPanel", () => {
     render(
       <TestPanel
         hidden={false}
-        speakers={mockSpeakers}
+        {...baseProps}
         selectedSpeakerId="2"
-        onSpeakerChange={mockCallbacks.onSpeakerChange}
-        onPlay={mockCallbacks.onPlay}
         error="エラーメッセージ"
       />,
     );
@@ -65,5 +63,52 @@ describe("TestPanel", () => {
 
     const errorElement = screen.getByRole("status");
     expect(errorElement).toHaveTextContent("エラーメッセージ");
+  });
+
+  describe("キャラクター機能", () => {
+    const mockCharacters: CharacterEntry[] = [
+      {
+        speakerName: "Speaker A",
+        styleName: "style1",
+        mouthClosed: "closed.png",
+        mouthOpen: "open.png",
+      },
+    ];
+
+    it("charactersEnabled=false のときキャラクター表示エリアが表示されない", () => {
+      render(<TestPanel hidden={false} {...baseProps} />);
+      expect(
+        screen.queryByAltText("character mouth closed"),
+      ).not.toBeInTheDocument();
+    });
+
+    it("charactersEnabled=true かつ一致するキャラがある場合に口パク画像が表示される", () => {
+      render(
+        <TestPanel
+          hidden={false}
+          {...baseProps}
+          charactersEnabled={true}
+          characters={mockCharacters}
+          selectedSpeakerId="1"
+        />,
+      );
+      expect(screen.getByAltText("character mouth closed")).toBeInTheDocument();
+      expect(screen.getByAltText("character mouth open")).toBeInTheDocument();
+    });
+
+    it("charactersEnabled=true かつ一致するキャラがない場合にプレースホルダーが表示される", () => {
+      render(
+        <TestPanel
+          hidden={false}
+          {...baseProps}
+          charactersEnabled={true}
+          characters={mockCharacters}
+          selectedSpeakerId="2"
+        />,
+      );
+      expect(
+        screen.queryByAltText("character mouth closed"),
+      ).not.toBeInTheDocument();
+    });
   });
 });
