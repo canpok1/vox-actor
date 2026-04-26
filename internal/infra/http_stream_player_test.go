@@ -1010,6 +1010,45 @@ func TestHTTPStreamPlayer_APIStatus_ReturnsSortedSpeakers(t *testing.T) {
 	}
 }
 
+func TestHTTPStreamPlayer_APIStatus_ReturnsOrderedSpeakers(t *testing.T) {
+	t.Parallel()
+	lookup := map[int]entity.SpeakerStyleInfo{
+		1: {SpeakerName: "四国めたん", StyleName: "あまあま"},
+		7: {SpeakerName: "四国めたん", StyleName: "ノーマル"},
+		3: {SpeakerName: "ずんだもん", StyleName: "ノーマル"},
+	}
+	orderedIDs := []int{7, 3, 1}
+	p := newStartedPlayerWithOpts(t,
+		WithSpeakerLookup(lookup),
+		WithOrderedSpeakerIDs(orderedIDs),
+	)
+	got := fetchAPIStatus(t, p)
+	if got.Silent {
+		t.Errorf("expected silent=false, got true")
+	}
+	if got.SilentReason != "" {
+		t.Errorf("expected silentReason empty, got %q", got.SilentReason)
+	}
+	if len(got.Speakers) != 3 {
+		t.Fatalf("expected 3 speakers, got %d: %+v", len(got.Speakers), got)
+	}
+	wantIDs := []int{7, 3, 1}
+	for i, w := range wantIDs {
+		if got.Speakers[i].ID != w {
+			t.Errorf("entry %d: expected id=%d, got %d", i, w, got.Speakers[i].ID)
+		}
+	}
+	if got.Speakers[0].SpeakerName != "四国めたん" || got.Speakers[0].StyleName != "ノーマル" {
+		t.Errorf("entry 0: expected 四国めたん/ノーマル, got %+v", got.Speakers[0])
+	}
+	if got.Speakers[1].SpeakerName != "ずんだもん" || got.Speakers[1].StyleName != "ノーマル" {
+		t.Errorf("entry 1: expected ずんだもん/ノーマル, got %+v", got.Speakers[1])
+	}
+	if got.Speakers[2].SpeakerName != "四国めたん" || got.Speakers[2].StyleName != "あまあま" {
+		t.Errorf("entry 2: expected 四国めたん/あまあま, got %+v", got.Speakers[2])
+	}
+}
+
 func TestHTTPStreamPlayer_APIStatus_NoLookupReturnsEmptySpeakers(t *testing.T) {
 	t.Parallel()
 	p := newStartedPlayer(t)

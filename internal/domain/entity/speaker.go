@@ -39,3 +39,24 @@ func BuildSpeakerStyleLookup(speakers []Speaker) map[int]SpeakerStyleInfo {
 	}
 	return lookup
 }
+
+// BuildSpeakerStyleLookupWithOrder は []Speaker から SpeakerID マップと
+// VOICEVOX 取得順を保持した ID リストを同時に構築する。
+// 複数 Speaker に同じスタイルIDが存在する場合は最初に現れた値が優先される。
+func BuildSpeakerStyleLookupWithOrder(speakers []Speaker) (map[int]SpeakerStyleInfo, []int) {
+	lookup := make(map[int]SpeakerStyleInfo)
+	var orderedIDs []int
+	for _, sp := range speakers {
+		for _, st := range sp.Styles {
+			if _, exists := lookup[st.ID]; exists {
+				continue
+			}
+			lookup[st.ID] = SpeakerStyleInfo{
+				SpeakerName: sp.Name,
+				StyleName:   st.Name,
+			}
+			orderedIDs = append(orderedIDs, st.ID)
+		}
+	}
+	return lookup, orderedIDs
+}

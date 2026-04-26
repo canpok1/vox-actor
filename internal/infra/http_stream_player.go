@@ -46,6 +46,10 @@ type HTTPStreamPlayer struct {
 	// nil または未ヒットの場合は `話者#<ID>` / 空文字 にフォールバックする。
 	speakerLookup map[int]entity.SpeakerStyleInfo
 
+	// orderedSpeakerIDs は /api/status で返す speakers 配列の順序。
+	// 設定されていない場合は speakerLookup のキーを ID 昇順でソートして使用する（後方互換）。
+	orderedSpeakerIDs []int
+
 	// silent が true の場合、Play() / PlayText() は WAV を配信せずテキストのみを配信する。
 	// silentReason は /api/status でフロントに伝える文面（改行を含んでよい）。
 	silent       bool
@@ -143,6 +147,16 @@ func WithSpeakerLookup(lookup map[int]entity.SpeakerStyleInfo) HTTPStreamOption 
 	return func(p *HTTPStreamPlayer) {
 		if lookup != nil {
 			p.speakerLookup = lookup
+		}
+	}
+}
+
+// WithOrderedSpeakerIDs は /api/status で返す speakers 配列の順序を設定するオプション。
+// 設定されない場合は speakerLookup のキーを ID 昇順でソートして使用する。
+func WithOrderedSpeakerIDs(ids []int) HTTPStreamOption {
+	return func(p *HTTPStreamPlayer) {
+		if ids != nil {
+			p.orderedSpeakerIDs = ids
 		}
 	}
 }
@@ -537,16 +551,23 @@ type apiCharactersJSON struct {
 // buildAPIStatusJSON は speakerLookup と silent 状態から /api/status のレスポンスを
 // Start 時に一度だけマーシャルしてキャッシュする。
 // 無音モードでは speakers は空配列として固定する。
+// orderedSpeakerIDs が設定されている場合はその順序を使用し、
+// そうでない場合は speakerLookup のキーを ID 昇順でソートする（後方互換）。
 func (p *HTTPStreamPlayer) buildAPIStatusJSON() error {
 	var items []speakerJSON
 	if p.silent {
 		items = []speakerJSON{}
 	} else {
-		ids := make([]int, 0, len(p.speakerLookup))
-		for id := range p.speakerLookup {
-			ids = append(ids, id)
+		var ids []int
+		if len(p.orderedSpeakerIDs) > 0 {
+			ids = p.orderedSpeakerIDs
+		} else {
+			ids = make([]int, 0, len(p.speakerLookup))
+			for id := range p.speakerLookup {
+				ids = append(ids, id)
+			}
+			sort.Ints(ids)
 		}
-		sort.Ints(ids)
 		items = make([]speakerJSON, 0, len(ids))
 		for _, id := range ids {
 			info := p.speakerLookup[id]

@@ -34,10 +34,11 @@ func startStreamPlayer(
 	addr string,
 	logger *slog.Logger,
 	client app.VoicevoxClient,
-	factory func(string, *slog.Logger, map[int]entity.SpeakerStyleInfo, app.VoicevoxClient) (app.StreamPlayer, error),
+	factory func(string, *slog.Logger, map[int]entity.SpeakerStyleInfo, []int, app.VoicevoxClient) (app.StreamPlayer, error),
 ) (sp app.StreamPlayer, silent bool, err error) {
 	var (
 		lookup       map[int]entity.SpeakerStyleInfo
+		orderedIDs   []int
 		silentReason string
 	)
 	if hcErr := client.HealthCheck(ctx); hcErr != nil {
@@ -51,15 +52,16 @@ func startStreamPlayer(
 			silentReason = silentReasonGetSpeakersFailed
 			logger.Warn(silentLogMessage, "error", fmt.Errorf("get speakers failed: %w", gsErr))
 		} else {
-			lookup = entity.BuildSpeakerStyleLookup(speakers)
+			lookup, orderedIDs = entity.BuildSpeakerStyleLookupWithOrder(speakers)
 			logger.Info("speakers loaded", "speakerCount", len(speakers), "styleCount", len(lookup))
 		}
 	}
 	if silent {
 		lookup = map[int]entity.SpeakerStyleInfo{}
+		orderedIDs = nil
 	}
 
-	sp, err = factory(addr, logger, lookup, client)
+	sp, err = factory(addr, logger, lookup, orderedIDs, client)
 	if err != nil {
 		return nil, false, fmt.Errorf("failed to create stream player: %w", err)
 	}
@@ -81,7 +83,7 @@ type ViewerDeps struct {
 	ClientFactory       func(engineURL string) app.VoicevoxClient
 	Mover               app.FileMover
 	DirWatcherFactory   func(logger *slog.Logger) app.DirWatcher
-	StreamPlayerFactory func(addr string, logger *slog.Logger, speakerLookup map[int]entity.SpeakerStyleInfo, client app.VoicevoxClient) (app.StreamPlayer, error)
+	StreamPlayerFactory func(addr string, logger *slog.Logger, speakerLookup map[int]entity.SpeakerStyleInfo, orderedSpeakerIDs []int, client app.VoicevoxClient) (app.StreamPlayer, error)
 	QueuePathResolver   func() (string, error)
 }
 
