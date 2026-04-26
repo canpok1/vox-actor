@@ -125,7 +125,7 @@ export function App() {
 
   const { playingClipId, enqueue } = usePlaybackQueue(
     audioRef,
-    activeTab === "stream",
+    activeTab === "stream" || activeTab === "character",
   );
   const playingClipIdRef = useRef<number | null>(null);
   playingClipIdRef.current = playingClipId;
