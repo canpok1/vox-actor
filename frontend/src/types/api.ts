@@ -131,3 +131,40 @@ export function isApiStatus(value: unknown): value is ApiStatus {
     isSpeakerArray(v.speakers)
   );
 }
+
+export interface CharacterEntry {
+  speakerName: string;
+  styleName: string;
+  mouthClosed: string;
+  mouthOpen: string;
+}
+
+export interface ApiCharacters {
+  enabled: boolean;
+  characters: CharacterEntry[];
+}
+
+export function isCharacterEntry(value: unknown): value is CharacterEntry {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+  const v = value as Record<string, unknown>;
+  return (
+    typeof v.speakerName === "string" &&
+    typeof v.styleName === "string" &&
+    typeof v.mouthClosed === "string" &&
+    typeof v.mouthOpen === "string"
+  );
+}
+
+export function isApiCharacters(value: unknown): value is ApiCharacters {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+  const v = value as Record<string, unknown>;
+  return (
+    typeof v.enabled === "boolean" &&
+    Array.isArray(v.characters) &&
+    v.characters.every(isCharacterEntry)
+  );
+}
