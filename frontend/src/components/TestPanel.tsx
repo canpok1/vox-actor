@@ -55,6 +55,13 @@ export function TestPanel({
       hidden={hidden}
       className={charactersEnabled ? "flex h-full flex-col gap-4" : "mt-2"}
     >
+      <TestControls
+        speakers={speakers}
+        selectedSpeakerId={selectedSpeakerId}
+        onSpeakerChange={onSpeakerChange}
+        onPlay={onPlay}
+        error={error}
+      />
       {charactersEnabled && (
         <div className="flex min-h-0 flex-1 items-center justify-center rounded-md bg-ctp-surface p-4">
           {matchedCharacter ? (
@@ -71,13 +78,6 @@ export function TestPanel({
           )}
         </div>
       )}
-      <TestControls
-        speakers={speakers}
-        selectedSpeakerId={selectedSpeakerId}
-        onSpeakerChange={onSpeakerChange}
-        onPlay={onPlay}
-        error={error}
-      />
     </section>
   );
 }
