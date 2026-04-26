@@ -31,7 +31,7 @@ export function useAudioVolume(
       const analyser = audioContext.createAnalyser();
       analyser.fftSize = 512;
 
-      const source = audioContext.createMediaElementAudioSource(audioRef.current);
+      const source = audioContext.createMediaElementSource(audioRef.current);
       source.connect(analyser);
       analyser.connect(audioContext.destination);
 
@@ -48,7 +48,9 @@ export function useAudioVolume(
         return;
       }
 
-      analyserRef.current.getByteTimeDomainData(dataArrayRef.current);
+      analyserRef.current.getByteTimeDomainData(
+        dataArrayRef.current as Uint8Array<ArrayBuffer>
+      );
 
       // RMS (Root Mean Square) 計算
       let sum = 0;
