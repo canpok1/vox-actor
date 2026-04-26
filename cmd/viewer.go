@@ -14,6 +14,67 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// 無音モード通知用の固定文面（#284）。
+// silentLogMessage は WARN ログ、silentReason* はフロントに返す `silentReason` 本文。
+const (
+	silentLogMessage = "VOICEVOX engine unreachable, continuing in silent mode (no audio will be played)"
+
+	silentReasonHealthCheckFailed = `VOICEVOXに接続できないため無音モードで起動しました。
+音を再生したい場合はVOICEVOXに接続できる状態で起動し直してください。`
+
+	silentReasonGetSpeakersFailed = `VOICEVOXから話者一覧を取得できなかったため無音モードで起動しました。
+音を再生したい場合はVOICEVOXを正常に応答する状態にして起動し直してください。`
+)
+
+// startStreamPlayer は HealthCheck → /speakers 取得 → lookup 構築 → StreamPlayer 起動を行う。
+// VOICEVOX への接続失敗時は無音モードにフォールバックして起動を継続する（#284）。
+// 成功した場合、呼び出し元は defer sp.Shutdown を責務とする。
+func startStreamPlayer(
+	ctx context.Context,
+	addr string,
+	logger *slog.Logger,
+	client app.VoicevoxClient,
+	factory func(string, *slog.Logger, map[int]entity.SpeakerStyleInfo, app.VoicevoxClient) (app.StreamPlayer, error),
+) (sp app.StreamPlayer, silent bool, err error) {
+	var (
+		lookup       map[int]entity.SpeakerStyleInfo
+		silentReason string
+	)
+	if hcErr := client.HealthCheck(ctx); hcErr != nil {
+		silent = true
+		silentReason = silentReasonHealthCheckFailed
+		logger.Warn(silentLogMessage, "error", fmt.Errorf("health check failed: %w", hcErr))
+	} else {
+		speakers, gsErr := client.GetSpeakers(ctx)
+		if gsErr != nil {
+			silent = true
+			silentReason = silentReasonGetSpeakersFailed
+			logger.Warn(silentLogMessage, "error", fmt.Errorf("get speakers failed: %w", gsErr))
+		} else {
+			lookup = entity.BuildSpeakerStyleLookup(speakers)
+			logger.Info("speakers loaded", "speakerCount", len(speakers), "styleCount", len(lookup))
+		}
+	}
+	if silent {
+		lookup = map[int]entity.SpeakerStyleInfo{}
+	}
+
+	sp, err = factory(addr, logger, lookup, client)
+	if err != nil {
+		return nil, false, fmt.Errorf("failed to create stream player: %w", err)
+	}
+	if silent {
+		sp.SetSilent(silentReason)
+	}
+	if err = sp.Start(ctx); err != nil {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = sp.Shutdown(shutdownCtx)
+		return nil, false, fmt.Errorf("failed to start stream server: %w", err)
+	}
+	return sp, silent, nil
+}
+
 // ViewerDeps はviewerコマンドの依存を保持する。
 type ViewerDeps struct {
 	Reader              app.ScriptReader
