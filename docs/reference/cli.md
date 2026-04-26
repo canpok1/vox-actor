@@ -189,14 +189,17 @@ vox-actor config <key>
 |---|---|
 | `path.workspace` | vox-actor のワークスペースルート絶対パス |
 | `path.queue` | ワークスペースルート配下の `queue` ディレクトリ絶対パス |
+| `path.tmp` | ワークスペースルート配下の `tmp` ディレクトリ絶対パス |
 
-**解決順（両キー共通）:**
+**解決順（全キー共通）:**
 
 1. 環境変数 `VOX_ACTOR_WORKSPACE` が設定されていればその値をワークスペースルートとして扱う
 2. gitリポジトリ内であれば `git rev-parse --path-format=absolute --git-common-dir` の結果の親ディレクトリ配下の `.vox-actor` をワークスペースルートとする
-3. それ以外は非0終了
+3. git管理外の場合はカレントディレクトリをワークスペースルートとして扱う
 
-`path.queue` はワークスペースルートに `queue` を結合した値を返すため、`path.workspace`/queue = `path.queue` の関係が常に成立します。
+`path.queue` と `path.tmp` はワークスペースルートに各サブディレクトリを結合した値を返すため、常に以下の関係が成立します:
+- `path.workspace`/queue = `path.queue`
+- `path.workspace`/tmp = `path.tmp`
 
 **出力:**
 
@@ -210,7 +213,7 @@ vox-actor config <key>
 | 成功 | 0 | — |
 | 未知のキー | 2 (`ErrUsage`) | `unknown key: <key>` とサポートキー一覧 |
 | `git` コマンドがPATH上に無い | 1 | `Error: gitコマンドが見つかりません` |
-| カレントディレクトリがgitリポジトリ外かつ `VOX_ACTOR_WORKSPACE` 未設定 | 1 | `Error: カレントディレクトリはgitリポジトリではありません` |
+| カレント ディレクトリ取得失敗（通常発生しない） | 1 | `Error: カレントディレクトリが取得できません` |
 
 **使用例:**
 
@@ -220,18 +223,31 @@ $ cd /path/to/repo && vox-actor config path.workspace
 /path/to/repo/.vox-actor
 $ cd /path/to/repo && vox-actor config path.queue
 /path/to/repo/.vox-actor/queue
+$ cd /path/to/repo && vox-actor config path.tmp
+/path/to/repo/.vox-actor/tmp
+
+# git管理外で実行（カレントディレクトリにフォールバック）
+$ cd /tmp/non-git && vox-actor config path.workspace
+/tmp/non-git
+$ cd /tmp/non-git && vox-actor config path.queue
+/tmp/non-git/queue
+$ cd /tmp/non-git && vox-actor config path.tmp
+/tmp/non-git/tmp
 
 # VOX_ACTOR_WORKSPACE 明示
 $ VOX_ACTOR_WORKSPACE=/custom vox-actor config path.workspace
 /custom
 $ VOX_ACTOR_WORKSPACE=/custom vox-actor config path.queue
 /custom/queue
+$ VOX_ACTOR_WORKSPACE=/custom vox-actor config path.tmp
+/custom/tmp
 
 # 未知のキー
 $ vox-actor config path.unknown
 Error: unknown key: path.unknown
 supported keys:
   path.queue
+  path.tmp
   path.workspace
 ```
 

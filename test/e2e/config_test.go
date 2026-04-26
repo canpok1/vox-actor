@@ -105,6 +105,97 @@ func TestConfigE2E_PathQueue_InsideGitRepo(t *testing.T) {
 	}
 }
 
+func TestConfigE2E_PathTmp_WithEnv(t *testing.T) {
+	workspace := t.TempDir()
+	env := map[string]string{"VOX_ACTOR_WORKSPACE": workspace}
+
+	stdout, stderr, exitCode := runCLI(t, env, "config", "path.tmp")
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d\nstderr:\n%s", exitCode, stderr)
+	}
+
+	got := assertSinglePathLine(t, stdout)
+	want := filepath.Join(workspace, "tmp")
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestConfigE2E_PathTmp_InsideGitRepo(t *testing.T) {
+	repoRoot := initTempGitRepo(t)
+	env := map[string]string{"VOX_ACTOR_WORKSPACE": ""}
+
+	stdout, stderr, exitCode := runCLIInDir(t, repoRoot, env, "config", "path.tmp")
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d\nstderr:\n%s", exitCode, stderr)
+	}
+
+	got := assertSinglePathLine(t, stdout)
+	want := filepath.Join(repoRoot, ".vox-actor", "tmp")
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestConfigE2E_PathWorkspace_OutsideGitRepo(t *testing.T) {
+	dir := t.TempDir()
+	env := map[string]string{"VOX_ACTOR_WORKSPACE": ""}
+
+	stdout, stderr, exitCode := runCLIInDir(t, dir, env, "config", "path.workspace")
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d\nstderr:\n%s", exitCode, stderr)
+	}
+
+	got := assertSinglePathLine(t, stdout)
+	resolved, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		t.Fatalf("failed to eval symlinks for %q: %v", dir, err)
+	}
+	if got != resolved {
+		t.Errorf("got %q, want %q", got, resolved)
+	}
+}
+
+func TestConfigE2E_PathQueue_OutsideGitRepo(t *testing.T) {
+	dir := t.TempDir()
+	env := map[string]string{"VOX_ACTOR_WORKSPACE": ""}
+
+	stdout, stderr, exitCode := runCLIInDir(t, dir, env, "config", "path.queue")
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d\nstderr:\n%s", exitCode, stderr)
+	}
+
+	got := assertSinglePathLine(t, stdout)
+	resolved, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		t.Fatalf("failed to eval symlinks for %q: %v", dir, err)
+	}
+	want := filepath.Join(resolved, "queue")
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestConfigE2E_PathTmp_OutsideGitRepo(t *testing.T) {
+	dir := t.TempDir()
+	env := map[string]string{"VOX_ACTOR_WORKSPACE": ""}
+
+	stdout, stderr, exitCode := runCLIInDir(t, dir, env, "config", "path.tmp")
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d\nstderr:\n%s", exitCode, stderr)
+	}
+
+	got := assertSinglePathLine(t, stdout)
+	resolved, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		t.Fatalf("failed to eval symlinks for %q: %v", dir, err)
+	}
+	want := filepath.Join(resolved, "tmp")
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
 func TestConfigE2E_UnknownKey_ExitCode2(t *testing.T) {
 	stdout, stderr, exitCode := runCLI(t, nil, "config", "path.unknown")
 	if exitCode != 2 {
@@ -113,7 +204,7 @@ func TestConfigE2E_UnknownKey_ExitCode2(t *testing.T) {
 	if strings.TrimSpace(stdout) != "" {
 		t.Errorf("expected empty stdout, got %q", stdout)
 	}
-	wants := []string{"unknown key: path.unknown", "path.queue", "path.workspace"}
+	wants := []string{"unknown key: path.unknown", "path.queue", "path.tmp", "path.workspace"}
 	for _, w := range wants {
 		if !strings.Contains(stderr, w) {
 			t.Errorf("expected stderr to contain %q\nstderr:\n%s", w, stderr)
@@ -138,21 +229,5 @@ func TestConfigE2E_GitNotFound_ExitCode1(t *testing.T) {
 	}
 	if strings.TrimSpace(stderr) == "" {
 		t.Error("expected non-empty stderr for git-not-found")
-	}
-}
-
-func TestConfigE2E_OutsideGitRepo_ExitCode1(t *testing.T) {
-	dir := t.TempDir()
-	env := map[string]string{"VOX_ACTOR_WORKSPACE": ""}
-
-	stdout, stderr, exitCode := runCLIInDir(t, dir, env, "config", "path.workspace")
-	if exitCode != 1 {
-		t.Fatalf("expected exit code 1, got %d\nstderr:\n%s", exitCode, stderr)
-	}
-	if strings.TrimSpace(stdout) != "" {
-		t.Errorf("expected empty stdout, got %q", stdout)
-	}
-	if strings.TrimSpace(stderr) == "" {
-		t.Error("expected non-empty stderr for outside-git-repo")
 	}
 }

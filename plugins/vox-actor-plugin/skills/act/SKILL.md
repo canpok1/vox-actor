@@ -9,11 +9,9 @@ description: |
   直接ユーザーが呼ぶより、monologue/speak/talk経由の呼び出しを想定。
 argument-hint: "<種別:monologue|speak|talk> <本文> [追加の演出指示]"
 allowed-tools:
+  - "Bash(${CLAUDE_PLUGIN_ROOT}/skills/act/scripts/save-script.sh *)"
   - "Bash(${CLAUDE_PLUGIN_ROOT}/skills/act/scripts/play-script.sh *)"
-  - "Bash(mkdir -p *)"
-  - "Bash(date +%s%3N)"
   - "Read(${CLAUDE_PLUGIN_ROOT}/skills/act/characters/*.md)"
-  - "Write(${VOX_ACTOR_WORKSPACE}/tmp/*)"
 ---
 
 vox-actor を使った音声再生の技術的実行を担うスキルです。`monologue` / `speak` / `talk` の入口スキルから呼び出される前提で、台本生成と再生実行を一手に引き受けます。vox-actor CLI に関する利用知識（話速の目安・通知モード切替・ワークスペース解決・エラーログ仕様・JSON/JSONL の形式制約・キャラクター設定の扱いなど）はこのスキルに集約されています。
@@ -39,18 +37,22 @@ vox-actor を使った音声再生の技術的実行を担うスキルです。`
    - `speak`: 冒頭→本題→まとめの流れの JSONL（複数行）
    - `talk`: 複数キャラの掛け合い JSONL（複数行）。冒頭で全キャラが1回以上登場するよう構成する
 4. セリフ毎に内容の感情に合う `speaker` と `speedScale` を選定する
-5. `mkdir -p "${VOX_ACTOR_WORKSPACE}/tmp"` で一時ディレクトリを作成する
-6. `date +%s%3N` でユニックス時刻（ms）を取得し、一時ファイル `${VOX_ACTOR_WORKSPACE}/tmp/<unix_ms>_<kind>.<ext>` に台本を Write する
-   - `monologue` → `<unix_ms>_monologue.json`
-   - `speak` → `<unix_ms>_speak.jsonl`
-   - `talk` → `<unix_ms>_talk.jsonl`
-7. `play-script.sh <path>` を呼び出して再生する
+5. 台本をstdinから `save-script.sh` に渡して、一時ファイルの絶対パスを取得する
+
+```bash
+SCRIPT_PATH=$(echo "$script_content" | ${CLAUDE_PLUGIN_ROOT}/skills/act/scripts/save-script.sh <kind>) || exit 1
+```
+
+- `<kind>`: 種別（`monologue` / `speak` / `talk`）
+- 返り値: `<workspace>/tmp/<unix_ms>_<kind>.<ext>` の絶対パス
+
+6. `play-script.sh <path>` を呼び出して再生する
 
 ```bash
 ${CLAUDE_PLUGIN_ROOT}/skills/act/scripts/play-script.sh <path>
 ```
 
-- `<path>`（第1引数・必須）: 生成した台本ファイルの絶対パス
+- `<path>`（第1引数・必須）: `save-script.sh` が返した台本ファイルの絶対パス
 
 ## 台本の形式
 
@@ -117,16 +119,13 @@ ${CLAUDE_PLUGIN_ROOT}/skills/act/scripts/play-script.sh <path>
 
 ## 前提条件
 
-### play-script.sh の依存関係
+### CLI コマンドの依存関係
 
-再生の実行に使用する `${CLAUDE_PLUGIN_ROOT}/skills/act/scripts/play-script.sh` は以下の前提条件を必要とします。
+このスキルが使用する CLI コマンドについて、ワークスペース解決および一時ファイル管理は CLI 側に統一されています。詳細は `docs/reference/cli.md` を参照してください。
 
 - **`vox-actor` コマンドのインストール必須**: スクリプト冒頭で `command -v vox-actor` を検査し、未インストール時は `[ERROR] vox-actor コマンドが必要です` を stderr に出して非0終了する
-- **ワークスペースの解決**: スクリプトは `vox-actor config path.queue` / `vox-actor config path.workspace` を呼ぶだけで、環境変数の分岐は CLI 側が担う。CLI の解決順は以下のとおり
-  1. 環境変数 `VOX_ACTOR_WORKSPACE` が設定されていればその値をワークスペースルートとして使う（queue は `${VOX_ACTOR_WORKSPACE}/queue`）
-  2. 未設定なら gitリポジトリ直下の `.vox-actor` をワークスペースルートとする（queue は `<repo>/.vox-actor/queue`）
-- **git 管理外で利用する場合**: `VOX_ACTOR_WORKSPACE` の明示が必要。未指定のままだと CLI が非0終了し、そのエラーメッセージが表示されてスクリプトも終了する
-- **出力先ディレクトリ**: ワークスペースルートおよび配下の `queue/` は `play-script.sh` が必要に応じて自動作成する。`tmp/` ディレクトリは Claude が Write する前に `mkdir -p "${VOX_ACTOR_WORKSPACE}/tmp"` で作成する（`tmp/` 利用時は `VOX_ACTOR_WORKSPACE` の明示が前提）
+- **ワークスペースの自動解決**: `vox-actor config path.*` は環境変数・git リポジトリ・カレントディレクトリの順で自動判定する
+  - 詳細は `docs/reference/cli.md` の `config` サブコマンドセクションを参照
 - `play-script-errors.log`（directモードのエラーログ）はワークスペースルート直下に配置される
 
 ### 通知モード
