@@ -48,15 +48,11 @@ describe("Tabs", () => {
 
   it("hideTest=false のときに音声テストタブが描画される", () => {
     render(<Tabs active="stream" onChange={() => {}} hideTest={false} />);
-    expect(
-      screen.getByRole("tab", { name: "音声テスト" }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "音声テスト" })).toBeInTheDocument();
   });
 
   it("hideTest を指定しない場合（デフォルト）に音声テストタブが描画される", () => {
     render(<Tabs active="stream" onChange={() => {}} />);
-    expect(
-      screen.getByRole("tab", { name: "音声テスト" }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "音声テスト" })).toBeInTheDocument();
   });
 });

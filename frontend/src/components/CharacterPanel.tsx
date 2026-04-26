@@ -1,19 +1,41 @@
-import type { CharacterEntry } from "../types/api";
+import type { CharacterEntry, TimelineEntry } from "../types/api";
 import { LipSyncImage } from "./LipSyncImage";
 import { useAudioVolume } from "../hooks/useAudioVolume";
+import { useCharacterStage } from "../hooks/useCharacterStage";
 
 interface CharacterPanelProps {
   hidden: boolean;
   characters: CharacterEntry[];
   playingClipId: number | null;
-  entries: Array<{ kind: "clip"; id: number; text: string; speakerName: string; styleName: string } | { kind: "error" }>;
+  entries: TimelineEntry[];
   audioRef: React.RefObject<HTMLAudioElement>;
+}
+
+const MULTI_SLOT_LAYOUT = [
+  { slotIndex: 3, flip: true }, // 外側左
+  { slotIndex: 1, flip: true }, // 内側左
+  { slotIndex: 0, flip: false }, // 内側右
+  { slotIndex: 2, flip: false }, // 外側右
+] as const;
+
+function getCharacterImageUrls(character: CharacterEntry): {
+  closed: string;
+  open: string;
+} {
+  return {
+    closed: `/assets/images/characters/${encodeURIComponent(
+      character.mouthClosed,
+    )}`,
+    open: `/assets/images/characters/${encodeURIComponent(
+      character.mouthOpen,
+    )}`,
+  };
 }
 
 /**
  * CharacterPanel はキャラクタータブのメインコンポーネント。
- * 現在再生中のクリップから話者を特定し、マッチするキャラクター画像を
- * 音量に応じて口パクさせながら表示する。
+ * 現在再生中のクリップから話者を特定し、マッチするキャラクター画像を表示する。
+ * 複数キャラの場合は4スロットレイアウト、1キャラの場合は中央寄せで表示。
  */
 export function CharacterPanel({
   hidden,
@@ -23,25 +45,42 @@ export function CharacterPanel({
   audioRef,
 }: CharacterPanelProps) {
   const volume = useAudioVolume(audioRef, !hidden);
+  const { slots, isMultiSlot } = useCharacterStage(
+    playingClipId,
+    entries,
+    characters,
+  );
 
-  const playingClip = playingClipId
+  const playingClipEntry = playingClipId
     ? entries.find((e) => e.kind === "clip" && e.id === playingClipId)
     : null;
 
   const playingClipData =
-    playingClip && playingClip.kind === "clip" ? playingClip : null;
+    playingClipEntry && playingClipEntry.kind === "clip"
+      ? playingClipEntry
+      : null;
 
-  const matchedCharacter = playingClipData
-    ? characters.find(
-        (c) =>
-          c.speakerName === playingClipData.speakerName &&
-          c.styleName === playingClipData.styleName
-      )
-    : null;
+  function isPlayingCharacter(character: CharacterEntry): boolean {
+    return (
+      playingClipData !== null &&
+      character.speakerName === playingClipData.speakerName &&
+      character.styleName === playingClipData.styleName
+    );
+  }
+
+  const placeholderStyle: React.CSSProperties = {
+    aspectRatio: "3 / 4",
+    backgroundColor: "var(--ctp-base)",
+  };
 
   if (hidden) {
     return null;
   }
+
+  const singleSlotChar = !isMultiSlot ? slots[0] : null;
+  const singleSlotUrls = singleSlotChar
+    ? getCharacterImageUrls(singleSlotChar.character)
+    : null;
 
   return (
     <section
@@ -51,24 +90,43 @@ export function CharacterPanel({
       className="flex h-full flex-col gap-4"
     >
       <div className="flex min-h-0 flex-1 items-center justify-center rounded-md bg-ctp-surface p-4">
-        {matchedCharacter ? (
-          <LipSyncImage
-            mouthClosedUrl={`/assets/images/characters/${encodeURIComponent(
-              matchedCharacter.mouthClosed
-            )}`}
-            mouthOpenUrl={`/assets/images/characters/${encodeURIComponent(
-              matchedCharacter.mouthOpen
-            )}`}
-            volume={volume}
-          />
+        {!isMultiSlot ? (
+          singleSlotUrls && singleSlotChar ? (
+            <LipSyncImage
+              mouthClosedUrl={singleSlotUrls.closed}
+              mouthOpenUrl={singleSlotUrls.open}
+              volume={isPlayingCharacter(singleSlotChar.character) ? volume : 0}
+            />
+          ) : (
+            <div
+              className="h-full w-auto max-w-full"
+              style={placeholderStyle}
+            />
+          )
         ) : (
-          <div
-            className="h-full w-auto max-w-full"
-            style={{
-              aspectRatio: "3 / 4",
-              backgroundColor: "var(--ctp-base)",
-            }}
-          />
+          <div className="grid h-full w-full grid-cols-4 gap-2">
+            {MULTI_SLOT_LAYOUT.map(({ slotIndex, flip }) => {
+              const slot = slots[slotIndex];
+              const urls = slot ? getCharacterImageUrls(slot.character) : null;
+              const wrapperStyle: React.CSSProperties = flip
+                ? { transform: "scaleX(-1)" }
+                : {};
+
+              return (
+                <div key={slotIndex} style={wrapperStyle}>
+                  {slot && urls ? (
+                    <LipSyncImage
+                      mouthClosedUrl={urls.closed}
+                      mouthOpenUrl={urls.open}
+                      volume={isPlayingCharacter(slot.character) ? volume : 0}
+                    />
+                  ) : (
+                    <div className="h-full w-full" style={placeholderStyle} />
+                  )}
+                </div>
+              );
+            })}
+          </div>
         )}
       </div>
 
@@ -78,7 +136,9 @@ export function CharacterPanel({
             {playingClipData.text}
           </p>
         ) : (
-          <p className="text-ctp-subtext">クリップを再生するとセリフが表示されます</p>
+          <p className="text-ctp-subtext">
+            クリップを再生するとセリフが表示されます
+          </p>
         )}
       </div>
     </section>
