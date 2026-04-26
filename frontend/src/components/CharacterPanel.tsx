@@ -18,6 +18,20 @@ const MULTI_SLOT_LAYOUT = [
   { slotIndex: 2, flip: false }, // 外側右
 ] as const;
 
+function getCharacterImageUrls(character: CharacterEntry): {
+  closed: string;
+  open: string;
+} {
+  return {
+    closed: `/assets/images/characters/${encodeURIComponent(
+      character.mouthClosed,
+    )}`,
+    open: `/assets/images/characters/${encodeURIComponent(
+      character.mouthOpen,
+    )}`,
+  };
+}
+
 /**
  * CharacterPanel はキャラクタータブのメインコンポーネント。
  * 現在再生中のクリップから話者を特定し、マッチするキャラクター画像を表示する。
@@ -52,20 +66,6 @@ export function CharacterPanel({
       character.speakerName === playingClipData.speakerName &&
       character.styleName === playingClipData.styleName
     );
-  }
-
-  function getCharacterImageUrls(character: CharacterEntry): {
-    closed: string;
-    open: string;
-  } {
-    return {
-      closed: `/assets/images/characters/${encodeURIComponent(
-        character.mouthClosed,
-      )}`,
-      open: `/assets/images/characters/${encodeURIComponent(
-        character.mouthOpen,
-      )}`,
-    };
   }
 
   const placeholderStyle: React.CSSProperties = {
