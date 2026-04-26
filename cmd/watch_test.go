@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"io"
 	"log/slog"
 	"os"
 	"strings"
@@ -75,16 +74,6 @@ func TestWatchCmd_DefaultOptionValues(t *testing.T) {
 	deleteMode, _ := watchCmd.Flags().GetBool("delete")
 	if deleteMode {
 		t.Error("expected --delete default to be false")
-	}
-
-	stream, _ := watchCmd.Flags().GetBool("stream")
-	if stream {
-		t.Error("expected --stream default to be false")
-	}
-
-	streamAddr, _ := watchCmd.Flags().GetString("stream-addr")
-	if streamAddr != "127.0.0.1:8080" {
-		t.Errorf("expected default stream-addr '127.0.0.1:8080', got: %s", streamAddr)
 	}
 
 	verbose, _ := watchCmd.Flags().GetBool("verbose")
@@ -177,11 +166,16 @@ func TestWatchCmd_HelpContainsFlags(t *testing.T) {
 	}
 
 	output := buf.String()
-	flags := []string{"--engine-url", "--speaker", "--speed", "--pitch", "--intonation", "--delete", "--stream", "--stream-addr", "--verbose", "--dry-run"}
+	flags := []string{"--engine-url", "--speaker", "--speed", "--pitch", "--intonation", "--delete", "--verbose", "--dry-run"}
 	for _, flag := range flags {
 		if !strings.Contains(output, flag) {
 			t.Errorf("expected help output to contain '%s'", flag)
 		}
+	}
+
+	// --stream / --stream-addr は廃止済みのため help に表示されない
+	if strings.Contains(output, "--stream") {
+		t.Error("expected help output NOT to contain '--stream'")
 	}
 
 	// --stream-history-size は #226 で廃止された
@@ -190,25 +184,47 @@ func TestWatchCmd_HelpContainsFlags(t *testing.T) {
 	}
 }
 
-func TestWatchCmd_StreamAndDryRun_ReturnsUsageError(t *testing.T) {
+func TestWatchCmd_StreamFlagRemoved_ReturnsUsageError(t *testing.T) {
 	dir := t.TempDir()
 
 	rootCmd := makeRootCmd()
 	buf := new(bytes.Buffer)
 	rootCmd.SetOut(buf)
 	rootCmd.SetErr(buf)
-	rootCmd.SetArgs([]string{"watch", "--stream", "--dry-run", dir})
+	rootCmd.SetArgs([]string{"watch", "--stream", dir})
 
 	err := rootCmd.Execute()
 	if err == nil {
-		t.Fatal("expected error when --stream and --dry-run are combined")
+		t.Fatal("expected error when --stream is used")
 	}
 	if !errors.Is(err, ErrUsage) {
 		t.Errorf("expected ErrUsage, got: %v", err)
 	}
+	if !strings.Contains(err.Error(), "viewer") {
+		t.Errorf("expected error to mention 'viewer', got: %v", err)
+	}
 }
 
-// --- #228 /speakers 取得 ---
+func TestWatchCmd_StreamAddrFlagRemoved_ReturnsUsageError(t *testing.T) {
+	dir := t.TempDir()
+
+	rootCmd := makeRootCmd()
+	buf := new(bytes.Buffer)
+	rootCmd.SetOut(buf)
+	rootCmd.SetErr(buf)
+	rootCmd.SetArgs([]string{"watch", "--stream-addr", "0.0.0.0:9090", dir})
+
+	err := rootCmd.Execute()
+	if err == nil {
+		t.Fatal("expected error when --stream-addr is used")
+	}
+	if !errors.Is(err, ErrUsage) {
+		t.Errorf("expected ErrUsage, got: %v", err)
+	}
+	if !strings.Contains(err.Error(), "viewer") {
+		t.Errorf("expected error to mention 'viewer', got: %v", err)
+	}
+}
 
 // stubVoicevoxClient は GetSpeakers/HealthCheck の振る舞いをカスタマイズできるテスト用クライアント。
 type stubVoicevoxClient struct {
@@ -255,249 +271,6 @@ func (stubDirWatcher) Watch(ctx context.Context, _ string) (<-chan string, <-cha
 type stubAudioPlayer struct{}
 
 func (stubAudioPlayer) Play(_ context.Context, _ []byte, _ app.PlayMeta) error { return nil }
-
-type stubStreamPlayer struct {
-	silentReason string
-	playTextCall int
-}
-
-func (p *stubStreamPlayer) Start(_ context.Context) error                          { return nil }
-func (p *stubStreamPlayer) Shutdown(_ context.Context) error                       { return nil }
-func (p *stubStreamPlayer) Addr() string                                           { return "127.0.0.1:0" }
-func (p *stubStreamPlayer) Play(_ context.Context, _ []byte, _ app.PlayMeta) error { return nil }
-func (p *stubStreamPlayer) SetSilent(reason string)                                { p.silentReason = reason }
-func (p *stubStreamPlayer) PlayText(_ context.Context, _ app.PlayMeta) error {
-	p.playTextCall++
-	return nil
-}
-
-// captureStderr は関数実行中の os.Stderr への出力を文字列として収集する。
-// buildLoggerFromFlags が os.Stderr に書くため、WARN ログの検証に使う。
-func captureStderr(t *testing.T, fn func()) string {
-	t.Helper()
-	orig := os.Stderr
-	r, w, err := os.Pipe()
-	if err != nil {
-		t.Fatalf("os.Pipe: %v", err)
-	}
-	os.Stderr = w
-
-	done := make(chan string, 1)
-	go func() {
-		var out bytes.Buffer
-		_, _ = io.Copy(&out, r)
-		done <- out.String()
-	}()
-
-	fn()
-
-	_ = w.Close()
-	os.Stderr = orig
-	return <-done
-}
-
-// runStreamWatchWithDeps は --stream 実行用の共通ヘルパー。cancelled な ctx を渡して usecase.Run を即座に抜けさせる。
-// captureStderr と組み合わせて WARN ログを検証する。
-func runStreamWatchWithDeps(t *testing.T, deps *Deps, args ...string) error {
-	t.Helper()
-	rootCmd := makeRootCmd(deps)
-	buf := new(bytes.Buffer)
-	rootCmd.SetOut(buf)
-	rootCmd.SetErr(buf)
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	rootCmd.SetContext(ctx)
-	rootCmd.SetArgs(args)
-	return rootCmd.Execute()
-}
-
-func TestWatchCmd_Stream_GetSpeakersFailure_FallsBackToSilent(t *testing.T) {
-	dir := t.TempDir()
-
-	stubClient := &stubVoicevoxClient{
-		getSpeakersErr: errors.New("speakers endpoint down"),
-	}
-	var capturedLookup map[int]entity.SpeakerStyleInfo
-	sp := &stubStreamPlayer{}
-	deps := &Deps{
-		Watch: &WatchDeps{
-			Reader:            stubScriptReader{},
-			ClientFactory:     func(_ string) app.VoicevoxClient { return stubClient },
-			Player:            stubAudioPlayer{},
-			Mover:             stubFileMover{},
-			DirWatcherFactory: func(_ *slog.Logger) app.DirWatcher { return stubDirWatcher{} },
-			StreamPlayerFactory: func(_ string, _ *slog.Logger, lookup map[int]entity.SpeakerStyleInfo, _ app.VoicevoxClient) (app.StreamPlayer, error) {
-				capturedLookup = lookup
-				return sp, nil
-			},
-		},
-	}
-
-	var err error
-	logs := captureStderr(t, func() {
-		err = runStreamWatchWithDeps(t, deps, "watch", "--stream", dir)
-	})
-	if err != nil {
-		t.Fatalf("expected no error (fallback to silent), got: %v", err)
-	}
-
-	if stubClient.getSpeakersCall != 1 {
-		t.Errorf("expected GetSpeakers to be called once, got %d", stubClient.getSpeakersCall)
-	}
-	if len(capturedLookup) != 0 {
-		t.Errorf("expected empty lookup in silent fallback, got %+v", capturedLookup)
-	}
-	if sp.silentReason == "" {
-		t.Errorf("expected SetSilent called with non-empty reason")
-	}
-	if !strings.Contains(sp.silentReason, "話者一覧") {
-		t.Errorf("expected silentReason to mention 話者一覧 (GetSpeakers case), got %q", sp.silentReason)
-	}
-
-	if !strings.Contains(logs, "VOICEVOX engine unreachable") {
-		t.Errorf("expected WARN log 'VOICEVOX engine unreachable', got: %s", logs)
-	}
-	if strings.Count(logs, "VOICEVOX engine unreachable") != 1 {
-		t.Errorf("expected WARN log to fire exactly once, got: %s", logs)
-	}
-}
-
-func TestWatchCmd_Stream_HealthCheckFailure_FallsBackToSilent(t *testing.T) {
-	dir := t.TempDir()
-
-	stubClient := &stubVoicevoxClient{
-		healthCheckErr: errors.New("engine down"),
-	}
-	var capturedLookup map[int]entity.SpeakerStyleInfo
-	sp := &stubStreamPlayer{}
-	deps := &Deps{
-		Watch: &WatchDeps{
-			Reader:            stubScriptReader{},
-			ClientFactory:     func(_ string) app.VoicevoxClient { return stubClient },
-			Player:            stubAudioPlayer{},
-			Mover:             stubFileMover{},
-			DirWatcherFactory: func(_ *slog.Logger) app.DirWatcher { return stubDirWatcher{} },
-			StreamPlayerFactory: func(_ string, _ *slog.Logger, lookup map[int]entity.SpeakerStyleInfo, _ app.VoicevoxClient) (app.StreamPlayer, error) {
-				capturedLookup = lookup
-				return sp, nil
-			},
-		},
-	}
-
-	var err error
-	logs := captureStderr(t, func() {
-		err = runStreamWatchWithDeps(t, deps, "watch", "--stream", dir)
-	})
-	if err != nil {
-		t.Fatalf("expected no error (fallback to silent), got: %v", err)
-	}
-
-	// HealthCheck 失敗時は GetSpeakers は呼ばれない
-	if stubClient.getSpeakersCall != 0 {
-		t.Errorf("expected GetSpeakers not to be called when HealthCheck fails, got %d", stubClient.getSpeakersCall)
-	}
-	if len(capturedLookup) != 0 {
-		t.Errorf("expected empty lookup in silent fallback, got %+v", capturedLookup)
-	}
-	if sp.silentReason == "" {
-		t.Errorf("expected SetSilent called with non-empty reason")
-	}
-	if !strings.Contains(sp.silentReason, "接続できない") {
-		t.Errorf("expected silentReason to mention 接続できない (HealthCheck case), got %q", sp.silentReason)
-	}
-
-	if !strings.Contains(logs, "VOICEVOX engine unreachable") {
-		t.Errorf("expected WARN log 'VOICEVOX engine unreachable', got: %s", logs)
-	}
-}
-
-func TestWatchCmd_Stream_EngineHealthy_DoesNotEnterSilent(t *testing.T) {
-	dir := t.TempDir()
-
-	stubClient := &stubVoicevoxClient{
-		speakers: []entity.Speaker{
-			{Name: "ずんだもん", Styles: []entity.SpeakerStyle{{ID: 3, Name: "ノーマル"}}},
-		},
-	}
-	sp := &stubStreamPlayer{}
-	deps := &Deps{
-		Watch: &WatchDeps{
-			Reader:            stubScriptReader{},
-			ClientFactory:     func(_ string) app.VoicevoxClient { return stubClient },
-			Player:            stubAudioPlayer{},
-			Mover:             stubFileMover{},
-			DirWatcherFactory: func(_ *slog.Logger) app.DirWatcher { return stubDirWatcher{} },
-			StreamPlayerFactory: func(_ string, _ *slog.Logger, _ map[int]entity.SpeakerStyleInfo, _ app.VoicevoxClient) (app.StreamPlayer, error) {
-				return sp, nil
-			},
-		},
-	}
-
-	var err error
-	logs := captureStderr(t, func() {
-		err = runStreamWatchWithDeps(t, deps, "watch", "--stream", dir)
-	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if sp.silentReason != "" {
-		t.Errorf("expected SetSilent not called in normal mode, got %q", sp.silentReason)
-	}
-	if strings.Contains(logs, "VOICEVOX engine unreachable") {
-		t.Errorf("expected no WARN log in normal mode")
-	}
-}
-
-func TestWatchCmd_Stream_PassesSpeakerLookupToFactory(t *testing.T) {
-	dir := t.TempDir()
-
-	stubClient := &stubVoicevoxClient{
-		speakers: []entity.Speaker{
-			{Name: "ずんだもん", Styles: []entity.SpeakerStyle{{ID: 3, Name: "ノーマル"}}},
-		},
-	}
-
-	var captured map[int]entity.SpeakerStyleInfo
-	deps := &Deps{
-		Watch: &WatchDeps{
-			Reader:            stubScriptReader{},
-			ClientFactory:     func(_ string) app.VoicevoxClient { return stubClient },
-			Player:            stubAudioPlayer{},
-			Mover:             stubFileMover{},
-			DirWatcherFactory: func(_ *slog.Logger) app.DirWatcher { return stubDirWatcher{} },
-			StreamPlayerFactory: func(_ string, _ *slog.Logger, lookup map[int]entity.SpeakerStyleInfo, _ app.VoicevoxClient) (app.StreamPlayer, error) {
-				captured = lookup
-				// usecase.Run まで進ませず、watch loop から確実に抜けるためにキャンセルを返す。
-				return &stubStreamPlayer{}, nil
-			},
-		},
-	}
-	rootCmd := makeRootCmd(deps)
-	buf := new(bytes.Buffer)
-	rootCmd.SetOut(buf)
-	rootCmd.SetErr(buf)
-	// usecase.Run 内のディレクトリ監視は stubDirWatcher が ctx.Done() を待つだけなので、
-	// 短い timeout を持つ context を作って即座に抜ける。
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	rootCmd.SetContext(ctx)
-	rootCmd.SetArgs([]string{"watch", "--stream", dir})
-
-	if err := rootCmd.Execute(); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	if captured == nil {
-		t.Fatal("StreamPlayerFactory was not called with a lookup")
-	}
-	info, ok := captured[3]
-	if !ok {
-		t.Fatalf("lookup missing key 3, got: %+v", captured)
-	}
-	if info.SpeakerName != "ずんだもん" || info.StyleName != "ノーマル" {
-		t.Errorf("unexpected lookup[3]=%+v", info)
-	}
-}
 
 func TestWatchCmd_EnvVarVOXEngineURL(t *testing.T) {
 	t.Setenv("VOX_ENGINE_URL", "http://custom:9999")

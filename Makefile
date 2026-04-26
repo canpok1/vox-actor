@@ -61,8 +61,9 @@ dev-frontend: frontend/node_modules
 
 # VOICEVOX エンジン URL は CLI 既定値（http://localhost:50021）または環境変数 VOX_ENGINE_URL に従う。
 # dev container 等で voicevox:50021 を使う場合は `VOX_ENGINE_URL=http://voicevox:50021 make dev-backend` のように指定する。
+# viewer サブコマンドで HTTP サーバーを起動し、0.0.0.0:8080 でリッスンする。
 dev-backend:
-	go run . watch --engine-url http://voicevox:50021 --stream --stream-addr 0.0.0.0:8080 --queue
+	go run . viewer --engine-url http://voicevox:50021 --host 0.0.0.0 --port 8080 --watch-queue
 
 dev:
 	$(MAKE) -j2 dev-backend dev-frontend
@@ -72,4 +73,4 @@ install: build-frontend
 
 all: build
 
-.PHONY: all setup build build-frontend clean test test-e2e test-frontend-unit test-frontend-e2e fmt lint lint-frontend typecheck depcheck run-stream dev dev-frontend dev-backend install
+.PHONY: all setup build build-frontend clean test test-e2e test-frontend-unit test-frontend-e2e fmt lint lint-frontend typecheck depcheck dev dev-frontend dev-backend install

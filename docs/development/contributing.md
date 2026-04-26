@@ -130,7 +130,7 @@ cd frontend && npm run test:unit:watch
 
 ## 配信画面の E2E テスト（Playwright）
 
-`frontend/test/e2e/` 以下に Playwright + Chromium による配信画面の E2E テストがあります。実バックエンド（`vox-actor watch --stream`）の代わりに `frontend/test/stub-server.mjs` のスタブを使い、SSE / `/api/status` / `/test-clip` / `/clips/*.wav` を決定的にエミュレートします。
+`frontend/test/e2e/` 以下に Playwright + Chromium による配信画面の E2E テストがあります。実バックエンド（`vox-actor viewer`）の代わりに `frontend/test/stub-server.mjs` のスタブを使い、SSE / `/api/status` / `/test-clip` / `/clips/*.wav` を決定的にエミュレートします。
 
 ### 実行
 

@@ -1,30 +1,15 @@
 package cmd
 
 import (
-	"context"
 	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	"github.com/canpok1/vox-actor/internal/app"
-	"github.com/canpok1/vox-actor/internal/domain/entity"
 	"github.com/canpok1/vox-actor/internal/infra"
 	"github.com/spf13/cobra"
-)
-
-// 無音モード通知用の固定文面（#284）。
-// silentLogMessage は WARN ログ、silentReason* はフロントに返す `silentReason` 本文。
-const (
-	silentLogMessage = "VOICEVOX engine unreachable, continuing in silent mode (no audio will be played)"
-
-	silentReasonHealthCheckFailed = `VOICEVOXに接続できないため無音モードで起動しました。
-音を再生したい場合はVOICEVOXに接続できる状態で起動し直してください。`
-
-	silentReasonGetSpeakersFailed = `VOICEVOXから話者一覧を取得できなかったため無音モードで起動しました。
-音を再生したい場合はVOICEVOXを正常に応答する状態にして起動し直してください。`
 )
 
 // WatchDeps はwatchコマンドの依存を保持する。
@@ -34,11 +19,6 @@ type WatchDeps struct {
 	Player            app.AudioPlayer
 	Mover             app.FileMover
 	DirWatcherFactory func(logger *slog.Logger) app.DirWatcher
-	// StreamPlayerFactory は --stream 指定時にストリーム配信用の AudioPlayer を生成する。
-	// speakerLookup は /speakers 取得結果から構築されたマップで、配信時に話者名/スタイル名を解決する。
-	// マップが空でも factory はエラーにせず player を返してよい（フォールバック表示が使われる）。
-	// client はブラウザ側の /test-clip エンドポイントから音声合成を呼ぶために渡す。
-	StreamPlayerFactory func(addr string, logger *slog.Logger, speakerLookup map[int]entity.SpeakerStyleInfo, client app.VoicevoxClient) (app.StreamPlayer, error)
 	// QueuePathResolver は --queue 指定時に監視対象パスを解決する関数。
 	// nil の場合は infra.ResolveQueuePath がデフォルトで使われる。
 	QueuePathResolver func() (string, error)
@@ -51,6 +31,15 @@ func makeWatchCmd(deps *WatchDeps) *cobra.Command {
 		Long:  "1つ以上のディレクトリを並列監視し、検知したファイルを順次読み上げる。",
 		// 位置引数と --queue の排他・片方必須は RunE 側で検証する。
 		Args: cobra.ArbitraryArgs,
+		PreRunE: func(cmd *cobra.Command, _ []string) error {
+			if cmd.Flags().Changed("stream") {
+				return fmt.Errorf("%w: --stream is removed; use 'vox-actor viewer' instead", ErrUsage)
+			}
+			if cmd.Flags().Changed("stream-addr") {
+				return fmt.Errorf("%w: --stream-addr is removed; use 'vox-actor viewer --host <host> --port <port>' instead", ErrUsage)
+			}
+			return nil
+		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runWatch(cmd, args, deps)
 		},
@@ -58,9 +47,13 @@ func makeWatchCmd(deps *WatchDeps) *cobra.Command {
 
 	registerCommonFlags(cmd)
 	cmd.Flags().Bool("delete", false, "処理済みファイルを削除する（未指定時は各ディレクトリの done/ に移動）")
-	cmd.Flags().Bool("stream", false, "HTTPサーバーを起動し、SSE経由でブラウザに音声配信する")
-	cmd.Flags().String("stream-addr", "127.0.0.1:8080", "ストリーム配信用のバインドアドレス")
 	cmd.Flags().Bool("queue", false, "vox-actor config path.queue で解決される queue ディレクトリを監視対象に自動選択する（位置引数と併用不可、起動時に自動作成）")
+
+	// --stream / --stream-addr は廃止済み。廃止フラグが渡された場合は PreRunE でエラーを返す。
+	cmd.Flags().Bool("stream", false, "")
+	cmd.Flags().String("stream-addr", "", "")
+	_ = cmd.Flags().MarkHidden("stream")
+	_ = cmd.Flags().MarkHidden("stream-addr")
 
 	return cmd
 }
@@ -89,55 +82,6 @@ func resolveWatchPaths(args []string, useQueue bool, deps *WatchDeps) ([]string,
 		return nil, err
 	}
 	return []string{queuePath}, nil
-}
-
-// startStreamPlayer は HealthCheck → /speakers 取得 → lookup 構築 → StreamPlayer 起動を行う。
-// VOICEVOX への接続失敗時は無音モードにフォールバックして起動を継続する（#284）。
-// 成功した場合、呼び出し元は defer sp.Shutdown を責務とする。
-func startStreamPlayer(
-	ctx context.Context,
-	addr string,
-	logger *slog.Logger,
-	client app.VoicevoxClient,
-	factory func(string, *slog.Logger, map[int]entity.SpeakerStyleInfo, app.VoicevoxClient) (app.StreamPlayer, error),
-) (sp app.StreamPlayer, silent bool, err error) {
-	var (
-		lookup       map[int]entity.SpeakerStyleInfo
-		silentReason string
-	)
-	if hcErr := client.HealthCheck(ctx); hcErr != nil {
-		silent = true
-		silentReason = silentReasonHealthCheckFailed
-		logger.Warn(silentLogMessage, "error", fmt.Errorf("health check failed: %w", hcErr))
-	} else {
-		speakers, gsErr := client.GetSpeakers(ctx)
-		if gsErr != nil {
-			silent = true
-			silentReason = silentReasonGetSpeakersFailed
-			logger.Warn(silentLogMessage, "error", fmt.Errorf("get speakers failed: %w", gsErr))
-		} else {
-			lookup = entity.BuildSpeakerStyleLookup(speakers)
-			logger.Info("speakers loaded", "speakerCount", len(speakers), "styleCount", len(lookup))
-		}
-	}
-	if silent {
-		lookup = map[int]entity.SpeakerStyleInfo{}
-	}
-
-	sp, err = factory(addr, logger, lookup, client)
-	if err != nil {
-		return nil, false, fmt.Errorf("failed to create stream player: %w", err)
-	}
-	if silent {
-		sp.SetSilent(silentReason)
-	}
-	if err = sp.Start(ctx); err != nil {
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		_ = sp.Shutdown(shutdownCtx)
-		return nil, false, fmt.Errorf("failed to start stream server: %w", err)
-	}
-	return sp, silent, nil
 }
 
 // resolveQueueDir はキュー解決関数を使ってキューディレクトリパスを解決・自動作成する。
@@ -181,12 +125,6 @@ func runWatch(cmd *cobra.Command, args []string, deps *WatchDeps) error {
 	pitch, _ := cmd.Flags().GetFloat64("pitch")
 	intonation, _ := cmd.Flags().GetFloat64("intonation")
 	dryRun, _ := cmd.Flags().GetBool("dry-run")
-	stream, _ := cmd.Flags().GetBool("stream")
-	streamAddr, _ := cmd.Flags().GetString("stream-addr")
-
-	if stream && dryRun {
-		return fmt.Errorf("%w: --stream and --dry-run cannot be used together", ErrUsage)
-	}
 
 	if deps == nil || deps.ClientFactory == nil || deps.Reader == nil || deps.Player == nil || deps.Mover == nil || deps.DirWatcherFactory == nil {
 		return fmt.Errorf("watch command dependencies are not initialized")
@@ -202,39 +140,13 @@ func runWatch(cmd *cobra.Command, args []string, deps *WatchDeps) error {
 		return fmt.Errorf("failed to create VoicevoxClient for %s", engineURL)
 	}
 
-	player := deps.Player
-	silent := false
-	if stream {
-		if deps.StreamPlayerFactory == nil {
-			return fmt.Errorf("stream player factory is not initialized")
-		}
-
-		sp, isSilent, err := startStreamPlayer(ctx, streamAddr, logger, client, deps.StreamPlayerFactory)
-		if err != nil {
-			return err
-		}
-		silent = isSilent
-		defer func() {
-			shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			defer cancel()
-			if err := sp.Shutdown(shutdownCtx); err != nil {
-				logger.Error("stream server shutdown error", "error", err)
-			}
-		}()
-		logger.Info("stream server listening", "addr", sp.Addr(), "silent", silent)
-		player = sp
-	}
-
 	watcher := deps.DirWatcherFactory(logger)
 	opts := []app.WatchOption{app.WithWatchLogger(logger)}
 	if deleteMode {
 		opts = append(opts, app.WithDeleteMode())
 	}
-	if silent {
-		opts = append(opts, app.WithSilent())
-	}
 
-	uc := app.NewWatchUsecase(deps.Reader, client, player, deps.Mover, watcher, opts...)
+	uc := app.NewWatchUsecase(deps.Reader, client, deps.Player, deps.Mover, watcher, opts...)
 	return uc.Run(ctx, app.WatchParams{
 		Paths:      args,
 		SpeakerID:  speakerID,

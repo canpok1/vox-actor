@@ -122,7 +122,7 @@ export VOX_ACTOR_MONOLOGUE_MODE=file
 
 詳細なセットアップ手順は [プラグイン／スキルリファレンス](./docs/reference/plugins.md) を参照してください。
 
-ホスト側にも音声デバイスがない場合は `vox-actor watch --stream` でブラウザに音声を配信する構成も利用できます。詳細は [CLIリファレンスのストリーム配信モード](./docs/reference/cli.md#ストリーム配信モード) を参照してください。
+ホスト側にも音声デバイスがない場合は `vox-actor viewer` でブラウザに音声を配信する構成も利用できます。詳細は [CLIリファレンスのストリーム配信モード](./docs/reference/cli.md#ストリーム配信モード) を参照してください。
 
 ## 📦 インストール方法
 

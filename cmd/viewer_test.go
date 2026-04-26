@@ -15,6 +15,42 @@ import (
 	"github.com/spf13/cobra"
 )
 
+type stubStreamPlayer struct {
+	silentReason string
+}
+
+func (p *stubStreamPlayer) Start(_ context.Context) error                          { return nil }
+func (p *stubStreamPlayer) Shutdown(_ context.Context) error                       { return nil }
+func (p *stubStreamPlayer) Addr() string                                           { return "127.0.0.1:0" }
+func (p *stubStreamPlayer) Play(_ context.Context, _ []byte, _ app.PlayMeta) error { return nil }
+func (p *stubStreamPlayer) SetSilent(reason string)                                { p.silentReason = reason }
+func (p *stubStreamPlayer) PlayText(_ context.Context, _ app.PlayMeta) error       { return nil }
+
+// captureStderr は関数実行中の os.Stderr への出力を文字列として収集する。
+// buildLoggerFromFlags が os.Stderr に書くため、WARN ログの検証に使う。
+func captureStderr(t *testing.T, fn func()) string {
+	t.Helper()
+	orig := os.Stderr
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("os.Pipe: %v", err)
+	}
+	os.Stderr = w
+
+	done := make(chan string, 1)
+	go func() {
+		var out bytes.Buffer
+		_, _ = out.ReadFrom(r)
+		done <- out.String()
+	}()
+
+	fn()
+
+	_ = w.Close()
+	os.Stderr = orig
+	return <-done
+}
+
 func findViewerCmd(t *testing.T, rootCmd *cobra.Command) *cobra.Command {
 	t.Helper()
 	for _, c := range rootCmd.Commands() {

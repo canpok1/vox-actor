@@ -276,7 +276,8 @@ func TestWatchE2E_UsageError_ExitCode2(t *testing.T) {
 		args []string
 	}{
 		{name: "queue with positional arg", args: []string{"watch", "--queue", "--dry-run", dir}},
-		{name: "stream with dry-run", args: []string{"watch", "--stream", "--dry-run", dir}},
+		{name: "stream flag removed", args: []string{"watch", "--stream", dir}},
+		{name: "stream-addr flag removed", args: []string{"watch", "--stream-addr", "0.0.0.0:9090", dir}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

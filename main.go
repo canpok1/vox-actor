@@ -54,12 +54,11 @@ func main() {
 			DirWatcherFactory: dirWatcherFactory,
 		},
 		Watch: &cmd.WatchDeps{
-			Reader:              reader,
-			ClientFactory:       clientFactory,
-			Player:              player,
-			Mover:               mover,
-			DirWatcherFactory:   dirWatcherFactory,
-			StreamPlayerFactory: streamPlayerFactory,
+			Reader:            reader,
+			ClientFactory:     clientFactory,
+			Player:            player,
+			Mover:             mover,
+			DirWatcherFactory: dirWatcherFactory,
 		},
 		Viewer: &cmd.ViewerDeps{
 			Reader:              reader,
