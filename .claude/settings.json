@@ -71,7 +71,6 @@
         "hooks": [
           {
             "type": "command",
-            "if": "Bash(git commit *)",
             "command": "./.claude/hooks/block-commit-on-main.sh",
             "timeout": 10
           }
