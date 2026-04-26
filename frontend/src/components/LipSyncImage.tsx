@@ -44,6 +44,7 @@ export function LipSyncImage({
     return () => {
       if (closeTimerRef.current) {
         clearTimeout(closeTimerRef.current);
+        closeTimerRef.current = null;
       }
     };
   }, [volume, threshold, hysteresisMs]);
