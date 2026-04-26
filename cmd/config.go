@@ -1,7 +1,10 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/canpok1/vox-actor/internal/infra"
@@ -11,6 +14,7 @@ import (
 // supportedConfigKeys は `vox-actor config <key>` で解決可能なキーをアルファベット順で保持する。
 var supportedConfigKeys = []string{
 	"path.queue",
+	"path.tmp",
 	"path.workspace",
 }
 
@@ -39,9 +43,19 @@ func runConfig(cmd *cobra.Command, key string) error {
 	)
 	switch key {
 	case "path.queue":
-		path, err = infra.ResolveQueuePath()
+		var ws string
+		ws, err = resolveWorkspaceWithFallback()
+		if err == nil {
+			path = filepath.Join(ws, "queue")
+		}
+	case "path.tmp":
+		var ws string
+		ws, err = resolveWorkspaceWithFallback()
+		if err == nil {
+			path = filepath.Join(ws, "tmp")
+		}
 	case "path.workspace":
-		path, err = infra.ResolveWorkspacePath()
+		path, err = resolveWorkspaceWithFallback()
 	default:
 		return fmt.Errorf("%w: unknown key: %s\nsupported keys:\n%s", ErrUsage, key, formatSupportedKeys())
 	}
@@ -52,6 +66,19 @@ func runConfig(cmd *cobra.Command, key string) error {
 		return err
 	}
 	return nil
+}
+
+// resolveWorkspaceWithFallback はワークスペースルートを解決し、git管理外の場合はカレントディレクトリにフォールバックする。
+func resolveWorkspaceWithFallback() (string, error) {
+	path, err := infra.ResolveWorkspacePath()
+	if errors.Is(err, infra.ErrNotInGitRepo) {
+		cwd, cwdErr := os.Getwd()
+		if cwdErr != nil {
+			return "", cwdErr
+		}
+		return cwd, nil
+	}
+	return path, err
 }
 
 func formatSupportedKeys() string {
