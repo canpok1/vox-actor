@@ -33,6 +33,18 @@ func main() {
 	reader := infra.NewFileReader()
 	mover := infra.NewFileMover()
 
+	streamPlayerFactory := func(addr string, logger *slog.Logger, speakerLookup map[int]entity.SpeakerStyleInfo, client app.VoicevoxClient) (app.StreamPlayer, error) {
+		staticFS, err := streamAssetsFS()
+		if err != nil {
+			return nil, fmt.Errorf("failed to resolve stream assets: %w", err)
+		}
+		return infra.NewHTTPStreamPlayer(addr, staticFS,
+			infra.WithHTTPStreamLogger(logger),
+			infra.WithSpeakerLookup(speakerLookup),
+			infra.WithVoicevoxClient(client),
+		)
+	}
+
 	deps := &cmd.Deps{
 		Act: &cmd.ActDeps{
 			Reader:            reader,
@@ -42,22 +54,19 @@ func main() {
 			DirWatcherFactory: dirWatcherFactory,
 		},
 		Watch: &cmd.WatchDeps{
-			Reader:            reader,
-			ClientFactory:     clientFactory,
-			Player:            player,
-			Mover:             mover,
-			DirWatcherFactory: dirWatcherFactory,
-			StreamPlayerFactory: func(addr string, logger *slog.Logger, speakerLookup map[int]entity.SpeakerStyleInfo, client app.VoicevoxClient) (app.StreamPlayer, error) {
-				staticFS, err := streamAssetsFS()
-				if err != nil {
-					return nil, fmt.Errorf("failed to resolve stream assets: %w", err)
-				}
-				return infra.NewHTTPStreamPlayer(addr, staticFS,
-					infra.WithHTTPStreamLogger(logger),
-					infra.WithSpeakerLookup(speakerLookup),
-					infra.WithVoicevoxClient(client),
-				)
-			},
+			Reader:              reader,
+			ClientFactory:       clientFactory,
+			Player:              player,
+			Mover:               mover,
+			DirWatcherFactory:   dirWatcherFactory,
+			StreamPlayerFactory: streamPlayerFactory,
+		},
+		Viewer: &cmd.ViewerDeps{
+			Reader:              reader,
+			ClientFactory:       clientFactory,
+			Mover:               mover,
+			DirWatcherFactory:   dirWatcherFactory,
+			StreamPlayerFactory: streamPlayerFactory,
 		},
 		Say: &cmd.SayDeps{
 			ClientFactory: clientFactory,

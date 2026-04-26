@@ -28,8 +28,8 @@ func buildLoggerFromFlags(cmd *cobra.Command) *slog.Logger {
 	}))
 }
 
-// registerCommonFlags は各サブコマンド共通のフラグを登録する。
-func registerCommonFlags(cmd *cobra.Command) {
+// registerBaseFlags は dry-run を除く共通フラグを登録する。viewer など dry-run を持たないコマンドで使う。
+func registerBaseFlags(cmd *cobra.Command) {
 	engineURLDefault := "http://localhost:50021"
 	if v := os.Getenv("VOX_ENGINE_URL"); v != "" {
 		engineURLDefault = v
@@ -48,5 +48,10 @@ func registerCommonFlags(cmd *cobra.Command) {
 	cmd.Flags().Float64("pitch", 0.0, "音高")
 	cmd.Flags().Float64("intonation", 1.0, "抑揚")
 	cmd.Flags().Bool("verbose", false, "詳細ログを出力")
+}
+
+// registerCommonFlags は各サブコマンド共通のフラグを登録する。
+func registerCommonFlags(cmd *cobra.Command) {
+	registerBaseFlags(cmd)
 	cmd.Flags().Bool("dry-run", false, "VOICEVOX・音声再生を行わず、読み上げ対象をログ出力")
 }
