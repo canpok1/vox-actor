@@ -80,18 +80,80 @@ func resolveWatchPaths(args []string, useQueue bool, deps *WatchDeps) ([]string,
 		return args, nil
 	}
 
-	resolver := infra.ResolveQueuePath
-	if deps != nil && deps.QueuePathResolver != nil {
+	var resolver func() (string, error)
+	if deps != nil {
 		resolver = deps.QueuePathResolver
 	}
-	queuePath, err := resolver()
+	queuePath, err := resolveQueueDir(resolver)
 	if err != nil {
 		return nil, err
 	}
-	if err := os.MkdirAll(queuePath, 0o755); err != nil {
-		return nil, fmt.Errorf("failed to create queue directory %s: %w", queuePath, err)
-	}
 	return []string{queuePath}, nil
+}
+
+// startStreamPlayer は HealthCheck → /speakers 取得 → lookup 構築 → StreamPlayer 起動を行う。
+// VOICEVOX への接続失敗時は無音モードにフォールバックして起動を継続する（#284）。
+// 成功した場合、呼び出し元は defer sp.Shutdown を責務とする。
+func startStreamPlayer(
+	ctx context.Context,
+	addr string,
+	logger *slog.Logger,
+	client app.VoicevoxClient,
+	factory func(string, *slog.Logger, map[int]entity.SpeakerStyleInfo, app.VoicevoxClient) (app.StreamPlayer, error),
+) (sp app.StreamPlayer, silent bool, err error) {
+	var (
+		lookup       map[int]entity.SpeakerStyleInfo
+		silentReason string
+	)
+	if hcErr := client.HealthCheck(ctx); hcErr != nil {
+		silent = true
+		silentReason = silentReasonHealthCheckFailed
+		logger.Warn(silentLogMessage, "error", fmt.Errorf("health check failed: %w", hcErr))
+	} else {
+		speakers, gsErr := client.GetSpeakers(ctx)
+		if gsErr != nil {
+			silent = true
+			silentReason = silentReasonGetSpeakersFailed
+			logger.Warn(silentLogMessage, "error", fmt.Errorf("get speakers failed: %w", gsErr))
+		} else {
+			lookup = entity.BuildSpeakerStyleLookup(speakers)
+			logger.Info("speakers loaded", "speakerCount", len(speakers), "styleCount", len(lookup))
+		}
+	}
+	if silent {
+		lookup = map[int]entity.SpeakerStyleInfo{}
+	}
+
+	sp, err = factory(addr, logger, lookup, client)
+	if err != nil {
+		return nil, false, fmt.Errorf("failed to create stream player: %w", err)
+	}
+	if silent {
+		sp.SetSilent(silentReason)
+	}
+	if err = sp.Start(ctx); err != nil {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = sp.Shutdown(shutdownCtx)
+		return nil, false, fmt.Errorf("failed to start stream server: %w", err)
+	}
+	return sp, silent, nil
+}
+
+// resolveQueueDir はキュー解決関数を使ってキューディレクトリパスを解決・自動作成する。
+// resolver が nil の場合は infra.ResolveQueuePath を使う。
+func resolveQueueDir(resolver func() (string, error)) (string, error) {
+	if resolver == nil {
+		resolver = infra.ResolveQueuePath
+	}
+	queuePath, err := resolver()
+	if err != nil {
+		return "", err
+	}
+	if err := os.MkdirAll(queuePath, 0o755); err != nil {
+		return "", fmt.Errorf("failed to create queue directory %s: %w", queuePath, err)
+	}
+	return queuePath, nil
 }
 
 func runWatch(cmd *cobra.Command, args []string, deps *WatchDeps) error {
@@ -147,41 +209,11 @@ func runWatch(cmd *cobra.Command, args []string, deps *WatchDeps) error {
 			return fmt.Errorf("stream player factory is not initialized")
 		}
 
-		// HealthCheck → /speakers 取得 → lookup を組み立ててから stream player を起動する。
-		// どちらかが失敗した場合は無音モードにフォールバックして起動を継続する（#284）。
-		var (
-			lookup       map[int]entity.SpeakerStyleInfo
-			silentReason string
-		)
-		if err := client.HealthCheck(ctx); err != nil {
-			silent = true
-			silentReason = silentReasonHealthCheckFailed
-			logger.Warn(silentLogMessage, "error", fmt.Errorf("health check failed: %w", err))
-		} else {
-			speakers, err := client.GetSpeakers(ctx)
-			if err != nil {
-				silent = true
-				silentReason = silentReasonGetSpeakersFailed
-				logger.Warn(silentLogMessage, "error", fmt.Errorf("get speakers failed: %w", err))
-			} else {
-				lookup = entity.BuildSpeakerStyleLookup(speakers)
-				logger.Info("speakers loaded", "speakerCount", len(speakers), "styleCount", len(lookup))
-			}
-		}
-		if silent {
-			lookup = map[int]entity.SpeakerStyleInfo{}
-		}
-
-		sp, err := deps.StreamPlayerFactory(streamAddr, logger, lookup, client)
+		sp, isSilent, err := startStreamPlayer(ctx, streamAddr, logger, client, deps.StreamPlayerFactory)
 		if err != nil {
-			return fmt.Errorf("failed to create stream player: %w", err)
+			return err
 		}
-		if silent {
-			sp.SetSilent(silentReason)
-		}
-		if err := sp.Start(ctx); err != nil {
-			return fmt.Errorf("failed to start stream server: %w", err)
-		}
+		silent = isSilent
 		defer func() {
 			shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()

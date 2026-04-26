@@ -175,6 +175,64 @@ vox-actor watch --queue --delete
 vox-actor watch --queue --stream
 ```
 
+## `viewer` サブコマンド
+
+```
+vox-actor viewer [--watch <dir>]... [--watch-queue] [--delete] \
+                 [--host <host>] [--port <port>] \
+                 [--engine-url <url>] [--speaker <id>] \
+                 [--speed N] [--pitch N] [--intonation N] [--verbose]
+```
+
+HTTPサーバーとブラウザUIを起動し、SSE経由でブラウザに音声を配信する。ブラウザ配信専用のサブコマンドで、`--watch` や `--watch-queue` でディレクトリを監視しながら配信できる。
+
+| オプション | 環境変数 | デフォルト値 | 説明 |
+|---|---|---|---|
+| `--watch <dir>` | — | （未指定可・複数可） | 監視対象ディレクトリ（`--watch dir1 --watch dir2` のように複数回指定） |
+| `--watch-queue` | — | `false` | `vox-actor config path.queue` で解決される queue ディレクトリを監視対象に追加 |
+| `--delete` | — | `false` | 処理済みファイルを削除（未指定時は各ディレクトリの `done/` に移動） |
+| `--host` | — | `127.0.0.1` | HTTPサーバーのバインドホスト |
+| `--port` | — | `8080` | HTTPサーバーのバインドポート（1〜65535） |
+| `--engine-url` | `VOX_ENGINE_URL` | `http://localhost:50021` | VOICEVOXエンジンのURL |
+| `--speaker` | `VOX_SPEAKER` | `3` | 既定話者ID |
+| `--speed` | — | `1.0` | 話速 |
+| `--pitch` | — | `0.0` | 音高 |
+| `--intonation` | — | `1.0` | 抑揚 |
+| `--verbose` | — | `false` | 詳細ログを出力 |
+
+### 起動パターン
+
+```bash
+# 監視なし（HTTP+UIのみ）。「音声テスト」タブだけが機能する
+vox-actor viewer
+
+# ディレクトリを監視しながら配信
+vox-actor viewer --watch /path/to/dir
+
+# 複数ディレクトリを並列監視
+vox-actor viewer --watch /path/to/dir1 --watch /path/to/dir2
+
+# queue ディレクトリを監視
+vox-actor viewer --watch-queue
+
+# --watch と --watch-queue の併用
+vox-actor viewer --watch /extra/dir --watch-queue
+
+# バインドアドレスを変更（LAN公開）
+vox-actor viewer --host 0.0.0.0 --port 8080
+```
+
+### エラー条件
+
+| 状況 | 終了コード | エラー出力 |
+|---|---|---|
+| `--watch` のパスがディレクトリ以外 | 2 (`ErrUsage`) | `Error: <path> is not a directory` |
+| `--watch-queue` 指定時に git管理外かつ `VOX_ACTOR_WORKSPACE` 未設定 | 2 (`ErrUsage`) | `Error: gitコマンドが見つかりません` 等 |
+| `--port` が 1〜65535 範囲外 | 2 (`ErrUsage`) | `Error: invalid port: <n>` |
+| HTTPサーバー起動失敗（ポート占有等） | 1 | `Error: failed to start stream server: ...` |
+
+ブラウザUI・SSE・`/api/status`・無音モードの挙動は[ストリーム配信モード](#ストリーム配信モード)と同一です。
+
 ## `config` サブコマンド
 
 ```
@@ -322,17 +380,25 @@ fi
 
 ## ストリーム配信モード
 
-`watch --stream` を付けると、ローカルスピーカー再生の代わりにHTTPサーバーを起動し、SSE経由でブラウザに音声を配信します。音声デバイスが利用できない環境でホスト側のブラウザに再生させるケースで利用できます。
+HTTPサーバーを起動し、SSE経由でブラウザに音声を配信します。音声デバイスが利用できない環境でホスト側のブラウザに再生させるケースで利用できます。
+
+推奨は [`viewer` サブコマンド](#viewer-サブコマンド)を使う方法です。`watch --stream`（後方互換）も引き続き動作します。
 
 ```bash
-# デフォルト（127.0.0.1:8080 にバインド）
+# viewer（推奨）
+vox-actor viewer --watch /path/to/watch-dir
+
+# viewer でバインドアドレスを変更
+vox-actor viewer --host 0.0.0.0 --port 8080 --watch /path/to/watch-dir
+
+# watch --stream（後方互換）
 vox-actor watch --stream /path/to/watch-dir
 
-# バインドアドレスを変更
+# watch --stream でバインドアドレスを変更（後方互換）
 vox-actor watch --stream --stream-addr 0.0.0.0:8080 /path/to/watch-dir
 ```
 
-- `http://<stream-addr>/` をブラウザで開き、音量スライダーを操作すると再生が解禁されます（ブラウザの自動再生ポリシー対策）。
+- `http://<host>:<port>/` をブラウザで開き、音量スライダーを操作すると再生が解禁されます（ブラウザの自動再生ポリシー対策）。
 - 画面上部のタブで「配信」「音声テスト」を切り替えます。タブ切替時は再生中の音声が即停止し、再生キューも破棄されます。選択中のタブは localStorage に保存されてリロード後も復元されます（初期タブは「配信」）。
 - 「配信」タブはチャット風のタイムラインで、古いセリフが上、新しいセリフが下に並びます。再生中のセリフは背景色と `▶` アイコンで強調され、再生開始時に自動でスクロールして画面内に表示されます。
 - 各タイムライン項目はメタ行（時刻 / 話者名 / `[スタイル名]`）と本文の 2 段構成です。`☑話者名` `☑スタイル` `☑時刻` のチェックボックスで個別に表示/非表示を切り替えでき、状態は localStorage に保存されてリロード後も復元されます。
@@ -349,9 +415,9 @@ vox-actor watch --stream --stream-addr 0.0.0.0:8080 /path/to/watch-dir
 
 ### 無音モード（VOICEVOX 未起動時の自動フォールバック）
 
-`watch --stream` 起動時に VOICEVOX エンジンへの `HealthCheck` または `/speakers` 取得が失敗した場合、エラー終了せず**無音モード**で起動を継続します。VOICEVOX を立ち上げずに `watch --stream` でテキストだけをブラウザで読みたいときに有効です。
+`viewer` または `watch --stream` 起動時に VOICEVOX エンジンへの `HealthCheck` または `/speakers` 取得が失敗した場合、エラー終了せず**無音モード**で起動を継続します。VOICEVOX を立ち上げずにテキストだけをブラウザで読みたいときに有効です。
 
-- 判定は **watch 起動時のみ** 行われます。起動後にエンジンが切断されても無音モードへは切り替わりません（リカバリ対象外）。
+- 判定は **起動時のみ** 行われます。起動後にエンジンが切断されても無音モードへは切り替わりません（リカバリ対象外）。
 - フォールバック発動時、標準エラー出力に WARN ログ `VOICEVOX engine unreachable, continuing in silent mode (no audio will be played)` が1回出力されます。`error` 属性で `HealthCheck` 失敗か `GetSpeakers` 失敗かを識別できます。
 - 無音モード時は通常モードと比べて次のような挙動になります:
   - WAV の合成・配信は行われず、`clipEvent.url` は空文字で配信されます。`/clips/{id}.wav` へのリクエストは 404 を返します。
@@ -361,7 +427,7 @@ vox-actor watch --stream --stream-addr 0.0.0.0:8080 /path/to/watch-dir
   - ヘッダーの SSE 接続バッジの右隣に `🔇 無音モード` バッジが表示され、ホバーまたはタップで無音モードに入った理由と対処法（VOICEVOX を起動した状態で `watch --stream` を起動し直すなど）をツールチップで確認できます。
 - サーバーの現在の状態は `GET /api/status` で取得できます。無音フラグ・理由文面・話者一覧をまとめて返す単一エンドポイントで、既存の `/speakers.json` は廃止されています。
 - ディレクトリ監視・`done/` への移動／削除は無音モードでも通常通り実施されます。
-- 非ストリームの `watch` / `say` / `act` では従来通り `HealthCheck` 失敗時に即エラー終了します（本フォールバックは `watch --stream` のみ）。
+- 非ストリームの `watch` / `say` / `act` では従来通り `HealthCheck` 失敗時に即エラー終了します（本フォールバックは `viewer` / `watch --stream` のみ）。
 
 ## dry-runモード
 
