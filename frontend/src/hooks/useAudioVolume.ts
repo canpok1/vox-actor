@@ -28,6 +28,8 @@ export function useAudioVolume(
         (window as unknown as { webkitAudioContext: typeof AudioContext })
           .webkitAudioContext) as typeof AudioContext;
       const audioContext = new AudioContextConstructor();
+      audioContext.resume();
+
       const analyser = audioContext.createAnalyser();
       analyser.fftSize = 512;
 
