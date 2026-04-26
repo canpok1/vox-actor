@@ -167,7 +167,7 @@ func TestViewerCmd_PortOutOfRange_ReturnsUsageError(t *testing.T) {
 			deps := &Deps{
 				Viewer: &ViewerDeps{
 					ClientFactory: func(_ string) app.VoicevoxClient { return &stubVoicevoxClient{} },
-					StreamPlayerFactory: func(_ string, _ *slog.Logger, _ map[int]entity.SpeakerStyleInfo, _ app.VoicevoxClient) (app.StreamPlayer, error) {
+					StreamPlayerFactory: func(_ string, _ *slog.Logger, _ map[int]entity.SpeakerStyleInfo, _ []int, _ app.VoicevoxClient) (app.StreamPlayer, error) {
 						return &stubStreamPlayer{}, nil
 					},
 				},
@@ -199,7 +199,7 @@ func TestViewerCmd_WatchWithFile_ReturnsUsageError(t *testing.T) {
 	deps := &Deps{
 		Viewer: &ViewerDeps{
 			ClientFactory: func(_ string) app.VoicevoxClient { return &stubVoicevoxClient{} },
-			StreamPlayerFactory: func(_ string, _ *slog.Logger, _ map[int]entity.SpeakerStyleInfo, _ app.VoicevoxClient) (app.StreamPlayer, error) {
+			StreamPlayerFactory: func(_ string, _ *slog.Logger, _ map[int]entity.SpeakerStyleInfo, _ []int, _ app.VoicevoxClient) (app.StreamPlayer, error) {
 				return &stubStreamPlayer{}, nil
 			},
 		},
@@ -223,7 +223,7 @@ func TestViewerCmd_WatchWithNonExistentPath_ReturnsUsageError(t *testing.T) {
 	deps := &Deps{
 		Viewer: &ViewerDeps{
 			ClientFactory: func(_ string) app.VoicevoxClient { return &stubVoicevoxClient{} },
-			StreamPlayerFactory: func(_ string, _ *slog.Logger, _ map[int]entity.SpeakerStyleInfo, _ app.VoicevoxClient) (app.StreamPlayer, error) {
+			StreamPlayerFactory: func(_ string, _ *slog.Logger, _ map[int]entity.SpeakerStyleInfo, _ []int, _ app.VoicevoxClient) (app.StreamPlayer, error) {
 				return &stubStreamPlayer{}, nil
 			},
 		},
@@ -264,7 +264,7 @@ func TestViewerCmd_HealthCheckFailure_FallsBackToSilent(t *testing.T) {
 			ClientFactory:     func(_ string) app.VoicevoxClient { return &stubVoicevoxClient{healthCheckErr: errors.New("down")} },
 			Mover:             stubFileMover{},
 			DirWatcherFactory: func(_ *slog.Logger) app.DirWatcher { return stubDirWatcher{} },
-			StreamPlayerFactory: func(_ string, _ *slog.Logger, _ map[int]entity.SpeakerStyleInfo, _ app.VoicevoxClient) (app.StreamPlayer, error) {
+			StreamPlayerFactory: func(_ string, _ *slog.Logger, _ map[int]entity.SpeakerStyleInfo, _ []int, _ app.VoicevoxClient) (app.StreamPlayer, error) {
 				return sp, nil
 			},
 		},
@@ -292,7 +292,7 @@ func TestViewerCmd_GetSpeakersFailure_FallsBackToSilent(t *testing.T) {
 			},
 			Mover:             stubFileMover{},
 			DirWatcherFactory: func(_ *slog.Logger) app.DirWatcher { return stubDirWatcher{} },
-			StreamPlayerFactory: func(_ string, _ *slog.Logger, _ map[int]entity.SpeakerStyleInfo, _ app.VoicevoxClient) (app.StreamPlayer, error) {
+			StreamPlayerFactory: func(_ string, _ *slog.Logger, _ map[int]entity.SpeakerStyleInfo, _ []int, _ app.VoicevoxClient) (app.StreamPlayer, error) {
 				return sp, nil
 			},
 		},
@@ -324,7 +324,7 @@ func TestViewerCmd_EngineHealthy_DoesNotEnterSilent(t *testing.T) {
 			},
 			Mover:             stubFileMover{},
 			DirWatcherFactory: func(_ *slog.Logger) app.DirWatcher { return stubDirWatcher{} },
-			StreamPlayerFactory: func(_ string, _ *slog.Logger, _ map[int]entity.SpeakerStyleInfo, _ app.VoicevoxClient) (app.StreamPlayer, error) {
+			StreamPlayerFactory: func(_ string, _ *slog.Logger, _ map[int]entity.SpeakerStyleInfo, _ []int, _ app.VoicevoxClient) (app.StreamPlayer, error) {
 				return sp, nil
 			},
 		},
@@ -354,7 +354,7 @@ func TestViewerCmd_WatchQueue_ResolvesAndCreatesQueueDir(t *testing.T) {
 			ClientFactory:     func(_ string) app.VoicevoxClient { return &stubVoicevoxClient{} },
 			Mover:             stubFileMover{},
 			DirWatcherFactory: func(_ *slog.Logger) app.DirWatcher { return stubDirWatcher{} },
-			StreamPlayerFactory: func(_ string, _ *slog.Logger, _ map[int]entity.SpeakerStyleInfo, _ app.VoicevoxClient) (app.StreamPlayer, error) {
+			StreamPlayerFactory: func(_ string, _ *slog.Logger, _ map[int]entity.SpeakerStyleInfo, _ []int, _ app.VoicevoxClient) (app.StreamPlayer, error) {
 				return sp, nil
 			},
 			QueuePathResolver: func() (string, error) {
@@ -382,7 +382,7 @@ func TestViewerCmd_WatchQueue_ResolverReturnsNotInRepo_ReturnsError(t *testing.T
 	deps := &Deps{
 		Viewer: &ViewerDeps{
 			ClientFactory: func(_ string) app.VoicevoxClient { return &stubVoicevoxClient{} },
-			StreamPlayerFactory: func(_ string, _ *slog.Logger, _ map[int]entity.SpeakerStyleInfo, _ app.VoicevoxClient) (app.StreamPlayer, error) {
+			StreamPlayerFactory: func(_ string, _ *slog.Logger, _ map[int]entity.SpeakerStyleInfo, _ []int, _ app.VoicevoxClient) (app.StreamPlayer, error) {
 				return &stubStreamPlayer{}, nil
 			},
 			QueuePathResolver: func() (string, error) {

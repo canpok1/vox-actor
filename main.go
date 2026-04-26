@@ -33,7 +33,7 @@ func main() {
 	reader := infra.NewFileReader()
 	mover := infra.NewFileMover()
 
-	streamPlayerFactory := func(addr string, logger *slog.Logger, speakerLookup map[int]entity.SpeakerStyleInfo, client app.VoicevoxClient) (app.StreamPlayer, error) {
+	streamPlayerFactory := func(addr string, logger *slog.Logger, speakerLookup map[int]entity.SpeakerStyleInfo, orderedSpeakerIDs []int, client app.VoicevoxClient) (app.StreamPlayer, error) {
 		staticFS, err := streamAssetsFS()
 		if err != nil {
 			return nil, fmt.Errorf("failed to resolve stream assets: %w", err)
@@ -41,6 +41,7 @@ func main() {
 		opts := []infra.HTTPStreamOption{
 			infra.WithHTTPStreamLogger(logger),
 			infra.WithSpeakerLookup(speakerLookup),
+			infra.WithOrderedSpeakerIDs(orderedSpeakerIDs),
 			infra.WithVoicevoxClient(client),
 		}
 		workspacePath, wsErr := infra.ResolveWorkspacePath()
