@@ -530,8 +530,8 @@ type characterEntry struct {
 
 // apiCharactersJSON は GET /api/characters のレスポンスペイロード。
 type apiCharactersJSON struct {
-	Enabled    bool               `json:"enabled"`
-	Characters []characterEntry   `json:"characters"`
+	Enabled    bool             `json:"enabled"`
+	Characters []characterEntry `json:"characters"`
 }
 
 // buildAPIStatusJSON は speakerLookup と silent 状態から /api/status のレスポンスを
