@@ -658,7 +658,7 @@ func validateImagePath(relPath string, baseDir string) error {
 		return fmt.Errorf("path traversal detected")
 	}
 	if strings.Contains(relPath, "..") {
-		return fmt.Errorf("path contains ..")
+		return fmt.Errorf("path contains parent directory reference")
 	}
 
 	pathSegments := strings.Split(relPath, "/")
