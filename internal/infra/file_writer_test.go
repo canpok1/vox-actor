@@ -207,23 +207,19 @@ func TestFileWriter_Write_Txt_TextOnly(t *testing.T) {
 	}
 }
 
-func TestFileWriter_Write_UnknownExt_TextOnly(t *testing.T) {
+func TestFileWriter_Write_UnknownExt_ReturnsError(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
 	dest := filepath.Join(dir, "out.foo")
 
 	w := infra.NewFileWriter()
-	if _, err := w.Write(dest, entity.Script{Text: "未知拡張子"}); err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	_, err := w.Write(dest, entity.Script{Text: "未知拡張子"})
+	if err == nil {
+		t.Fatal("expected error for unknown extension, got nil")
 	}
-
-	data, err := os.ReadFile(dest)
-	if err != nil {
-		t.Fatalf("read failed: %v", err)
-	}
-	if string(data) != "未知拡張子" {
-		t.Errorf("expected exact text, got: %q", string(data))
+	if !strings.Contains(err.Error(), "unsupported output extension") {
+		t.Errorf("expected 'unsupported output extension' in error, got: %v", err)
 	}
 }
 
@@ -343,5 +339,133 @@ func TestFileWriter_Write_MissingParentDir_ReturnsError(t *testing.T) {
 	w := infra.NewFileWriter()
 	if _, err := w.Write(dest, entity.Script{Text: "本文"}); err == nil {
 		t.Fatal("expected error for missing parent directory, got nil")
+	}
+}
+
+// ディレクトリ指定時のテスト
+
+func TestFileWriter_Write_DirectoryTarget_CreatesAutoNamedFile(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	outDir := filepath.Join(dir, "out")
+	if err := os.Mkdir(outDir, 0o755); err != nil {
+		t.Fatalf("failed to create output dir: %v", err)
+	}
+
+	w := infra.NewFileWriter()
+	written, err := w.Write(outDir, entity.Script{
+		Text:       "ディレクトリ指定",
+		SpeakerID:  ptrInt(2),
+		SpeedScale: ptrFloat64(1.1),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// 出力先は outDir 配下、かつ _say.json で終わる
+	if !strings.HasPrefix(written, outDir) {
+		t.Errorf("expected written path under %s, got %s", outDir, written)
+	}
+	if !strings.HasSuffix(written, "_say.json") {
+		t.Errorf("expected filename ending with _say.json, got %s", filepath.Base(written))
+	}
+
+	// ファイルが実際に存在し、JSONで読める
+	data, err := os.ReadFile(written)
+	if err != nil {
+		t.Fatalf("failed to read written file: %v", err)
+	}
+	var got map[string]any
+	if err := json.Unmarshal(data, &got); err != nil {
+		t.Fatalf("invalid JSON written: %v", err)
+	}
+	if got["text"] != "ディレクトリ指定" {
+		t.Errorf("text mismatch: %v", got["text"])
+	}
+	if got["speaker"].(float64) != 2 {
+		t.Errorf("speaker mismatch: %v", got["speaker"])
+	}
+}
+
+func TestFileWriter_Write_DirectoryTargetTrailingSlash_CreatesDir(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	outDir := filepath.Join(dir, "newdir") + string(os.PathSeparator)
+
+	w := infra.NewFileWriter()
+	written, err := w.Write(outDir, entity.Script{Text: "末尾スラッシュ指定"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// ディレクトリが作成され、その下にファイルが生成される
+	if !strings.HasSuffix(written, "_say.json") {
+		t.Errorf("expected filename ending with _say.json, got %s", filepath.Base(written))
+	}
+
+	data, err := os.ReadFile(written)
+	if err != nil {
+		t.Fatalf("failed to read written file: %v", err)
+	}
+	if !strings.Contains(string(data), "末尾スラッシュ指定") {
+		t.Errorf("text not found in file: %s", string(data))
+	}
+}
+
+// ファイル拡張子検証のテスト
+
+func TestFileWriter_Write_NoExtension_ReturnsError(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	dest := filepath.Join(dir, "noext")
+
+	w := infra.NewFileWriter()
+	_, err := w.Write(dest, entity.Script{Text: "本文"})
+	if err == nil {
+		t.Fatal("expected error for no extension, got nil")
+	}
+	if !strings.Contains(err.Error(), "no extension") {
+		t.Errorf("expected 'no extension' in error message, got: %v", err)
+	}
+}
+
+func TestFileWriter_Write_UnsupportedExtension_ReturnsError(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	dest := filepath.Join(dir, "out.csv")
+
+	w := infra.NewFileWriter()
+	_, err := w.Write(dest, entity.Script{Text: "本文"})
+	if err == nil {
+		t.Fatal("expected error for unsupported extension, got nil")
+	}
+	errMsg := err.Error()
+	if !strings.Contains(errMsg, "unsupported output extension") && !strings.Contains(errMsg, ".csv") {
+		t.Errorf("expected error message mentioning unsupported extension, got: %v", err)
+	}
+}
+
+func TestFileWriter_Write_SupportedExtensions_AllWork(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	exts := []string{".json", ".jsonl", ".txt"}
+
+	for _, ext := range exts {
+		t.Run(ext, func(t *testing.T) {
+			dest := filepath.Join(dir, "out"+ext)
+			w := infra.NewFileWriter()
+			_, err := w.Write(dest, entity.Script{Text: "テスト"})
+			if err != nil {
+				t.Fatalf("unexpected error for %s: %v", ext, err)
+			}
+			if _, err := os.Stat(dest); err != nil {
+				t.Fatalf("file not created: %v", err)
+			}
+		})
 	}
 }
