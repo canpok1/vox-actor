@@ -1582,3 +1582,41 @@ func TestHTTPStreamPlayer_ImplementsErrorBroadcaster(t *testing.T) {
 	t.Parallel()
 	var _ app.ErrorBroadcaster = (*HTTPStreamPlayer)(nil)
 }
+
+// #323 キャラクタータブ / 口パク:
+// TODO: GET /api/characters が enabled=false, characters=[] を返す（無効な場合）
+// TODO: settings.json が存在しない場合に enabled=false を返す
+// TODO: settings.json のパース失敗時に enabled=false を返す
+// TODO: GET /api/characters が有効な場合に enabled=true と characters 配列を返す
+// TODO: 画像パスに `..` を含む場合は該当エントリを無視し enabled=false になる
+// TODO: 画像ファイル不在の場合は該当エントリを無視する
+// TODO: 全エントリが無効な場合は enabled=false を返す
+// TODO: GET /assets/images/characters/<relative-path> が画像ファイルを配信する
+// TODO: GET /assets/images/characters/<relative-path> でパス検証（..や先頭/拒否）
+// TODO: speakerName + styleName が重複する場合はエラー（startup 時）
+// TODO: ミュート中でも画像キャッシュは読み込まれる（lazy load on start）
+
+func TestHTTPStreamPlayer_APICharacters_DisabledWhenNoWorkspacePath(t *testing.T) {
+	t.Parallel()
+	p := newStartedPlayer(t)
+	resp, err := http.Get("http://" + p.Addr() + "/api/characters")
+	if err != nil {
+		t.Fatalf("GET /api/characters: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status: %d", resp.StatusCode)
+	}
+	var result map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	enabled, ok := result["enabled"].(bool)
+	if !ok || enabled {
+		t.Errorf("expected enabled=false, got %v", result)
+	}
+	chars, ok := result["characters"].([]interface{})
+	if !ok || len(chars) != 0 {
+		t.Errorf("expected characters=[], got %v", result)
+	}
+}

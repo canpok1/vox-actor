@@ -38,11 +38,16 @@ func main() {
 		if err != nil {
 			return nil, fmt.Errorf("failed to resolve stream assets: %w", err)
 		}
-		return infra.NewHTTPStreamPlayer(addr, staticFS,
+		opts := []infra.HTTPStreamOption{
 			infra.WithHTTPStreamLogger(logger),
 			infra.WithSpeakerLookup(speakerLookup),
 			infra.WithVoicevoxClient(client),
-		)
+		}
+		workspacePath, wsErr := infra.ResolveWorkspacePath()
+		if wsErr == nil {
+			opts = append(opts, infra.WithWorkspacePath(workspacePath))
+		}
+		return infra.NewHTTPStreamPlayer(addr, staticFS, opts...)
 	}
 
 	deps := &cmd.Deps{

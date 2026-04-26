@@ -9,6 +9,9 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"os"
+	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -32,6 +35,12 @@ type HTTPStreamPlayer struct {
 	staticFS fs.FS
 	// apiStatusJSON は Start 時に speakerLookup と silent 状態から一度だけマーシャルしたレスポンス。
 	apiStatusJSON []byte
+
+	// workspacePath はキャラクター設定ファイルの読み込み先ワークスペースルート。
+	// 空文字の場合はキャラクター機能は無効。
+	workspacePath string
+	// apiCharactersJSON は Start 時に characters 設定から一度だけマーシャルしたレスポンス。
+	apiCharactersJSON []byte
 
 	// speakerLookup は SpeakerID → 話者名/スタイル名 の解決マップ。
 	// nil または未ヒットの場合は `話者#<ID>` / 空文字 にフォールバックする。
@@ -158,6 +167,15 @@ func WithTestPhrase(phrase string) HTTPStreamOption {
 	}
 }
 
+// WithWorkspacePath はキャラクター設定ファイルの読み込み元ワークスペースルートを設定するオプション。
+func WithWorkspacePath(path string) HTTPStreamOption {
+	return func(p *HTTPStreamPlayer) {
+		if path != "" {
+			p.workspacePath = path
+		}
+	}
+}
+
 // withNowFunc は clipEvent の timestamp 取得に使う関数を設定する（テスト用）。
 func withNowFunc(now func() time.Time) HTTPStreamOption {
 	return func(p *HTTPStreamPlayer) {
@@ -207,6 +225,9 @@ func (p *HTTPStreamPlayer) Start(_ context.Context) error {
 	if err := p.buildAPIStatusJSON(); err != nil {
 		return err
 	}
+	if err := p.buildAPICharactersJSON(); err != nil {
+		return err
+	}
 
 	lis, err := net.Listen("tcp", p.addr)
 	if err != nil {
@@ -220,6 +241,8 @@ func (p *HTTPStreamPlayer) Start(_ context.Context) error {
 	mux.Handle("/", withStaticCacheControl(fileServer))
 	mux.HandleFunc("/events", p.handleEvents)
 	mux.HandleFunc("/api/status", p.handleAPIStatus)
+	mux.HandleFunc("/api/characters", p.handleAPICharacters)
+	mux.HandleFunc("/assets/images/characters/", p.handleCharacterImage)
 	mux.HandleFunc("/test-clip", p.handleTestClip)
 	mux.HandleFunc(clipPathPrefix, p.handleClip)
 
@@ -497,6 +520,20 @@ type apiStatusJSON struct {
 	Speakers     []speakerJSON `json:"speakers"`
 }
 
+// characterEntry は settings.json の character エントリ。
+type characterEntry struct {
+	SpeakerName string `json:"speakerName"`
+	StyleName   string `json:"styleName"`
+	MouthClosed string `json:"mouthClosed"`
+	MouthOpen   string `json:"mouthOpen"`
+}
+
+// apiCharactersJSON は GET /api/characters のレスポンスペイロード。
+type apiCharactersJSON struct {
+	Enabled    bool             `json:"enabled"`
+	Characters []characterEntry `json:"characters"`
+}
+
 // buildAPIStatusJSON は speakerLookup と silent 状態から /api/status のレスポンスを
 // Start 時に一度だけマーシャルしてキャッシュする。
 // 無音モードでは speakers は空配列として固定する。
@@ -532,9 +569,146 @@ func (p *HTTPStreamPlayer) buildAPIStatusJSON() error {
 	return nil
 }
 
+// buildAPICharactersJSON はキャラクター設定から /api/characters のレスポンスを
+// Start 時に一度だけマーシャルしてキャッシュする。
+// workspacePath が空の場合は enabled=false で固定する。
+func (p *HTTPStreamPlayer) buildAPICharactersJSON() error {
+	entries := []characterEntry{}
+	enabled := false
+
+	if p.workspacePath != "" {
+		loadedEntries, loadErr := loadCharacterSettings(p.workspacePath, p.logger)
+		if loadErr == nil && len(loadedEntries) > 0 {
+			entries = loadedEntries
+			enabled = true
+		}
+	}
+
+	payload, err := json.Marshal(apiCharactersJSON{
+		Enabled:    enabled,
+		Characters: entries,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to marshal api characters: %w", err)
+	}
+	p.apiCharactersJSON = payload
+	return nil
+}
+
+// loadCharacterSettings はworkspacePath/settings.jsonからキャラクター設定を読み込む。
+// JSON パース失敗、画像不在、パス検証エラーなどで無効なエントリは自動的に除外される。
+// 有効なエントリが 0 件の場合はエラーを返す。
+func loadCharacterSettings(workspacePath string, logger *slog.Logger) ([]characterEntry, error) {
+	settingsFile := filepath.Join(workspacePath, "settings.json")
+	data, err := os.ReadFile(settingsFile)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, nil
+		}
+		logger.Warn("failed to read settings.json", "path", settingsFile, "error", err)
+		return nil, nil
+	}
+
+	var settingsPayload struct {
+		Characters []characterEntry `json:"characters"`
+	}
+	if err := json.Unmarshal(data, &settingsPayload); err != nil {
+		logger.Warn("failed to parse settings.json", "path", settingsFile, "error", err)
+		return nil, nil
+	}
+
+	validEntries := []characterEntry{}
+	charactersDir := filepath.Join(workspacePath, "characters")
+
+	for _, entry := range settingsPayload.Characters {
+		if err := validateCharacterEntry(entry, charactersDir); err != nil {
+			logger.Warn("skipping invalid character entry", "speakerName", entry.SpeakerName, "styleName", entry.StyleName, "error", err)
+			continue
+		}
+		validEntries = append(validEntries, entry)
+	}
+
+	if len(validEntries) == 0 {
+		return nil, fmt.Errorf("no valid character entries found")
+	}
+
+	return validEntries, nil
+}
+
+// validateCharacterEntry は単一のキャラクター設定を検証する。
+// パス検証: .. や先頭 / を含む、セグメントが [A-Za-z0-9._-]+ 以外を含む場合はエラー。
+// 画像ファイル存在確認。
+func validateCharacterEntry(entry characterEntry, charactersDir string) error {
+	for _, imgPath := range []string{entry.MouthClosed, entry.MouthOpen} {
+		if imgPath == "" {
+			return fmt.Errorf("image path is empty")
+		}
+		if err := validateImagePath(imgPath, charactersDir); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// validateImagePath は相対パスの検証と存在確認を行う。
+// パストラバーサル (..を含む、/で始まる) を拒否し、
+// 各セグメントが [A-Za-z0-9._-]+ にマッチするか確認する。
+func validateImagePath(relPath string, baseDir string) error {
+	if strings.HasPrefix(relPath, "/") || strings.HasPrefix(relPath, "../") || strings.Contains(relPath, "/../") {
+		return fmt.Errorf("path traversal detected")
+	}
+	if strings.Contains(relPath, "..") {
+		return fmt.Errorf("path contains parent directory reference")
+	}
+
+	pathSegments := strings.Split(relPath, "/")
+	pathPattern := regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
+	for _, seg := range pathSegments {
+		if !pathPattern.MatchString(seg) {
+			return fmt.Errorf("invalid path segment: %s", seg)
+		}
+	}
+
+	fullPath := filepath.Join(baseDir, relPath)
+	if _, err := os.Stat(fullPath); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("image file not found: %s", relPath)
+		}
+		return err
+	}
+
+	return nil
+}
+
 func (p *HTTPStreamPlayer) handleAPIStatus(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	_, _ = w.Write(p.apiStatusJSON)
+}
+
+func (p *HTTPStreamPlayer) handleAPICharacters(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	_, _ = w.Write(p.apiCharactersJSON)
+}
+
+func (p *HTTPStreamPlayer) handleCharacterImage(w http.ResponseWriter, r *http.Request) {
+	if p.workspacePath == "" {
+		http.NotFound(w, r)
+		return
+	}
+
+	relPath := strings.TrimPrefix(r.URL.Path, "/assets/images/characters/")
+	if relPath == r.URL.Path {
+		http.NotFound(w, r)
+		return
+	}
+
+	if err := validateImagePath(relPath, filepath.Join(p.workspacePath, "characters")); err != nil {
+		http.Error(w, "invalid path", http.StatusBadRequest)
+		return
+	}
+
+	fullPath := filepath.Join(p.workspacePath, "characters", relPath)
+	http.ServeFile(w, r, fullPath)
 }
 
 func (p *HTTPStreamPlayer) handleTestClip(w http.ResponseWriter, r *http.Request) {

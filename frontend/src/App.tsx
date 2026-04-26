@@ -4,15 +4,18 @@ import { StatusBadge } from "./components/StatusBadge";
 import { StreamPanel } from "./components/StreamPanel";
 import { type TabName, Tabs } from "./components/Tabs";
 import { TestPanel } from "./components/TestPanel";
+import { CharacterPanel } from "./components/CharacterPanel";
 import { VolumeControls } from "./components/VolumeControls";
 import { useEventSource } from "./hooks/useEventSource";
 import { usePersistedState } from "./hooks/usePersistedState";
 import { usePlaybackQueue } from "./hooks/usePlaybackQueue";
 import {
   isApiStatus,
+  isApiCharacters,
   isClipEvent,
   isErrorEventPayload,
   type Speaker,
+  type CharacterEntry,
   type TimelineEntry,
 } from "./types/api";
 
@@ -32,7 +35,7 @@ const HISTORY_SIZE_OPTIONS: readonly number[] = [10, 20, 30, 50, 100, 200];
 const TEST_ERROR_DISPLAY_MS = 4000;
 
 const parseTab = (raw: string): TabName | null =>
-  raw === "stream" || raw === "test" ? raw : null;
+  raw === "stream" || raw === "test" || raw === "character" ? raw : null;
 
 const parseHistorySize = (raw: string): number | null => {
   const n = parseInt(raw, 10);
@@ -116,6 +119,8 @@ export function App() {
   const [silentReason, setSilentReason] = useState("");
   const [entries, setEntries] = useState<TimelineEntry[]>([]);
   const [testError, setTestError] = useState<string>("");
+  const [charactersEnabled, setCharactersEnabled] = useState(false);
+  const [characters, setCharacters] = useState<CharacterEntry[]>([]);
   const testErrorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const { playingClipId, enqueue } = usePlaybackQueue(
@@ -189,6 +194,29 @@ export function App() {
   }, [showTestError]);
 
   useEffect(() => {
+    let cancelled = false;
+    const load = async (): Promise<void> => {
+      try {
+        const resp = await fetch("/api/characters");
+        if (!resp.ok) throw new Error(`characters ${resp.status}`);
+        const data: unknown = await resp.json();
+        if (!isApiCharacters(data)) {
+          throw new Error("invalid api characters payload");
+        }
+        if (cancelled) return;
+        setCharactersEnabled(data.enabled);
+        setCharacters(data.characters);
+      } catch (err) {
+        console.error("failed to load api characters", err);
+      }
+    };
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
     if (speakers.length === 0) return;
     const exists = speakers.some((s) => String(s.id) === testSpeakerId);
     if (!exists) {
@@ -202,6 +230,13 @@ export function App() {
       setActiveTab("stream");
     }
   }, [silent, activeTab, setActiveTab]);
+
+  // キャラクター機能が無効な場合は「キャラ」タブを非表示にし、選択中だった場合は配信タブに戻す。
+  useEffect(() => {
+    if (!charactersEnabled && activeTab === "character") {
+      setActiveTab("stream");
+    }
+  }, [charactersEnabled, activeTab, setActiveTab]);
 
   const handleClip = useCallback(
     (data: string): void => {
@@ -287,7 +322,12 @@ export function App() {
         onVolumeChange={setVolume}
         onMuteChange={setMuted}
       />
-      <Tabs active={activeTab} onChange={setActiveTab} hideTest={silent} />
+      <Tabs
+        active={activeTab}
+        onChange={setActiveTab}
+        hideTest={silent}
+        hideCharacter={!charactersEnabled}
+      />
       <StreamPanel
         hidden={activeTab !== "stream"}
         entries={entries}
@@ -302,6 +342,15 @@ export function App() {
         onShowStyleNameChange={setShowStyleName}
         onShowTimestampChange={setShowTimestamp}
       />
+      {charactersEnabled && (
+        <CharacterPanel
+          hidden={activeTab !== "character"}
+          characters={characters}
+          playingClipId={playingClipId}
+          entries={entries}
+          audioRef={audioRef}
+        />
+      )}
       {!silent && (
         <TestPanel
           hidden={activeTab !== "test"}
