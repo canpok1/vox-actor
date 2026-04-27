@@ -29,8 +29,8 @@ const SLOT_PRIORITY: SlotIndex[] = [0, 1, 2, 3];
 const OTHER_CLIPS_LIMIT = 5;
 export const QUEUE_EMPTY_MS = 15_000;
 
-function charKey(speakerName: string, styleName: string): string {
-  return `${speakerName}\0${styleName}`;
+function charKey(speakerName: string): string {
+  return speakerName;
 }
 
 function availableSlot(chars: StageChar[]): SlotIndex {
@@ -46,8 +46,7 @@ function stageReducer(state: StageState, action: StageAction): StageState {
       if (action.completedCharKey !== null) {
         chars = chars
           .map((c) =>
-            charKey(c.character.speakerName, c.character.styleName) ===
-            action.completedCharKey
+            charKey(c.character.speakerName) === action.completedCharKey
               ? c
               : { ...c, otherClipsCount: c.otherClipsCount + 1 },
           )
@@ -56,14 +55,14 @@ function stageReducer(state: StageState, action: StageAction): StageState {
 
       if (action.startedCharKey !== null && action.startedCharacter !== null) {
         const existingIdx = chars.findIndex(
-          (c) =>
-            charKey(c.character.speakerName, c.character.styleName) ===
-            action.startedCharKey,
+          (c) => charKey(c.character.speakerName) === action.startedCharKey,
         );
 
         if (existingIdx >= 0) {
           chars = chars.map((c, i) =>
-            i === existingIdx ? { ...c, otherClipsCount: 0 } : c,
+            i === existingIdx
+              ? { ...c, character: action.startedCharacter!, otherClipsCount: 0 }
+              : c,
           );
         } else {
           let updated = [...chars];
@@ -145,7 +144,7 @@ export function useCharacterStage(
     if (prev !== null) {
       const e = entries.find((e) => e.kind === "clip" && e.id === prev);
       if (e?.kind === "clip") {
-        completedCharKey = charKey(e.speakerName, e.styleName);
+        completedCharKey = charKey(e.speakerName);
       }
     }
 
@@ -156,7 +155,7 @@ export function useCharacterStage(
     if (curr !== null) {
       const e = entries.find((e) => e.kind === "clip" && e.id === curr);
       if (e?.kind === "clip") {
-        startedCharKey = charKey(e.speakerName, e.styleName);
+        startedCharKey = charKey(e.speakerName);
         startedCharacter =
           characters.find(
             (c) =>

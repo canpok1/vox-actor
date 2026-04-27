@@ -444,6 +444,50 @@ describe("useCharacterStage", () => {
     expect(result.current.slots[0]?.character.speakerName).toBe("キャラA");
   });
 
+  it("同一話者がスタイルを変えて発話しても同じスロットを維持し画像が更新される", async () => {
+    const charANormal = makeChar("キャラA", "ノーマル");
+    const charASweet = {
+      ...makeChar("キャラA", "あまあま"),
+      mouthClosed: "キャラA-sweet-closed.png",
+      mouthOpen: "キャラA-sweet-open.png",
+    };
+    const entries: TimelineEntry[] = [
+      makeClipEntry(1, "キャラA", "ノーマル"),
+      makeClipEntry(2, "キャラA", "あまあま"),
+    ];
+    const chars = [charANormal, charASweet];
+
+    const { result, rerender } = renderHook(
+      ({
+        playingClipId,
+        entries,
+        characters,
+      }: {
+        playingClipId: number | null;
+        entries: TimelineEntry[];
+        characters: CharacterEntry[];
+      }) => useCharacterStage(playingClipId, entries, characters),
+      { initialProps: { playingClipId: null, entries, characters: chars } },
+    );
+
+    await act(async () => {
+      rerender({ playingClipId: 1, entries, characters: chars });
+    });
+    expect(result.current.slots[0]?.character).toEqual(charANormal);
+    expect(result.current.isMultiSlot).toBe(false);
+
+    await act(async () => {
+      rerender({ playingClipId: 2, entries, characters: chars });
+    });
+
+    expect(result.current.slots[0]?.character).toEqual(charASweet);
+    expect(result.current.slots[1]).toBeNull();
+    expect(result.current.slots[2]).toBeNull();
+    expect(result.current.slots[3]).toBeNull();
+    // スタイル変更だけでは2人目入場にならないため
+    expect(result.current.isMultiSlot).toBe(false);
+  });
+
   it("キャラクター設定に存在しないスピーカーは無視される", async () => {
     const charA = makeChar("キャラA");
     const entries: TimelineEntry[] = [makeClipEntry(1, "存在しないキャラ")];
