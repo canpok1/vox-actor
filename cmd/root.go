@@ -20,6 +20,7 @@ type Deps struct {
 	AudioCheck *AudioCheckDeps
 	Viewer     *ViewerDeps
 	Assets     *AssetsDownloadDeps
+	Speakers   *SpeakersDeps
 }
 
 func makeRootCmd(deps ...*Deps) *cobra.Command {
@@ -43,12 +44,14 @@ func makeRootCmd(deps ...*Deps) *cobra.Command {
 	var sayDeps *SayDeps
 	var audioCheckDeps *AudioCheckDeps
 	var assetsDeps *AssetsDownloadDeps
+	var speakersDeps *SpeakersDeps
 	if d != nil {
 		actDeps = d.Act
 		watchDeps = d.Watch
 		sayDeps = d.Say
 		audioCheckDeps = d.AudioCheck
 		assetsDeps = d.Assets
+		speakersDeps = d.Speakers
 	}
 	var viewerDeps *ViewerDeps
 	if d != nil {
@@ -61,6 +64,7 @@ func makeRootCmd(deps ...*Deps) *cobra.Command {
 	cmd.AddCommand(makeAudioCheckCmd(audioCheckDeps))
 	cmd.AddCommand(makeViewerCmd(viewerDeps))
 	cmd.AddCommand(makeAssetsCmd(assetsDeps))
+	cmd.AddCommand(makeSpeakersCmd(speakersDeps))
 
 	return cmd
 }
