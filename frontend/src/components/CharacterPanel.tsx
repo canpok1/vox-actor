@@ -1,6 +1,5 @@
 import type { CharacterEntry, TimelineEntry } from "../types/api";
 import { LipSyncImage } from "./LipSyncImage";
-import { useAudioVolume } from "../hooks/useAudioVolume";
 import { useCharacterStage } from "../hooks/useCharacterStage";
 
 interface CharacterPanelProps {
@@ -8,7 +7,7 @@ interface CharacterPanelProps {
   characters: CharacterEntry[];
   playingClipId: number | null;
   entries: TimelineEntry[];
-  audioRef: React.RefObject<HTMLAudioElement>;
+  volume: number;
 }
 
 const MULTI_SLOT_LAYOUT = [
@@ -42,9 +41,8 @@ export function CharacterPanel({
   characters,
   playingClipId,
   entries,
-  audioRef,
+  volume,
 }: CharacterPanelProps) {
-  const volume = useAudioVolume(audioRef, !hidden);
   const { slots, isMultiSlot } = useCharacterStage(
     playingClipId,
     entries,

@@ -6,6 +6,7 @@ import { type TabName, Tabs } from "./components/Tabs";
 import { TestPanel } from "./components/TestPanel";
 import { CharacterPanel } from "./components/CharacterPanel";
 import { VolumeControls } from "./components/VolumeControls";
+import { useAudioVolume } from "./hooks/useAudioVolume";
 import { useEventSource } from "./hooks/useEventSource";
 import { usePersistedState } from "./hooks/usePersistedState";
 import { usePlaybackQueue } from "./hooks/usePlaybackQueue";
@@ -126,6 +127,11 @@ export function App() {
   const { playingClipId, enqueue } = usePlaybackQueue(
     audioRef,
     activeTab === "stream" || activeTab === "character",
+  );
+  const audioVolume = useAudioVolume(
+    audioRef,
+    activeTab === "character" ||
+      (activeTab === "test" && charactersEnabled),
   );
   const playingClipIdRef = useRef<number | null>(null);
   playingClipIdRef.current = playingClipId;
@@ -353,7 +359,7 @@ export function App() {
             characters={characters}
             playingClipId={playingClipId}
             entries={entries}
-            audioRef={audioRef}
+            volume={audioVolume}
           />
         )}
         {!silent && (
@@ -366,7 +372,7 @@ export function App() {
             error={testError}
             charactersEnabled={charactersEnabled}
             characters={characters}
-            audioRef={audioRef}
+            volume={audioVolume}
           />
         )}
       </div>
