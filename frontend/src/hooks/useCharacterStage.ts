@@ -13,6 +13,7 @@ interface StageChar {
 interface StageState {
   chars: StageChar[];
   isMultiSlot: boolean;
+  lastClipText: string | null;
 }
 
 type StageAction =
@@ -22,6 +23,7 @@ type StageAction =
       startedCharKey: string | null;
       startedCharacter: CharacterEntry | null;
       startedEntryOrder: number;
+      startedClipText: string | null;
     }
   | { type: "ALL_EXIT" };
 
@@ -94,11 +96,13 @@ function stageReducer(state: StageState, action: StageAction): StageState {
       const isMultiSlot =
         chars.length === 0 ? false : state.isMultiSlot || chars.length >= 2;
 
-      return { chars, isMultiSlot };
+      const lastClipText = action.startedClipText ?? state.lastClipText;
+
+      return { chars, isMultiSlot, lastClipText };
     }
 
     case "ALL_EXIT":
-      return { chars: [], isMultiSlot: false };
+      return { chars: [], isMultiSlot: false, lastClipText: null };
 
     default:
       return state;
@@ -112,6 +116,7 @@ export interface CharacterStageSlot {
 export interface CharacterStageResult {
   slots: (CharacterStageSlot | null)[];
   isMultiSlot: boolean;
+  lastClipText: string | null;
 }
 
 export function useCharacterStage(
@@ -122,6 +127,7 @@ export function useCharacterStage(
   const [state, dispatch] = useReducer(stageReducer, {
     chars: [],
     isMultiSlot: false,
+    lastClipText: null,
   });
 
   const prevPlayingClipIdRef = useRef<number | null>(null);
@@ -150,12 +156,14 @@ export function useCharacterStage(
 
     let startedCharKey: string | null = null;
     let startedCharacter: CharacterEntry | null = null;
+    let startedClipText: string | null = null;
     const startedEntryOrder = entryCounterRef.current;
 
     if (curr !== null) {
       const e = entries.find((e) => e.kind === "clip" && e.id === curr);
       if (e?.kind === "clip") {
         startedCharKey = charKey(e.speakerName);
+        startedClipText = e.text;
         startedCharacter =
           characters.find(
             (c) =>
@@ -173,6 +181,7 @@ export function useCharacterStage(
       startedCharKey,
       startedCharacter,
       startedEntryOrder,
+      startedClipText,
     });
 
     if (curr === null && prev !== null) {
@@ -196,5 +205,9 @@ export function useCharacterStage(
     slots[c.slotIndex] = { character: c.character };
   }
 
-  return { slots, isMultiSlot: state.isMultiSlot };
+  return {
+    slots,
+    isMultiSlot: state.isMultiSlot,
+    lastClipText: state.lastClipText,
+  };
 }
