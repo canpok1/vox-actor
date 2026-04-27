@@ -99,6 +99,8 @@ const (
 	// defaultSilentInterval は無音モードで PlayText が固定的に待機する時間。
 	// タイムラインが一瞬で流れ去らないようにするための暫定値。
 	defaultSilentInterval = 500 * time.Millisecond
+	// workspaceAssetsDir は workspacePath 配下のアセットディレクトリ名。
+	workspaceAssetsDir = "assets"
 )
 
 var (
@@ -604,13 +606,12 @@ func (p *HTTPStreamPlayer) buildAPICharactersJSON() error {
 	enabled := false
 
 	if p.workspacePath != "" {
-		const assetsDir = "assets"
 		fsys := os.DirFS(p.workspacePath)
-		loadedEntries, loadErr := loadCharacterSettingsFromSpeakerJSON(fsys, assetsDir, p.logger)
+		loadedEntries, loadErr := loadCharacterSettingsFromSpeakerJSON(fsys, workspaceAssetsDir, p.logger)
 		if loadErr != nil {
 			p.logger.Warn("failed to load character settings",
 				"workspacePath", p.workspacePath,
-				"assetsDir", assetsDir,
+				"assetsDir", workspaceAssetsDir,
 				"error", loadErr)
 		} else if len(loadedEntries) > 0 {
 			entries = loadedEntries
@@ -784,12 +785,12 @@ func (p *HTTPStreamPlayer) handleCharacterImage(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	if err := validateImagePath(relPath, filepath.Join(p.workspacePath, "assets")); err != nil {
+	if err := validateImagePath(relPath, filepath.Join(p.workspacePath, workspaceAssetsDir)); err != nil {
 		http.Error(w, "invalid path", http.StatusBadRequest)
 		return
 	}
 
-	fullPath := filepath.Join(p.workspacePath, "assets", relPath)
+	fullPath := filepath.Join(p.workspacePath, workspaceAssetsDir, relPath)
 	http.ServeFile(w, r, fullPath)
 }
 
