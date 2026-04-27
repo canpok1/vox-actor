@@ -1,7 +1,15 @@
 #!/bin/sh
 # PreToolUse hook: block `git commit` when current branch is main
 
-command=$(jq -r '.tool_input.command // ""' 2>/dev/null)
+set -eu
+
+input=$(cat)
+if [ -z "$input" ]; then
+  printf 'Error: hook に stdin が渡されていません。\n' >&2
+  exit 2
+fi
+
+command=$(printf '%s' "$input" | jq -r '.tool_input.command // ""')
 
 case "$command" in
   "git commit"*) ;;
