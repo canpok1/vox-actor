@@ -1684,7 +1684,7 @@ func TestLoadCharacterSettingsFromSpeakerJSON_SingleValidSpeaker(t *testing.T) {
 		"assets/zundamon/normal_opened.png": {Data: []byte("")},
 	}
 
-	entries, err := loadCharacterSettingsFromSpeakerJSON(fsys, "assets", slog.New(slog.NewTextHandler(io.Discard, nil)))
+	entries, err := loadCharacterSettingsFromSpeakerJSON(fsys, "/", "assets", slog.New(slog.NewTextHandler(io.Discard, nil)))
 	if err != nil {
 		t.Fatalf("loadCharacterSettingsFromSpeakerJSON failed: %v", err)
 	}
@@ -1731,7 +1731,7 @@ func TestLoadCharacterSettingsFromSpeakerJSON_MultipleStyles(t *testing.T) {
 		"assets/zundamon/happy_opened.png":  {Data: []byte("")},
 	}
 
-	entries, err := loadCharacterSettingsFromSpeakerJSON(fsys, "assets", slog.New(slog.NewTextHandler(io.Discard, nil)))
+	entries, err := loadCharacterSettingsFromSpeakerJSON(fsys, "/", "assets", slog.New(slog.NewTextHandler(io.Discard, nil)))
 	if err != nil {
 		t.Fatalf("loadCharacterSettingsFromSpeakerJSON failed: %v", err)
 	}
@@ -1750,7 +1750,7 @@ func TestLoadCharacterSettingsFromSpeakerJSON_NoSpeakerJSON(t *testing.T) {
 	t.Parallel()
 	fsys := fstest.MapFS{}
 
-	entries, err := loadCharacterSettingsFromSpeakerJSON(fsys, "assets", slog.New(slog.NewTextHandler(io.Discard, nil)))
+	entries, err := loadCharacterSettingsFromSpeakerJSON(fsys, "/", "assets", slog.New(slog.NewTextHandler(io.Discard, nil)))
 	if err == nil {
 		t.Fatal("expected error when no speaker.json found")
 	}
@@ -1781,7 +1781,7 @@ func TestLoadCharacterSettingsFromSpeakerJSON_SkipInvalidSpeakerJSON(t *testing.
 		"assets/zundamon/normal_opened.png": {Data: []byte("")},
 	}
 
-	entries, err := loadCharacterSettingsFromSpeakerJSON(fsys, "assets", slog.New(slog.NewTextHandler(io.Discard, nil)))
+	entries, err := loadCharacterSettingsFromSpeakerJSON(fsys, "/", "assets", slog.New(slog.NewTextHandler(io.Discard, nil)))
 	if err != nil {
 		t.Fatalf("loadCharacterSettingsFromSpeakerJSON failed: %v", err)
 	}
@@ -1810,7 +1810,7 @@ func TestLoadCharacterSettingsFromSpeakerJSON_SkipMissingImageFiles(t *testing.T
 		},
 	}
 
-	entries, err := loadCharacterSettingsFromSpeakerJSON(fsys, "assets", slog.New(slog.NewTextHandler(io.Discard, nil)))
+	entries, err := loadCharacterSettingsFromSpeakerJSON(fsys, "/", "assets", slog.New(slog.NewTextHandler(io.Discard, nil)))
 	if err == nil {
 		t.Fatal("expected error when image files don't exist")
 	}

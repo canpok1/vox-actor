@@ -607,7 +607,7 @@ func (p *HTTPStreamPlayer) buildAPICharactersJSON() error {
 
 	if p.workspacePath != "" {
 		fsys := os.DirFS(p.workspacePath)
-		loadedEntries, loadErr := loadCharacterSettingsFromSpeakerJSON(fsys, workspaceAssetsDir, p.logger)
+		loadedEntries, loadErr := loadCharacterSettingsFromSpeakerJSON(fsys, p.workspacePath, workspaceAssetsDir, p.logger)
 		if loadErr != nil {
 			p.logger.Warn("failed to load character settings",
 				"workspacePath", p.workspacePath,
@@ -634,7 +634,7 @@ func (p *HTTPStreamPlayer) buildAPICharactersJSON() error {
 // loadCharacterSettingsFromSpeakerJSON はfsys内のassetsDir/*/speaker.jsonを走査し、
 // キャラクター設定を読み込む。JSON パース失敗、画像不在、パス検証エラーなどで
 // 無効なエントリは自動的に除外される。有効なエントリが 0 件の場合はエラーを返す。
-func loadCharacterSettingsFromSpeakerJSON(fsys fs.FS, assetsDir string, logger *slog.Logger) ([]characterEntry, error) {
+func loadCharacterSettingsFromSpeakerJSON(fsys fs.FS, basePath string, assetsDir string, logger *slog.Logger) ([]characterEntry, error) {
 	entries := []characterEntry{}
 
 	assetsDirFS, err := fs.Sub(fsys, assetsDir)
@@ -681,7 +681,8 @@ func loadCharacterSettingsFromSpeakerJSON(fsys fs.FS, assetsDir string, logger *
 				MouthOpen:   style.MouthOpened,
 			}
 
-			if err := validateCharacterEntryInFS(entry, assetsDirFS); err != nil {
+			baseDir := filepath.Join(basePath, assetsDir)
+			if err := validateCharacterEntryInFS(entry, assetsDirFS, baseDir); err != nil {
 				logger.Warn("skipping invalid character entry", "speakerName", entry.SpeakerName, "styleName", entry.StyleName, "error", err)
 				continue
 			}
@@ -700,12 +701,12 @@ func loadCharacterSettingsFromSpeakerJSON(fsys fs.FS, assetsDir string, logger *
 // validateCharacterEntryInFS は単一のキャラクター設定を fs.FS に対して検証する。
 // パス検証: .. や先頭 / を含む、セグメントが [A-Za-z0-9._-]+ 以外を含む場合はエラー。
 // 画像ファイル存在確認。
-func validateCharacterEntryInFS(entry characterEntry, fsys fs.FS) error {
+func validateCharacterEntryInFS(entry characterEntry, fsys fs.FS, baseDir string) error {
 	for _, imgPath := range []string{entry.MouthClosed, entry.MouthOpen} {
 		if imgPath == "" {
 			return fmt.Errorf("image path is empty")
 		}
-		if err := validateImagePathInFS(imgPath, fsys); err != nil {
+		if err := validateImagePathInFS(imgPath, fsys, baseDir); err != nil {
 			return err
 		}
 	}
@@ -715,7 +716,7 @@ func validateCharacterEntryInFS(entry characterEntry, fsys fs.FS) error {
 // validateImagePathInFS は相対パスの検証と fs.FS に対する存在確認を行う。
 // パストラバーサル (..を含む、/で始まる) を拒否し、
 // 各セグメントが [A-Za-z0-9._-]+ にマッチするか確認する。
-func validateImagePathInFS(relPath string, fsys fs.FS) error {
+func validateImagePathInFS(relPath string, fsys fs.FS, baseDir string) error {
 	if strings.HasPrefix(relPath, "/") || strings.HasPrefix(relPath, "../") || strings.Contains(relPath, "/../") || strings.Contains(relPath, "..") {
 		return fmt.Errorf("path traversal detected")
 	}
@@ -729,7 +730,8 @@ func validateImagePathInFS(relPath string, fsys fs.FS) error {
 
 	if _, err := fs.Stat(fsys, relPath); err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
-			return fmt.Errorf("image file not found: %s", relPath)
+			fullPath := filepath.Join(baseDir, relPath)
+			return fmt.Errorf("image file not found: %s", fullPath)
 		}
 		return err
 	}
@@ -755,7 +757,7 @@ func validateImagePath(relPath string, baseDir string) error {
 	fullPath := filepath.Join(baseDir, relPath)
 	if _, err := os.Stat(fullPath); err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return fmt.Errorf("image file not found: %s", relPath)
+			return fmt.Errorf("image file not found: %s", fullPath)
 		}
 		return err
 	}
