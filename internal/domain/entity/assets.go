@@ -33,3 +33,21 @@ func (a *AssetsJSON) Validate() error {
 	}
 	return nil
 }
+
+// FilterBySpeakers は speakers で指定した名前の asset エントリのみを返す。
+// speakers が空の場合は全エントリを返す。
+// 存在しない speaker 名が指定された場合はエラーを返す。
+func (a *AssetsJSON) FilterBySpeakers(speakers []string) (map[string]AssetEntry, error) {
+	if len(speakers) == 0 {
+		return a.Assets, nil
+	}
+	result := make(map[string]AssetEntry)
+	for _, name := range speakers {
+		entry, ok := a.Assets[name]
+		if !ok {
+			return nil, fmt.Errorf("speaker %q not found in vox-actor-assets.json", name)
+		}
+		result[name] = entry
+	}
+	return result, nil
+}

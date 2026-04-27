@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"io"
 	"io/fs"
 	"log/slog"
 	"os"
@@ -78,7 +79,7 @@ func (u *AssetsDownloadUsecase) Run(ctx context.Context, params AssetsDownloadPa
 		return err
 	}
 
-	targets, err := filterAssets(assetsJSON, params.Speakers)
+	targets, err := assetsJSON.FilterBySpeakers(params.Speakers)
 	if err != nil {
 		return err
 	}
@@ -109,21 +110,6 @@ func (u *AssetsDownloadUsecase) Run(ctx context.Context, params AssetsDownloadPa
 	return nil
 }
 
-func filterAssets(assetsJSON *entity.AssetsJSON, speakers []string) (map[string]entity.AssetEntry, error) {
-	if len(speakers) == 0 {
-		return assetsJSON.Assets, nil
-	}
-	result := make(map[string]entity.AssetEntry)
-	for _, name := range speakers {
-		entry, ok := assetsJSON.Assets[name]
-		if !ok {
-			return nil, fmt.Errorf("speaker %q not found in vox-actor-assets.json", name)
-		}
-		result[name] = entry
-	}
-	return result, nil
-}
-
 func copyDir(src, dest string) error {
 	return filepath.WalkDir(src, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -142,9 +128,18 @@ func copyDir(src, dest string) error {
 }
 
 func copyFile(src, dest string) error {
-	data, err := os.ReadFile(src)
+	srcFile, err := os.Open(src)
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(dest, data, 0644)
+	defer func() { _ = srcFile.Close() }()
+
+	destFile, err := os.Create(dest)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = destFile.Close() }()
+
+	_, err = io.Copy(destFile, srcFile)
+	return err
 }
