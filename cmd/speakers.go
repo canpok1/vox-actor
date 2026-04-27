@@ -22,6 +22,18 @@ type SpeakerListItem struct {
 	Name string `json:"name"`
 }
 
+// SpeakerProfileOutput は speakers profile コマンドの出力形式を表す。
+type SpeakerProfileOutput struct {
+	ID           string         `json:"id"`
+	Name         string         `json:"name"`
+	Pronoun      string         `json:"pronoun"`
+	SpeechSuffix []string       `json:"speechSuffix"`
+	Personality  []string       `json:"personality"`
+	Speakers     map[string]int `json:"speakers"`
+	Styles       []string       `json:"styles"`
+	Description  string         `json:"description"`
+}
+
 func makeSpeakersCmd(deps *SpeakersDeps) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "speakers",
@@ -32,6 +44,7 @@ func makeSpeakersCmd(deps *SpeakersDeps) *cobra.Command {
 		},
 	}
 	cmd.AddCommand(makeSpeakersListCmd(deps))
+	cmd.AddCommand(makeSpeakersProfileCmd(deps))
 	return cmd
 }
 
@@ -108,6 +121,137 @@ func outputSpeakerList(cmd *cobra.Command, items []SpeakerListItem) error {
 		return fmt.Errorf("failed to marshal speaker list: %w", err)
 	}
 	if _, err := fmt.Fprintln(cmd.OutOrStdout(), string(data)); err != nil {
+		return err
+	}
+	return nil
+}
+
+func makeSpeakersProfileCmd(deps *SpeakersDeps) *cobra.Command {
+	var id string
+	var name string
+
+	cmd := &cobra.Command{
+		Use:   "profile",
+		Short: "指定したキャラクターのプロフィールをJSON形式で返す",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runSpeakersProfile(cmd, deps, id, name)
+		},
+	}
+	cmd.Flags().StringVar(&id, "id", "", "assets配下のディレクトリ名")
+	cmd.Flags().StringVar(&name, "name", "", "speaker.json の name フィールド")
+	return cmd
+}
+
+func runSpeakersProfile(cmd *cobra.Command, deps *SpeakersDeps, id string, name string) error {
+	// Flag validation
+	if (id != "" && name != "") || (id == "" && name == "") {
+		return fmt.Errorf("either --id or --name must be specified (not both)")
+	}
+
+	assetsDir, err := resolveAssetsDirForSpeakers(deps)
+	if err != nil {
+		return err
+	}
+
+	var characterID string
+	if id != "" {
+		characterID = id
+	} else {
+		// Search by name
+		var matches []string
+		entries, err := os.ReadDir(assetsDir)
+		if err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("failed to read assets dir: %w", err)
+		}
+
+		for _, entry := range entries {
+			if !entry.IsDir() {
+				continue
+			}
+			dirID := entry.Name()
+			speakerJSONPath := filepath.Join(assetsDir, dirID, "speaker.json")
+
+			data, err := os.ReadFile(speakerJSONPath)
+			if err != nil {
+				continue
+			}
+
+			s, err := entity.ParseSpeakerJSON(data)
+			if err != nil {
+				continue
+			}
+
+			if s.GetSpeakerName() == name {
+				matches = append(matches, dirID)
+			}
+		}
+
+		if len(matches) == 0 {
+			return fmt.Errorf("character not found: %q", name)
+		}
+		if len(matches) > 1 {
+			_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "error: multiple characters found with name %q: %v\n", name, matches)
+			return fmt.Errorf("duplicate character name")
+		}
+		characterID = matches[0]
+	}
+
+	speakerJSONPath := filepath.Join(assetsDir, characterID, "speaker.json")
+	data, err := os.ReadFile(speakerJSONPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return fmt.Errorf("character not found: %q", characterID)
+		}
+		return fmt.Errorf("failed to read speaker.json: %w", err)
+	}
+
+	speaker, err := entity.ParseSpeakerJSON(data)
+	if err != nil {
+		return fmt.Errorf("failed to parse speaker.json: %w", err)
+	}
+
+	// Build output
+	output := SpeakerProfileOutput{
+		ID:   characterID,
+		Name: speaker.GetSpeakerName(),
+	}
+
+	// Add profile fields if available
+	if speaker.Profile != nil {
+		output.Pronoun = speaker.Profile.Pronoun
+		output.SpeechSuffix = speaker.Profile.SpeechSuffix
+		output.Personality = speaker.Profile.Personality
+		output.Speakers = speaker.Profile.Speakers
+
+		// Read description file
+		if speaker.Profile.DescriptionPath != "" {
+			descPath := filepath.Join(assetsDir, characterID, speaker.Profile.DescriptionPath)
+			descData, err := os.ReadFile(descPath)
+			if err != nil {
+				if os.IsNotExist(err) {
+					_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: description file not found: %s\n", speaker.Profile.DescriptionPath)
+				} else {
+					_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: failed to read description file: %v\n", err)
+				}
+			} else {
+				output.Description = string(descData)
+			}
+		}
+	}
+
+	// Build styles array from speaker.Profile.Speakers keys
+	if output.Speakers != nil {
+		for styleName := range output.Speakers {
+			output.Styles = append(output.Styles, styleName)
+		}
+	}
+
+	// Output JSON
+	resultData, err := json.Marshal(output)
+	if err != nil {
+		return fmt.Errorf("failed to marshal profile: %w", err)
+	}
+	if _, err := fmt.Fprintln(cmd.OutOrStdout(), string(resultData)); err != nil {
 		return err
 	}
 	return nil
