@@ -83,6 +83,8 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
@@ -1623,10 +1625,12 @@ func TestHTTPStreamPlayer_ImplementsErrorBroadcaster(t *testing.T) {
 }
 
 // #323 キャラクタータブ / 口パク:
-// TODO: GET /api/characters が enabled=false, characters=[] を返す（無効な場合）
+// DONE: GET /api/characters が enabled=false, characters=[] を返す（workspacePath 未設定の場合）
+// DONE: GET /api/characters が有効な場合に enabled=true と characters 配列を返す
+// DONE: loadErr != nil のとき workspacePath と assetsDir を含む Warn ログが出る
+// DONE: 読み込み成功時に件数を含む Info ログが出る
 // TODO: settings.json が存在しない場合に enabled=false を返す
 // TODO: settings.json のパース失敗時に enabled=false を返す
-// TODO: GET /api/characters が有効な場合に enabled=true と characters 配列を返す
 // TODO: 画像パスに `..` を含む場合は該当エントリを無視し enabled=false になる
 // TODO: 画像ファイル不在の場合は該当エントリを無視する
 // TODO: 全エントリが無効な場合は enabled=false を返す
@@ -1812,5 +1816,119 @@ func TestLoadCharacterSettingsFromSpeakerJSON_SkipMissingImageFiles(t *testing.T
 	}
 	if len(entries) != 0 {
 		t.Errorf("expected 0 entries (invalid entry), got %d", len(entries))
+	}
+}
+
+func newValidAssetsWorkspace(t *testing.T) string {
+	t.Helper()
+	workspaceDir := t.TempDir()
+	speakerDir := filepath.Join(workspaceDir, "assets", "zundamon")
+	if err := os.MkdirAll(speakerDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	speakerJSON := `{"speakerName":"ずんだもん","styles":[{"styleName":"ノーマル","mouthClosed":"zundamon/normal_closed.png","mouthOpened":"zundamon/normal_opened.png"}]}`
+	if err := os.WriteFile(filepath.Join(speakerDir, "speaker.json"), []byte(speakerJSON), 0o644); err != nil {
+		t.Fatalf("WriteFile speaker.json: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(speakerDir, "normal_closed.png"), []byte(""), 0o644); err != nil {
+		t.Fatalf("WriteFile normal_closed.png: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(speakerDir, "normal_opened.png"), []byte(""), 0o644); err != nil {
+		t.Fatalf("WriteFile normal_opened.png: %v", err)
+	}
+	return workspaceDir
+}
+
+func TestHTTPStreamPlayer_APICharacters_EnabledWithValidAssets(t *testing.T) {
+	t.Parallel()
+	workspaceDir := newValidAssetsWorkspace(t)
+	p, err := NewHTTPStreamPlayer("127.0.0.1:0", newTestStreamAssets(), WithWorkspacePath(workspaceDir))
+	if err != nil {
+		t.Fatalf("NewHTTPStreamPlayer: %v", err)
+	}
+	if err := p.Start(context.Background()); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	t.Cleanup(func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		_ = p.Shutdown(shutdownCtx)
+	})
+
+	resp, err := http.Get("http://" + p.Addr() + "/api/characters")
+	if err != nil {
+		t.Fatalf("GET /api/characters: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status: %d", resp.StatusCode)
+	}
+	var result map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	enabled, ok := result["enabled"].(bool)
+	if !ok || !enabled {
+		t.Errorf("expected enabled=true, got %v", result)
+	}
+	chars, ok := result["characters"].([]interface{})
+	if !ok || len(chars) == 0 {
+		t.Errorf("expected non-empty characters, got %v", result)
+	}
+}
+
+func TestBuildAPICharactersJSON_LogsWarnOnLoadError(t *testing.T) {
+	t.Parallel()
+	var logBuf bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&logBuf, &slog.HandlerOptions{Level: slog.LevelDebug}))
+
+	workspaceDir := t.TempDir() // no assets/ subdir
+
+	p, err := NewHTTPStreamPlayer("127.0.0.1:0", newTestStreamAssets(),
+		WithHTTPStreamLogger(logger),
+		WithWorkspacePath(workspaceDir),
+	)
+	if err != nil {
+		t.Fatalf("NewHTTPStreamPlayer: %v", err)
+	}
+	if err := p.buildAPICharactersJSON(); err != nil {
+		t.Fatalf("buildAPICharactersJSON: %v", err)
+	}
+
+	logOutput := logBuf.String()
+	if !strings.Contains(logOutput, "WARN") {
+		t.Errorf("expected WARN log, got: %s", logOutput)
+	}
+	if !strings.Contains(logOutput, "failed to load character settings") {
+		t.Errorf("expected warn message in log, got: %s", logOutput)
+	}
+	if !strings.Contains(logOutput, workspaceDir) {
+		t.Errorf("expected workspacePath in log, got: %s", logOutput)
+	}
+}
+
+func TestBuildAPICharactersJSON_LogsInfoOnSuccess(t *testing.T) {
+	t.Parallel()
+	var logBuf bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&logBuf, &slog.HandlerOptions{Level: slog.LevelDebug}))
+
+	workspaceDir := newValidAssetsWorkspace(t)
+	p, err := NewHTTPStreamPlayer("127.0.0.1:0", newTestStreamAssets(),
+		WithHTTPStreamLogger(logger),
+		WithWorkspacePath(workspaceDir),
+	)
+	if err != nil {
+		t.Fatalf("NewHTTPStreamPlayer: %v", err)
+	}
+	if err := p.buildAPICharactersJSON(); err != nil {
+		t.Fatalf("buildAPICharactersJSON: %v", err)
+	}
+
+	logOutput := logBuf.String()
+	if !strings.Contains(logOutput, "INFO") {
+		t.Errorf("expected INFO log, got: %s", logOutput)
+	}
+	if !strings.Contains(logOutput, "character settings loaded") {
+		t.Errorf("expected 'character settings loaded' in log, got: %s", logOutput)
 	}
 }

@@ -604,11 +604,18 @@ func (p *HTTPStreamPlayer) buildAPICharactersJSON() error {
 	enabled := false
 
 	if p.workspacePath != "" {
+		const assetsDir = "assets"
 		fsys := os.DirFS(p.workspacePath)
-		loadedEntries, loadErr := loadCharacterSettingsFromSpeakerJSON(fsys, ".vox-actor/assets", p.logger)
-		if loadErr == nil && len(loadedEntries) > 0 {
+		loadedEntries, loadErr := loadCharacterSettingsFromSpeakerJSON(fsys, assetsDir, p.logger)
+		if loadErr != nil {
+			p.logger.Warn("failed to load character settings",
+				"workspacePath", p.workspacePath,
+				"assetsDir", assetsDir,
+				"error", loadErr)
+		} else if len(loadedEntries) > 0 {
 			entries = loadedEntries
 			enabled = true
+			p.logger.Info("character settings loaded", "count", len(entries))
 		}
 	}
 
