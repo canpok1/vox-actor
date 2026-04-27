@@ -96,10 +96,7 @@ function stageReducer(state: StageState, action: StageAction): StageState {
       const isMultiSlot =
         chars.length === 0 ? false : state.isMultiSlot || chars.length >= 2;
 
-      const lastClipText =
-        action.startedClipText !== null
-          ? action.startedClipText
-          : state.lastClipText;
+      const lastClipText = action.startedClipText ?? state.lastClipText;
 
       return { chars, isMultiSlot, lastClipText };
     }
