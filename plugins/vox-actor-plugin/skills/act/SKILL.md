@@ -9,9 +9,9 @@ description: |
   直接ユーザーが呼ぶより、monologue/speak/talk経由の呼び出しを想定。
 argument-hint: "<種別:monologue|speak|talk> <本文> [追加の演出指示]"
 allowed-tools:
+  - "Bash(vox-actor speakers *)"
   - "Bash(${CLAUDE_PLUGIN_ROOT}/skills/act/scripts/save-script.sh *)"
   - "Bash(${CLAUDE_PLUGIN_ROOT}/skills/act/scripts/play-script.sh *)"
-  - "Read(${CLAUDE_PLUGIN_ROOT}/skills/act/characters/*.md)"
 ---
 
 vox-actor を使った音声再生の技術的実行を担うスキルです。`monologue` / `speak` / `talk` の入口スキルから呼び出される前提で、台本生成と再生実行を一手に引き受けます。vox-actor CLI に関する利用知識（話速の目安・通知モード切替・ワークスペース解決・エラーログ仕様・JSON/JSONL の形式制約・キャラクター設定の扱いなど）はこのスキルに集約されています。
@@ -31,13 +31,21 @@ vox-actor を使った音声再生の技術的実行を担うスキルです。`
 ## 実行フロー
 
 1. `$ARGUMENTS` から **種別** と **本文** を取り出す
-2. 引き継いだキャラクター名から `${CLAUDE_PLUGIN_ROOT}/skills/act/characters/<name>.md` を読み、`speakers` 一覧と性格・口調を把握する
-3. 種別に応じた台本を生成する
+2. 引き継いだキャラクター名をもとに、`vox-actor speakers list` で利用可能なキャラクター一覧を取得し、入力がマッチするか確認する
+   - list の結果から id/name が入力と一致するキャラクターを特定
+   - 一致するキャラクターがない場合は、利用可能な id/name 一覧を提示してエラー終了
+3. 確定した id（または name）を `vox-actor speakers profile --id <id>` に渡して詳細を取得し、JSON 出力を jq でパースする
+   - `speakers`: スピーカーIDマップ（スタイル名 → ID）
+   - `pronoun`: 人称
+   - `speechSuffix`: 語尾パターン
+   - `personality`: 性格特性
+   - `description`: キャラクター説明本文（性格・口調・セリフ例を含む）を読み取る
+4. 種別に応じた台本を生成する
    - `monologue`: 1セリフだけの単一 JSON オブジェクト
    - `speak`: 冒頭→本題→まとめの流れの JSONL（複数行）
    - `talk`: 複数キャラの掛け合い JSONL（複数行）。冒頭で全キャラが1回以上登場するよう構成する
-4. セリフ毎に内容の感情に合う `speaker` と `speedScale` を選定する
-5. 台本をstdinから `save-script.sh` に渡して、一時ファイルの絶対パスを取得する
+5. セリフ毎に内容の感情に合う `speaker` と `speedScale` を選定する
+6. 台本をstdinから `save-script.sh` に渡して、一時ファイルの絶対パスを取得する
 
 ```bash
 SCRIPT_PATH=$(echo "$script_content" | ${CLAUDE_PLUGIN_ROOT}/skills/act/scripts/save-script.sh <kind>) || exit 1
@@ -46,7 +54,7 @@ SCRIPT_PATH=$(echo "$script_content" | ${CLAUDE_PLUGIN_ROOT}/skills/act/scripts/
 - `<kind>`: 種別（`monologue` / `speak` / `talk`）
 - 返り値: `<workspace>/tmp/<unix_ms>_<kind>.<ext>` の絶対パス
 
-6. `play-script.sh <path>` を呼び出して再生する
+7. `play-script.sh <path>` を呼び出して再生する
 
 ```bash
 ${CLAUDE_PLUGIN_ROOT}/skills/act/scripts/play-script.sh <path>
@@ -113,9 +121,37 @@ ${CLAUDE_PLUGIN_ROOT}/skills/act/scripts/play-script.sh <path>
 
 ## キャラクター設定
 
-`${CLAUDE_PLUGIN_ROOT}/skills/act/characters/<name>.md` がキャラクター設定ファイルです。Claude 向けの自然言語テキストとして消費され、キャラクター名や口調特徴などの主要メタデータは YAML frontmatter に構造化されています。本文には性格・口調の説明とセリフ例が記載されています。
+キャラクター設定は `vox-actor speakers profile` コマンド経由で取得します。コマンドが返す JSON に以下の情報が含まれます：
 
-呼び出し元スキル（`monologue` / `speak` / `talk`）がメモリから読み取って引き継いだキャラクター名に対応するファイルを読み、`speakers` マップ・口調・性格を反映した台本を生成します。
+- `id`: アセットディレクトリ内のディレクトリ名
+- `name`: キャラクター表示名
+- `pronoun`: 人称（例："ボク"）
+- `speechSuffix`: 語尾パターン（配列、例：["〜のだ", "〜なのだ"]）
+- `personality`: 性格特性（配列、例：["元気", "明るい"]）
+- `speakers`: スピーカーIDマップ（スタイル名 → VOICEVOX エンジンのスピーカーID）
+- `styles`: 利用可能なスタイル名の配列
+- `description`: キャラクター説明本文（性格・口調の詳細とセリフ例を含む）
+
+呼び出し元スキル（`monologue` / `speak` / `talk`）がメモリから読み取って引き継いだキャラクター名をもとに、speakers コマンドでプロフィールを取得し、`speakers` マップ・口調・性格を反映した台本を生成します。
+
+## キャラクター取得フロー（list → profile の2段階）
+
+キャラクター指定が曖昧またはタイポの場合に有用なエラーメッセージを提供するため、以下の2段階フローを採用しています：
+
+1. **`vox-actor speakers list`**: 軽量な id/name リストを取得
+   - JSON 形式: `[{"id":"zundamon","name":"ずんだもん"}, ...]`
+   - 入力されたキャラクター名が完全一致するか確認
+
+2. **存在確認 → `vox-actor speakers profile --id <id>`**: 詳細プロフィール取得
+   - 一致した id を使って profile コマンドを呼び出す
+   - list に存在しないキャラクターが指定された場合は、利用可能な id/name 一覧を提示してエラー終了
+
+### エラーハンドリング
+
+- `speakers list` コマンド実行失敗時: スキルはエラーメッセージを出力して終了
+- list の結果に該当キャラクターがない場合: 利用可能なキャラクター id/name 一覧を提示してエラー終了
+- `speakers profile` コマンド実行失敗時: スキルはエラーメッセージを出力して終了
+- JSON パース失敗時: エラーの詳細をログ出力して終了
 
 ## 前提条件
 
