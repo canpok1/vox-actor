@@ -104,7 +104,7 @@ export function CharacterPanel({
             />
           )
         ) : (
-          <div className="grid h-full w-full grid-cols-4 gap-2">
+          <div className="flex h-full items-end justify-center gap-2">
             {MULTI_SLOT_LAYOUT.map(({ slotIndex, flip }) => {
               const slot = slots[slotIndex];
               const urls = slot ? getCharacterImageUrls(slot.character) : null;
@@ -113,7 +113,7 @@ export function CharacterPanel({
                 : {};
 
               return (
-                <div key={slotIndex} style={wrapperStyle}>
+                <div key={slotIndex} className="h-full" style={wrapperStyle}>
                   {slot && urls ? (
                     <LipSyncImage
                       mouthClosedUrl={urls.closed}
@@ -121,7 +121,7 @@ export function CharacterPanel({
                       volume={isPlayingCharacter(slot.character) ? volume : 0}
                     />
                   ) : (
-                    <div className="h-full w-full" style={placeholderStyle} />
+                    <div className="h-full" style={placeholderStyle} />
                   )}
                 </div>
               );
@@ -130,7 +130,7 @@ export function CharacterPanel({
         )}
       </div>
 
-      <div className="flex max-h-32 min-h-[4rem] shrink-0 items-center overflow-y-auto rounded-md bg-ctp-surface p-4">
+      <div className="flex h-32 shrink-0 items-center overflow-y-auto rounded-md bg-ctp-surface p-4">
         {playingClipData ? (
           <p className="break-words text-lg font-medium text-ctp-text">
             {playingClipData.text}

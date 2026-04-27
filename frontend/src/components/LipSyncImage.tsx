@@ -72,17 +72,17 @@ export function LipSyncImage({
   }, [volume, hysteresisMs]);
 
   return (
-    <div className="relative h-full w-full overflow-hidden">
+    <div className="h-full">
       <img
         src={mouthClosedUrl}
         alt="character mouth closed"
-        className="absolute inset-0 h-full w-full object-contain"
+        className="h-full w-auto"
         style={{ display: isOpen ? "none" : "block" }}
       />
       <img
         src={mouthOpenUrl}
         alt="character mouth open"
-        className="absolute inset-0 h-full w-full object-contain"
+        className="h-full w-auto"
         style={{ display: isOpen ? "block" : "none" }}
       />
     </div>
