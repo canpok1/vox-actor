@@ -46,6 +46,7 @@ frontend/dist/*
 frontend/node_modules/
 
 # Playwright
+.playwright-cli/
 frontend/test-results/
 frontend/playwright-report/
 frontend/playwright/.cache/
