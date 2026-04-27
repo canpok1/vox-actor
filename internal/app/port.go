@@ -38,6 +38,12 @@ type DirWatcher interface {
 	Watch(ctx context.Context, dir string) (<-chan string, <-chan error)
 }
 
+// GitCloner は git リポジトリを clone するインターフェース。
+type GitCloner interface {
+	// Clone は repoURL を destDir へ clone する。destDir は Clone が作成する。
+	Clone(ctx context.Context, repoURL string, destDir string) error
+}
+
 // VoicevoxClient はVOICEVOXエンジンとの通信を抽象化するインターフェース。
 type VoicevoxClient interface {
 	// HealthCheck はエンジンの疎通確認を行う。
