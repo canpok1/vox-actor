@@ -1659,3 +1659,158 @@ func TestHTTPStreamPlayer_APICharacters_DisabledWhenNoWorkspacePath(t *testing.T
 		t.Errorf("expected characters=[], got %v", result)
 	}
 }
+
+func TestLoadCharacterSettingsFromSpeakerJSON_SingleValidSpeaker(t *testing.T) {
+	t.Parallel()
+	// Create a temporary workspace with assets/speaker-name/speaker.json
+	fsys := fstest.MapFS{
+		"assets/zundamon/speaker.json": {
+			Data: []byte(`{
+				"speakerName": "ずんだもん",
+				"styles": [
+					{
+						"styleName": "ノーマル",
+						"mouthClosed": "zundamon/normal_closed.png",
+						"mouthOpened": "zundamon/normal_opened.png"
+					}
+				]
+			}`),
+		},
+		"assets/zundamon/normal_closed.png": {Data: []byte("")},
+		"assets/zundamon/normal_opened.png": {Data: []byte("")},
+	}
+
+	entries, err := loadCharacterSettingsFromSpeakerJSON(fsys, "assets", slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if err != nil {
+		t.Fatalf("loadCharacterSettingsFromSpeakerJSON failed: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 entry, got %d", len(entries))
+	}
+	if entries[0].SpeakerName != "ずんだもん" {
+		t.Errorf("expected speakerName='ずんだもん', got %q", entries[0].SpeakerName)
+	}
+	if entries[0].StyleName != "ノーマル" {
+		t.Errorf("expected styleName='ノーマル', got %q", entries[0].StyleName)
+	}
+	if entries[0].MouthClosed != "zundamon/normal_closed.png" {
+		t.Errorf("expected mouthClosed='zundamon/normal_closed.png', got %q", entries[0].MouthClosed)
+	}
+	if entries[0].MouthOpen != "zundamon/normal_opened.png" {
+		t.Errorf("expected mouthOpen='zundamon/normal_opened.png', got %q", entries[0].MouthOpen)
+	}
+}
+
+func TestLoadCharacterSettingsFromSpeakerJSON_MultipleStyles(t *testing.T) {
+	t.Parallel()
+	fsys := fstest.MapFS{
+		"assets/zundamon/speaker.json": {
+			Data: []byte(`{
+				"speakerName": "ずんだもん",
+				"styles": [
+					{
+						"styleName": "ノーマル",
+						"mouthClosed": "zundamon/normal_closed.png",
+						"mouthOpened": "zundamon/normal_opened.png"
+					},
+					{
+						"styleName": "喜び",
+						"mouthClosed": "zundamon/happy_closed.png",
+						"mouthOpened": "zundamon/happy_opened.png"
+					}
+				]
+			}`),
+		},
+		"assets/zundamon/normal_closed.png": {Data: []byte("")},
+		"assets/zundamon/normal_opened.png": {Data: []byte("")},
+		"assets/zundamon/happy_closed.png":  {Data: []byte("")},
+		"assets/zundamon/happy_opened.png":  {Data: []byte("")},
+	}
+
+	entries, err := loadCharacterSettingsFromSpeakerJSON(fsys, "assets", slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if err != nil {
+		t.Fatalf("loadCharacterSettingsFromSpeakerJSON failed: %v", err)
+	}
+	if len(entries) != 2 {
+		t.Fatalf("expected 2 entries, got %d", len(entries))
+	}
+	if entries[0].StyleName != "ノーマル" {
+		t.Errorf("expected first style to be ノーマル, got %q", entries[0].StyleName)
+	}
+	if entries[1].StyleName != "喜び" {
+		t.Errorf("expected second style to be 喜び, got %q", entries[1].StyleName)
+	}
+}
+
+func TestLoadCharacterSettingsFromSpeakerJSON_NoSpeakerJSON(t *testing.T) {
+	t.Parallel()
+	fsys := fstest.MapFS{}
+
+	entries, err := loadCharacterSettingsFromSpeakerJSON(fsys, "assets", slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if err == nil {
+		t.Fatal("expected error when no speaker.json found")
+	}
+	if len(entries) != 0 {
+		t.Errorf("expected 0 entries, got %d", len(entries))
+	}
+}
+
+func TestLoadCharacterSettingsFromSpeakerJSON_SkipInvalidSpeakerJSON(t *testing.T) {
+	t.Parallel()
+	fsys := fstest.MapFS{
+		"assets/invalid/speaker.json": {
+			Data: []byte(`{invalid json}`),
+		},
+		"assets/zundamon/speaker.json": {
+			Data: []byte(`{
+				"speakerName": "ずんだもん",
+				"styles": [
+					{
+						"styleName": "ノーマル",
+						"mouthClosed": "zundamon/normal_closed.png",
+						"mouthOpened": "zundamon/normal_opened.png"
+					}
+				]
+			}`),
+		},
+		"assets/zundamon/normal_closed.png": {Data: []byte("")},
+		"assets/zundamon/normal_opened.png": {Data: []byte("")},
+	}
+
+	entries, err := loadCharacterSettingsFromSpeakerJSON(fsys, "assets", slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if err != nil {
+		t.Fatalf("loadCharacterSettingsFromSpeakerJSON failed: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 entry (valid one), got %d", len(entries))
+	}
+	if entries[0].SpeakerName != "ずんだもん" {
+		t.Errorf("expected valid speaker to be loaded")
+	}
+}
+
+func TestLoadCharacterSettingsFromSpeakerJSON_SkipMissingImageFiles(t *testing.T) {
+	t.Parallel()
+	fsys := fstest.MapFS{
+		"assets/zundamon/speaker.json": {
+			Data: []byte(`{
+				"speakerName": "ずんだもん",
+				"styles": [
+					{
+						"styleName": "ノーマル",
+						"mouthClosed": "zundamon/normal_closed.png",
+						"mouthOpened": "zundamon/normal_opened.png"
+					}
+				]
+			}`),
+		},
+	}
+
+	entries, err := loadCharacterSettingsFromSpeakerJSON(fsys, "assets", slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if err == nil {
+		t.Fatal("expected error when image files don't exist")
+	}
+	if len(entries) != 0 {
+		t.Errorf("expected 0 entries (invalid entry), got %d", len(entries))
+	}
+}

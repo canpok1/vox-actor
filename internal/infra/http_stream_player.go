@@ -101,6 +101,11 @@ const (
 	defaultSilentInterval = 500 * time.Millisecond
 )
 
+var (
+	// pathSegmentPattern はファイルパスのセグメント検証に使う正規表現。
+	pathSegmentPattern = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
+)
+
 // clipEvent は SSE で配信する clip イベントのペイロード。
 type clipEvent struct {
 	ID          uint64 `json:"id"`
@@ -534,7 +539,7 @@ type apiStatusJSON struct {
 	Speakers     []speakerJSON `json:"speakers"`
 }
 
-// characterEntry は settings.json の character エントリ。
+// characterEntry は speaker.json から変換された character エントリ。
 type characterEntry struct {
 	SpeakerName string `json:"speakerName"`
 	StyleName   string `json:"styleName"`
@@ -593,12 +598,14 @@ func (p *HTTPStreamPlayer) buildAPIStatusJSON() error {
 // buildAPICharactersJSON はキャラクター設定から /api/characters のレスポンスを
 // Start 時に一度だけマーシャルしてキャッシュする。
 // workspacePath が空の場合は enabled=false で固定する。
+// speaker.json から読み込み、有効なエントリが見つからない場合は enabled=false。
 func (p *HTTPStreamPlayer) buildAPICharactersJSON() error {
 	entries := []characterEntry{}
 	enabled := false
 
 	if p.workspacePath != "" {
-		loadedEntries, loadErr := loadCharacterSettings(p.workspacePath, p.logger)
+		fsys := os.DirFS(p.workspacePath)
+		loadedEntries, loadErr := loadCharacterSettingsFromSpeakerJSON(fsys, ".vox-actor/assets", p.logger)
 		if loadErr == nil && len(loadedEntries) > 0 {
 			entries = loadedEntries
 			enabled = true
@@ -616,58 +623,109 @@ func (p *HTTPStreamPlayer) buildAPICharactersJSON() error {
 	return nil
 }
 
-// loadCharacterSettings はworkspacePath/settings.jsonからキャラクター設定を読み込む。
-// JSON パース失敗、画像不在、パス検証エラーなどで無効なエントリは自動的に除外される。
-// 有効なエントリが 0 件の場合はエラーを返す。
-func loadCharacterSettings(workspacePath string, logger *slog.Logger) ([]characterEntry, error) {
-	settingsFile := filepath.Join(workspacePath, "settings.json")
-	data, err := os.ReadFile(settingsFile)
+// loadCharacterSettingsFromSpeakerJSON はfsys内のassetsDir/*/speaker.jsonを走査し、
+// キャラクター設定を読み込む。JSON パース失敗、画像不在、パス検証エラーなどで
+// 無効なエントリは自動的に除外される。有効なエントリが 0 件の場合はエラーを返す。
+func loadCharacterSettingsFromSpeakerJSON(fsys fs.FS, assetsDir string, logger *slog.Logger) ([]characterEntry, error) {
+	entries := []characterEntry{}
+
+	assetsDirFS, err := fs.Sub(fsys, assetsDir)
 	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return nil, nil
-		}
-		logger.Warn("failed to read settings.json", "path", settingsFile, "error", err)
-		return nil, nil
+		return nil, fmt.Errorf("failed to access assets directory: %w", err)
 	}
 
-	var settingsPayload struct {
-		Characters []characterEntry `json:"characters"`
-	}
-	if err := json.Unmarshal(data, &settingsPayload); err != nil {
-		logger.Warn("failed to parse settings.json", "path", settingsFile, "error", err)
-		return nil, nil
+	dirs, err := fs.ReadDir(assetsDirFS, ".")
+	if err != nil {
+		return nil, fmt.Errorf("failed to read assets directory: %w", err)
 	}
 
-	validEntries := []characterEntry{}
-	assetsDir := filepath.Join(workspacePath, "assets")
-
-	for _, entry := range settingsPayload.Characters {
-		if err := validateCharacterEntry(entry, assetsDir); err != nil {
-			logger.Warn("skipping invalid character entry", "speakerName", entry.SpeakerName, "styleName", entry.StyleName, "error", err)
+	for _, dir := range dirs {
+		if !dir.IsDir() {
 			continue
 		}
-		validEntries = append(validEntries, entry)
+
+		speakerJSONPath := filepath.Join(dir.Name(), "speaker.json")
+		data, err := fs.ReadFile(assetsDirFS, speakerJSONPath)
+		if err != nil {
+			if errors.Is(err, fs.ErrNotExist) {
+				continue
+			}
+			logger.Warn("failed to read speaker.json", "path", speakerJSONPath, "error", err)
+			continue
+		}
+
+		speakerJSON, err := entity.ParseSpeakerJSON(data)
+		if err != nil {
+			logger.Warn("failed to parse speaker.json", "path", speakerJSONPath, "error", err)
+			continue
+		}
+
+		if err := speakerJSON.Validate(); err != nil {
+			logger.Warn("invalid speaker.json", "path", speakerJSONPath, "error", err)
+			continue
+		}
+
+		for _, style := range speakerJSON.Styles {
+			entry := characterEntry{
+				SpeakerName: speakerJSON.SpeakerName,
+				StyleName:   style.StyleName,
+				MouthClosed: style.MouthClosed,
+				MouthOpen:   style.MouthOpened,
+			}
+
+			if err := validateCharacterEntryInFS(entry, assetsDirFS); err != nil {
+				logger.Warn("skipping invalid character entry", "speakerName", entry.SpeakerName, "styleName", entry.StyleName, "error", err)
+				continue
+			}
+
+			entries = append(entries, entry)
+		}
 	}
 
-	if len(validEntries) == 0 {
+	if len(entries) == 0 {
 		return nil, fmt.Errorf("no valid character entries found")
 	}
 
-	return validEntries, nil
+	return entries, nil
 }
 
-// validateCharacterEntry は単一のキャラクター設定を検証する。
+// validateCharacterEntryInFS は単一のキャラクター設定を fs.FS に対して検証する。
 // パス検証: .. や先頭 / を含む、セグメントが [A-Za-z0-9._-]+ 以外を含む場合はエラー。
 // 画像ファイル存在確認。
-func validateCharacterEntry(entry characterEntry, charactersDir string) error {
+func validateCharacterEntryInFS(entry characterEntry, fsys fs.FS) error {
 	for _, imgPath := range []string{entry.MouthClosed, entry.MouthOpen} {
 		if imgPath == "" {
 			return fmt.Errorf("image path is empty")
 		}
-		if err := validateImagePath(imgPath, charactersDir); err != nil {
+		if err := validateImagePathInFS(imgPath, fsys); err != nil {
 			return err
 		}
 	}
+	return nil
+}
+
+// validateImagePathInFS は相対パスの検証と fs.FS に対する存在確認を行う。
+// パストラバーサル (..を含む、/で始まる) を拒否し、
+// 各セグメントが [A-Za-z0-9._-]+ にマッチするか確認する。
+func validateImagePathInFS(relPath string, fsys fs.FS) error {
+	if strings.HasPrefix(relPath, "/") || strings.HasPrefix(relPath, "../") || strings.Contains(relPath, "/../") || strings.Contains(relPath, "..") {
+		return fmt.Errorf("path traversal detected")
+	}
+
+	pathSegments := strings.Split(relPath, "/")
+	for _, seg := range pathSegments {
+		if !pathSegmentPattern.MatchString(seg) {
+			return fmt.Errorf("invalid path segment: %s", seg)
+		}
+	}
+
+	if _, err := fs.Stat(fsys, relPath); err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return fmt.Errorf("image file not found: %s", relPath)
+		}
+		return err
+	}
+
 	return nil
 }
 
@@ -675,17 +733,13 @@ func validateCharacterEntry(entry characterEntry, charactersDir string) error {
 // パストラバーサル (..を含む、/で始まる) を拒否し、
 // 各セグメントが [A-Za-z0-9._-]+ にマッチするか確認する。
 func validateImagePath(relPath string, baseDir string) error {
-	if strings.HasPrefix(relPath, "/") || strings.HasPrefix(relPath, "../") || strings.Contains(relPath, "/../") {
+	if strings.HasPrefix(relPath, "/") || strings.HasPrefix(relPath, "../") || strings.Contains(relPath, "/../") || strings.Contains(relPath, "..") {
 		return fmt.Errorf("path traversal detected")
-	}
-	if strings.Contains(relPath, "..") {
-		return fmt.Errorf("path contains parent directory reference")
 	}
 
 	pathSegments := strings.Split(relPath, "/")
-	pathPattern := regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
 	for _, seg := range pathSegments {
-		if !pathPattern.MatchString(seg) {
+		if !pathSegmentPattern.MatchString(seg) {
 			return fmt.Errorf("invalid path segment: %s", seg)
 		}
 	}
