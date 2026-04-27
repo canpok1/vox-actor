@@ -72,17 +72,17 @@ export function LipSyncImage({
   }, [volume, hysteresisMs]);
 
   return (
-    <div className="h-full">
+    <div className="h-full w-auto" style={{ aspectRatio: "3 / 4" }}>
       <img
         src={mouthClosedUrl}
         alt="character mouth closed"
-        className="h-full w-auto"
+        className="h-full w-auto object-contain"
         style={{ display: isOpen ? "none" : "block" }}
       />
       <img
         src={mouthOpenUrl}
         alt="character mouth open"
-        className="h-full w-auto"
+        className="h-full w-auto object-contain"
         style={{ display: isOpen ? "block" : "none" }}
       />
     </div>

@@ -80,6 +80,17 @@ export function CharacterPanel({
     ? getCharacterImageUrls(singleSlotChar.character)
     : null;
 
+  // マルチスロット時に実際に表示するキャラのスロット情報を抽出
+  const filledSlots = !isMultiSlot
+    ? []
+    : MULTI_SLOT_LAYOUT.filter(({ slotIndex }) => slots[slotIndex] !== null).map(
+        ({ slotIndex, flip }) => ({
+          slotIndex,
+          flip,
+          slot: slots[slotIndex]!,
+        }),
+      );
+
   return (
     <section
       id="panel-character"
@@ -102,29 +113,69 @@ export function CharacterPanel({
             />
           )
         ) : (
-          <div className="flex h-full items-end justify-center gap-2">
-            {MULTI_SLOT_LAYOUT.map(({ slotIndex, flip }) => {
-              const slot = slots[slotIndex];
-              const urls = slot ? getCharacterImageUrls(slot.character) : null;
-              const wrapperStyle: React.CSSProperties = flip
-                ? { transform: "scaleX(-1)" }
-                : {};
+          <>
+            {/* Desktop layout: horizontal flex layout */}
+            <div className="hidden sm:flex h-full items-end justify-center gap-2">
+              {filledSlots.map(({ slotIndex, flip, slot }) => {
+                const urls = getCharacterImageUrls(slot.character);
+                const wrapperStyle: React.CSSProperties = flip
+                  ? { transform: "scaleX(-1)" }
+                  : {};
+                const isPlaying = isPlayingCharacter(slot.character);
 
-              return (
-                <div key={slotIndex} className="h-full" style={wrapperStyle}>
-                  {slot && urls ? (
+                return (
+                  <div
+                    key={slotIndex}
+                    className="relative h-full flex-shrink-0"
+                    style={{
+                      ...wrapperStyle,
+                      maxWidth: "25%",
+                      width: "auto",
+                      zIndex: isPlaying ? 10 : 1,
+                    }}
+                  >
                     <LipSyncImage
                       mouthClosedUrl={urls.closed}
                       mouthOpenUrl={urls.open}
-                      volume={isPlayingCharacter(slot.character) ? volume : 0}
+                      volume={isPlaying ? volume : 0}
                     />
-                  ) : (
-                    <div className="h-full" style={placeholderStyle} />
-                  )}
-                </div>
-              );
-            })}
-          </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Mobile layout: absolute positioning with overlap */}
+            <div className="sm:hidden relative w-full h-full">
+              {filledSlots.map((_, index) => {
+                const { slotIndex, flip, slot } = filledSlots[index];
+                const urls = getCharacterImageUrls(slot.character);
+                const isPlaying = isPlayingCharacter(slot.character);
+                const charCount = filledSlots.length;
+                // 位置: n人表示の場合、画面幅を(n+1)分割して、(index+1)/(n+1)の位置に配置
+                const leftPercent = ((index + 1) / (charCount + 1)) * 100;
+
+                return (
+                  <div
+                    key={slotIndex}
+                    className="absolute bottom-0 h-full"
+                    style={{
+                      left: `${leftPercent}%`,
+                      transform: `translateX(-50%)${flip ? " scaleX(-1)" : ""}`,
+                      maxWidth: "60%",
+                      width: "auto",
+                      zIndex: isPlaying ? 10 : 1,
+                    }}
+                  >
+                    <LipSyncImage
+                      mouthClosedUrl={urls.closed}
+                      mouthOpenUrl={urls.open}
+                      volume={isPlaying ? volume : 0}
+                    />
+                  </div>
+                );
+              })}
+            </div>
+          </>
         )}
       </div>
 
