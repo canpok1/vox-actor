@@ -1666,7 +1666,9 @@ func TestHTTPStreamPlayer_APICharacters_DisabledWhenNoWorkspacePath(t *testing.T
 
 func TestLoadCharacterSettingsFromSpeakerJSON_SingleValidSpeaker(t *testing.T) {
 	t.Parallel()
-	// Create a temporary workspace with assets/speaker-name/speaker.json
+	// Create a temporary workspace with assets/speaker-name/speaker.json.
+	// speaker.json paths are filename-only (relative to the speaker directory),
+	// matching the actual format used in .vox-actor/assets/*/speaker.json.
 	fsys := fstest.MapFS{
 		"assets/zundamon/speaker.json": {
 			Data: []byte(`{
@@ -1674,8 +1676,8 @@ func TestLoadCharacterSettingsFromSpeakerJSON_SingleValidSpeaker(t *testing.T) {
 				"styles": [
 					{
 						"styleName": "ノーマル",
-						"mouthClosed": "zundamon/normal_closed.png",
-						"mouthOpened": "zundamon/normal_opened.png"
+						"mouthClosed": "normal_closed.png",
+						"mouthOpened": "normal_opened.png"
 					}
 				]
 			}`),
@@ -1714,13 +1716,13 @@ func TestLoadCharacterSettingsFromSpeakerJSON_MultipleStyles(t *testing.T) {
 				"styles": [
 					{
 						"styleName": "ノーマル",
-						"mouthClosed": "zundamon/normal_closed.png",
-						"mouthOpened": "zundamon/normal_opened.png"
+						"mouthClosed": "normal_closed.png",
+						"mouthOpened": "normal_opened.png"
 					},
 					{
 						"styleName": "喜び",
-						"mouthClosed": "zundamon/happy_closed.png",
-						"mouthOpened": "zundamon/happy_opened.png"
+						"mouthClosed": "happy_closed.png",
+						"mouthOpened": "happy_opened.png"
 					}
 				]
 			}`),
@@ -1771,8 +1773,8 @@ func TestLoadCharacterSettingsFromSpeakerJSON_SkipInvalidSpeakerJSON(t *testing.
 				"styles": [
 					{
 						"styleName": "ノーマル",
-						"mouthClosed": "zundamon/normal_closed.png",
-						"mouthOpened": "zundamon/normal_opened.png"
+						"mouthClosed": "normal_closed.png",
+						"mouthOpened": "normal_opened.png"
 					}
 				]
 			}`),
@@ -1802,8 +1804,8 @@ func TestLoadCharacterSettingsFromSpeakerJSON_SkipMissingImageFiles(t *testing.T
 				"styles": [
 					{
 						"styleName": "ノーマル",
-						"mouthClosed": "zundamon/normal_closed.png",
-						"mouthOpened": "zundamon/normal_opened.png"
+						"mouthClosed": "normal_closed.png",
+						"mouthOpened": "normal_opened.png"
 					}
 				]
 			}`),
@@ -1819,6 +1821,46 @@ func TestLoadCharacterSettingsFromSpeakerJSON_SkipMissingImageFiles(t *testing.T
 	}
 }
 
+// TestLoadCharacterSettingsFromSpeakerJSON_PathRelativeToSpeakerDir verifies that
+// mouthClosed/mouthOpened paths in speaker.json are treated as relative to the speaker
+// directory, not the assets directory root. Real speaker.json files use filename-only
+// paths (e.g. "ankomon_normal_close.png"), not paths prefixed with the speaker dir.
+func TestLoadCharacterSettingsFromSpeakerJSON_PathRelativeToSpeakerDir(t *testing.T) {
+	t.Parallel()
+	// speaker.json uses filename-only paths (relative to its own directory),
+	// matching the actual format used in .vox-actor/assets/*/speaker.json.
+	fsys := fstest.MapFS{
+		"assets/zundamon/speaker.json": {
+			Data: []byte(`{
+				"speakerName": "ずんだもん",
+				"styles": [
+					{
+						"styleName": "ノーマル",
+						"mouthClosed": "normal_closed.png",
+						"mouthOpened": "normal_opened.png"
+					}
+				]
+			}`),
+		},
+		"assets/zundamon/normal_closed.png": {Data: []byte("")},
+		"assets/zundamon/normal_opened.png": {Data: []byte("")},
+	}
+
+	entries, err := loadCharacterSettingsFromSpeakerJSON(fsys, "/", "assets", slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if err != nil {
+		t.Fatalf("loadCharacterSettingsFromSpeakerJSON failed: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 entry, got %d", len(entries))
+	}
+	if entries[0].MouthClosed != "zundamon/normal_closed.png" {
+		t.Errorf("expected mouthClosed='zundamon/normal_closed.png', got %q", entries[0].MouthClosed)
+	}
+	if entries[0].MouthOpen != "zundamon/normal_opened.png" {
+		t.Errorf("expected mouthOpen='zundamon/normal_opened.png', got %q", entries[0].MouthOpen)
+	}
+}
+
 func newValidAssetsWorkspace(t *testing.T) string {
 	t.Helper()
 	workspaceDir := t.TempDir()
@@ -1826,7 +1868,7 @@ func newValidAssetsWorkspace(t *testing.T) string {
 	if err := os.MkdirAll(speakerDir, 0o755); err != nil {
 		t.Fatalf("MkdirAll: %v", err)
 	}
-	speakerJSON := `{"speakerName":"ずんだもん","styles":[{"styleName":"ノーマル","mouthClosed":"zundamon/normal_closed.png","mouthOpened":"zundamon/normal_opened.png"}]}`
+	speakerJSON := `{"speakerName":"ずんだもん","styles":[{"styleName":"ノーマル","mouthClosed":"normal_closed.png","mouthOpened":"normal_opened.png"}]}`
 	if err := os.WriteFile(filepath.Join(speakerDir, "speaker.json"), []byte(speakerJSON), 0o644); err != nil {
 		t.Fatalf("WriteFile speaker.json: %v", err)
 	}
