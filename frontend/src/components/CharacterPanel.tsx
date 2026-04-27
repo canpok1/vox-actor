@@ -22,10 +22,10 @@ function getCharacterImageUrls(character: CharacterEntry): {
   open: string;
 } {
   return {
-    closed: `/assets/images/characters/${encodeURIComponent(
+    closed: `/assets/images/${encodeURIComponent(
       character.mouthClosed,
     )}`,
-    open: `/assets/images/characters/${encodeURIComponent(
+    open: `/assets/images/${encodeURIComponent(
       character.mouthOpen,
     )}`,
   };

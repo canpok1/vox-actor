@@ -1630,8 +1630,8 @@ func TestHTTPStreamPlayer_ImplementsErrorBroadcaster(t *testing.T) {
 // TODO: 画像パスに `..` を含む場合は該当エントリを無視し enabled=false になる
 // TODO: 画像ファイル不在の場合は該当エントリを無視する
 // TODO: 全エントリが無効な場合は enabled=false を返す
-// TODO: GET /assets/images/characters/<relative-path> が画像ファイルを配信する
-// TODO: GET /assets/images/characters/<relative-path> でパス検証（..や先頭/拒否）
+// TODO: GET /assets/images/<relative-path> が画像ファイルを配信する
+// TODO: GET /assets/images/<relative-path> でパス検証（..や先頭/拒否）
 // TODO: speakerName + styleName が重複する場合はエラー（startup 時）
 // TODO: ミュート中でも画像キャッシュは読み込まれる（lazy load on start）
 

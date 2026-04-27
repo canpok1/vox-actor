@@ -63,8 +63,8 @@ export function TestPanel({
         <div className="flex min-h-0 flex-1 items-center justify-center rounded-md bg-ctp-surface p-4">
           {matchedCharacter ? (
             <LipSyncImage
-              mouthClosedUrl={`/assets/images/characters/${encodeURIComponent(matchedCharacter.mouthClosed)}`}
-              mouthOpenUrl={`/assets/images/characters/${encodeURIComponent(matchedCharacter.mouthOpen)}`}
+              mouthClosedUrl={`/assets/images/${encodeURIComponent(matchedCharacter.mouthClosed)}`}
+              mouthOpenUrl={`/assets/images/${encodeURIComponent(matchedCharacter.mouthOpen)}`}
               volume={volume}
             />
           ) : (
