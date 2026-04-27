@@ -9,9 +9,9 @@ description: |
   直接ユーザーが呼ぶより、monologue/speak/talk経由の呼び出しを想定。
 argument-hint: "<種別:monologue|speak|talk> <本文> [追加の演出指示]"
 allowed-tools:
+  - "Bash(vox-actor speakers *)"
   - "Bash(${CLAUDE_PLUGIN_ROOT}/skills/act/scripts/save-script.sh *)"
   - "Bash(${CLAUDE_PLUGIN_ROOT}/skills/act/scripts/play-script.sh *)"
-  - "Read(${CLAUDE_PLUGIN_ROOT}/skills/act/characters/*.md)"
 ---
 
 vox-actor を使った音声再生の技術的実行を担うスキルです。`monologue` / `speak` / `talk` の入口スキルから呼び出される前提で、台本生成と再生実行を一手に引き受けます。vox-actor CLI に関する利用知識（話速の目安・通知モード切替・ワークスペース解決・エラーログ仕様・JSON/JSONL の形式制約・キャラクター設定の扱いなど）はこのスキルに集約されています。
