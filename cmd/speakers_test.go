@@ -254,3 +254,306 @@ func TestSpeakersListCmd_LegacySpeakerName_Listed(t *testing.T) {
 		t.Errorf("expected legacy speakerName to work, got items: %+v", items)
 	}
 }
+
+// speakers profile コマンド テストリスト
+// TODO: profileサブコマンドがspeakersに登録されている
+// TODO: --idフラグで指定したキャラクターのプロフィールをJSON形式で返す
+// TODO: --nameフラグで指定したキャラクターのプロフィールをJSON形式で返す
+// TODO: descriptionPathのmdファイル内容がdescriptionフィールドに含まれる
+// TODO: --idと--nameを両方指定した場合は usage error
+// TODO: --idと--nameを両方指定しなかった場合は usage error
+// TODO: --nameで複数キャラクターが一致した場合は exit 1 エラー（stderrにidリスト）
+// TODO: 存在しないキャラクターは "character not found" エラー（exit 1）
+// TODO: descriptionPathが存在しない場合は description="" で継続し stderr に警告
+
+func findSpeakersProfileCmdFromRoot(t *testing.T, rootCmd *cobra.Command) *cobra.Command {
+	t.Helper()
+	for _, c := range rootCmd.Commands() {
+		if c.Name() == "speakers" {
+			for _, sc := range c.Commands() {
+				if sc.Name() == "profile" {
+					return sc
+				}
+			}
+		}
+	}
+	t.Fatal("speakers profile subcommand not found")
+	return nil
+}
+
+func TestSpeakersProfileCmd_RegisteredUnderSpeakers(t *testing.T) {
+	rootCmd := makeRootCmd()
+	_ = findSpeakersProfileCmdFromRoot(t, rootCmd)
+}
+
+func TestSpeakersProfileCmd_WithID_ReturnsProfile(t *testing.T) {
+	assetsDir := t.TempDir()
+
+	// zundamon のキャラクター設定
+	zundaDir := filepath.Join(assetsDir, "zundamon")
+	if err := os.MkdirAll(zundaDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	descriptionFile := filepath.Join(zundaDir, "character.md")
+	descContent := "# ずんだもん キャラクター設定\n\n## 口調の特徴\n\n- 語尾に「のだ」を付ける"
+	if err := os.WriteFile(descriptionFile, []byte(descContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	speakerJSON := `{
+		"name": "ずんだもん",
+		"profile": {
+			"pronoun": "ボク",
+			"speechSuffix": ["〜のだ", "〜なのだ"],
+			"personality": ["元気", "明るい"],
+			"speakers": {
+				"ノーマル": 3,
+				"ツンツン": 7
+			},
+			"descriptionPath": "character.md"
+		},
+		"styles": []
+	}`
+
+	if err := os.WriteFile(filepath.Join(zundaDir, "speaker.json"), []byte(speakerJSON), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	deps := &Deps{
+		Speakers: &SpeakersDeps{
+			AssetsDirFunc: func() (string, error) { return assetsDir, nil },
+		},
+	}
+	rootCmd := makeRootCmd(deps)
+	buf := new(bytes.Buffer)
+	rootCmd.SetOut(buf)
+	rootCmd.SetArgs([]string{"speakers", "profile", "--id", "zundamon"})
+
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	var result map[string]interface{}
+	if err := json.Unmarshal(buf.Bytes(), &result); err != nil {
+		t.Fatalf("expected valid JSON, got: %v (output: %s)", err, buf.String())
+	}
+
+	if result["id"] != "zundamon" {
+		t.Errorf("expected id 'zundamon', got %v", result["id"])
+	}
+	if result["name"] != "ずんだもん" {
+		t.Errorf("expected name 'ずんだもん', got %v", result["name"])
+	}
+	if result["description"] != descContent {
+		t.Errorf("expected description content to be included, got: %v", result["description"])
+	}
+}
+
+func TestSpeakersProfileCmd_WithName_ReturnsProfile(t *testing.T) {
+	assetsDir := t.TempDir()
+
+	// zundamon のキャラクター設定
+	zundaDir := filepath.Join(assetsDir, "zundamon")
+	if err := os.MkdirAll(zundaDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	descriptionFile := filepath.Join(zundaDir, "character.md")
+	descContent := "# ずんだもん"
+	if err := os.WriteFile(descriptionFile, []byte(descContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	speakerJSON := `{
+		"name": "ずんだもん",
+		"profile": {
+			"pronoun": "ボク",
+			"speechSuffix": ["〜のだ"],
+			"personality": ["元気"],
+			"speakers": {"ノーマル": 3},
+			"descriptionPath": "character.md"
+		},
+		"styles": []
+	}`
+
+	if err := os.WriteFile(filepath.Join(zundaDir, "speaker.json"), []byte(speakerJSON), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	deps := &Deps{
+		Speakers: &SpeakersDeps{
+			AssetsDirFunc: func() (string, error) { return assetsDir, nil },
+		},
+	}
+	rootCmd := makeRootCmd(deps)
+	buf := new(bytes.Buffer)
+	rootCmd.SetOut(buf)
+	rootCmd.SetArgs([]string{"speakers", "profile", "--name", "ずんだもん"})
+
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	var result map[string]interface{}
+	if err := json.Unmarshal(buf.Bytes(), &result); err != nil {
+		t.Fatalf("expected valid JSON, got: %v", err)
+	}
+
+	if result["id"] != "zundamon" {
+		t.Errorf("expected id 'zundamon', got %v", result["id"])
+	}
+	if result["name"] != "ずんだもん" {
+		t.Errorf("expected name 'ずんだもん', got %v", result["name"])
+	}
+}
+
+func TestSpeakersProfileCmd_BothFlagsSpecified_UsageError(t *testing.T) {
+	assetsDir := t.TempDir()
+
+	deps := &Deps{
+		Speakers: &SpeakersDeps{
+			AssetsDirFunc: func() (string, error) { return assetsDir, nil },
+		},
+	}
+	rootCmd := makeRootCmd(deps)
+	errBuf := new(bytes.Buffer)
+	rootCmd.SetErr(errBuf)
+	rootCmd.SetArgs([]string{"speakers", "profile", "--id", "zundamon", "--name", "ずんだもん"})
+
+	err := rootCmd.Execute()
+	if err == nil {
+		t.Error("expected error when both --id and --name specified")
+	}
+}
+
+func TestSpeakersProfileCmd_NoFlagsSpecified_UsageError(t *testing.T) {
+	assetsDir := t.TempDir()
+
+	deps := &Deps{
+		Speakers: &SpeakersDeps{
+			AssetsDirFunc: func() (string, error) { return assetsDir, nil },
+		},
+	}
+	rootCmd := makeRootCmd(deps)
+	errBuf := new(bytes.Buffer)
+	rootCmd.SetErr(errBuf)
+	rootCmd.SetArgs([]string{"speakers", "profile"})
+
+	err := rootCmd.Execute()
+	if err == nil {
+		t.Error("expected error when neither --id nor --name specified")
+	}
+}
+
+func TestSpeakersProfileCmd_CharacterNotFound_Error(t *testing.T) {
+	assetsDir := t.TempDir()
+
+	deps := &Deps{
+		Speakers: &SpeakersDeps{
+			AssetsDirFunc: func() (string, error) { return assetsDir, nil },
+		},
+	}
+	rootCmd := makeRootCmd(deps)
+	rootCmd.SetArgs([]string{"speakers", "profile", "--id", "nonexistent"})
+
+	err := rootCmd.Execute()
+	if err == nil {
+		t.Error("expected error for nonexistent character")
+	}
+}
+
+func TestSpeakersProfileCmd_NameDuplicate_Error(t *testing.T) {
+	assetsDir := t.TempDir()
+
+	// zundamon
+	zundaDir := filepath.Join(assetsDir, "zundamon")
+	if err := os.MkdirAll(zundaDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	speakerJSON := `{"name": "ずんだもん", "profile": {}, "styles": []}`
+	if err := os.WriteFile(filepath.Join(zundaDir, "speaker.json"), []byte(speakerJSON), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// another dir with same name
+	otherDir := filepath.Join(assetsDir, "other")
+	if err := os.MkdirAll(otherDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(otherDir, "speaker.json"), []byte(speakerJSON), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	deps := &Deps{
+		Speakers: &SpeakersDeps{
+			AssetsDirFunc: func() (string, error) { return assetsDir, nil },
+		},
+	}
+	rootCmd := makeRootCmd(deps)
+	errBuf := new(bytes.Buffer)
+	rootCmd.SetErr(errBuf)
+	rootCmd.SetArgs([]string{"speakers", "profile", "--name", "ずんだもん"})
+
+	err := rootCmd.Execute()
+	if err == nil {
+		t.Error("expected error when multiple characters have same name")
+	}
+	if !strings.Contains(errBuf.String(), "zundamon") && !strings.Contains(errBuf.String(), "other") {
+		t.Errorf("expected matched IDs in stderr, got: %s", errBuf.String())
+	}
+}
+
+func TestSpeakersProfileCmd_DescriptionFileMissing_ContinuesWithWarning(t *testing.T) {
+	assetsDir := t.TempDir()
+
+	zundaDir := filepath.Join(assetsDir, "zundamon")
+	if err := os.MkdirAll(zundaDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	speakerJSON := `{
+		"name": "ずんだもん",
+		"profile": {
+			"pronoun": "ボク",
+			"speechSuffix": ["〜のだ"],
+			"personality": ["元気"],
+			"speakers": {"ノーマル": 3},
+			"descriptionPath": "nonexistent.md"
+		},
+		"styles": []
+	}`
+
+	if err := os.WriteFile(filepath.Join(zundaDir, "speaker.json"), []byte(speakerJSON), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	deps := &Deps{
+		Speakers: &SpeakersDeps{
+			AssetsDirFunc: func() (string, error) { return assetsDir, nil },
+		},
+	}
+	rootCmd := makeRootCmd(deps)
+	buf := new(bytes.Buffer)
+	errBuf := new(bytes.Buffer)
+	rootCmd.SetOut(buf)
+	rootCmd.SetErr(errBuf)
+	rootCmd.SetArgs([]string{"speakers", "profile", "--id", "zundamon"})
+
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("expected no error (should continue with warning), got: %v", err)
+	}
+
+	var result map[string]interface{}
+	if err := json.Unmarshal(buf.Bytes(), &result); err != nil {
+		t.Fatalf("expected valid JSON, got: %v", err)
+	}
+
+	if result["description"] != "" {
+		t.Errorf("expected empty description when file missing, got: %v", result["description"])
+	}
+
+	if !strings.Contains(errBuf.String(), "nonexistent.md") {
+		t.Errorf("expected warning about missing file in stderr, got: %s", errBuf.String())
+	}
+}
