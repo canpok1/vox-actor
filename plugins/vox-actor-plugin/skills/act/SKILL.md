@@ -14,8 +14,6 @@ allowed-tools:
   - "Bash(${CLAUDE_PLUGIN_ROOT}/skills/act/scripts/play-script.sh *)"
 ---
 
-`monologue` / `speak` / `talk` から呼ばれ、台本生成と再生を行う実行スキル。話速・JSON制約・発音ルールなど vox-actor CLI 周りの利用知識はこのスキルに集約する。
-
 ## 入力
 
 - `$ARGUMENTS` 先頭から **種別**（`monologue` / `speak` / `talk`）と **本文** を取り出す
