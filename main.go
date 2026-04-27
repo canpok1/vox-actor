@@ -52,6 +52,9 @@ func main() {
 	}
 
 	deps := &cmd.Deps{
+		Assets: &cmd.AssetsDownloadDeps{
+			Cloner: &infra.GitCloner{},
+		},
 		Act: &cmd.ActDeps{
 			Reader:            reader,
 			ClientFactory:     clientFactory,
