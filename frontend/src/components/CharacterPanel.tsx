@@ -43,7 +43,7 @@ export function CharacterPanel({
   entries,
   volume,
 }: CharacterPanelProps) {
-  const { slots, isMultiSlot } = useCharacterStage(
+  const { slots, isMultiSlot, lastClipText } = useCharacterStage(
     playingClipId,
     entries,
     characters,
@@ -129,9 +129,9 @@ export function CharacterPanel({
       </div>
 
       <div className="flex h-32 shrink-0 items-center overflow-y-auto rounded-md bg-ctp-surface p-4">
-        {playingClipData ? (
+        {lastClipText !== null ? (
           <p className="break-words text-lg font-medium text-ctp-text">
-            {playingClipData.text}
+            {lastClipText}
           </p>
         ) : (
           <p className="text-ctp-subtext">

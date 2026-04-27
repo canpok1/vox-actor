@@ -512,4 +512,184 @@ describe("useCharacterStage", () => {
 
     expect(result.current.slots).toEqual([null, null, null, null]);
   });
+
+  describe("lastClipText", () => {
+    it("初期状態ではlastClipTextがnull", () => {
+      const { result } = renderHook(() => useCharacterStage(null, [], []));
+      expect(result.current.lastClipText).toBeNull();
+    });
+
+    it("クリップ再生開始でlastClipTextが更新される", async () => {
+      const charA = makeChar("キャラA");
+      const entry1 = makeClipEntry(1, "キャラA");
+
+      const { result, rerender } = renderHook(
+        ({
+          playingClipId,
+          entries,
+          characters,
+        }: {
+          playingClipId: number | null;
+          entries: TimelineEntry[];
+          characters: CharacterEntry[];
+        }) => useCharacterStage(playingClipId, entries, characters),
+        {
+          initialProps: {
+            playingClipId: null,
+            entries: [entry1],
+            characters: [charA],
+          },
+        },
+      );
+
+      await act(async () => {
+        rerender({ playingClipId: 1, entries: [entry1], characters: [charA] });
+      });
+
+      expect(result.current.lastClipText).toBe("text 1");
+    });
+
+    it("クリップ再生終了後もlastClipTextが保持される", async () => {
+      const charA = makeChar("キャラA");
+      const entry1 = makeClipEntry(1, "キャラA");
+
+      const { result, rerender } = renderHook(
+        ({
+          playingClipId,
+          entries,
+          characters,
+        }: {
+          playingClipId: number | null;
+          entries: TimelineEntry[];
+          characters: CharacterEntry[];
+        }) => useCharacterStage(playingClipId, entries, characters),
+        {
+          initialProps: {
+            playingClipId: null,
+            entries: [entry1],
+            characters: [charA],
+          },
+        },
+      );
+
+      await act(async () => {
+        rerender({ playingClipId: 1, entries: [entry1], characters: [charA] });
+      });
+      await act(async () => {
+        rerender({
+          playingClipId: null,
+          entries: [entry1],
+          characters: [charA],
+        });
+      });
+
+      expect(result.current.lastClipText).toBe("text 1");
+    });
+
+    it("次のクリップ再生開始でlastClipTextが切り替わる", async () => {
+      const charA = makeChar("キャラA");
+      const charB = makeChar("キャラB");
+      const entries = [makeClipEntry(1, "キャラA"), makeClipEntry(2, "キャラB")];
+      const chars = [charA, charB];
+
+      const { result, rerender } = renderHook(
+        ({
+          playingClipId,
+          entries,
+          characters,
+        }: {
+          playingClipId: number | null;
+          entries: TimelineEntry[];
+          characters: CharacterEntry[];
+        }) => useCharacterStage(playingClipId, entries, characters),
+        { initialProps: { playingClipId: null, entries, characters: chars } },
+      );
+
+      await act(async () => {
+        rerender({ playingClipId: 1, entries, characters: chars });
+      });
+      expect(result.current.lastClipText).toBe("text 1");
+
+      await act(async () => {
+        rerender({ playingClipId: 2, entries, characters: chars });
+      });
+      expect(result.current.lastClipText).toBe("text 2");
+    });
+
+    it("ALL_EXIT後にlastClipTextがnullになる", async () => {
+      const charA = makeChar("キャラA");
+      const entry1 = makeClipEntry(1, "キャラA");
+      const chars = [charA];
+
+      const { result, rerender } = renderHook(
+        ({
+          playingClipId,
+          entries,
+          characters,
+        }: {
+          playingClipId: number | null;
+          entries: TimelineEntry[];
+          characters: CharacterEntry[];
+        }) => useCharacterStage(playingClipId, entries, characters),
+        {
+          initialProps: {
+            playingClipId: null,
+            entries: [entry1],
+            characters: chars,
+          },
+        },
+      );
+
+      await act(async () => {
+        rerender({ playingClipId: 1, entries: [entry1], characters: chars });
+      });
+      await act(async () => {
+        rerender({ playingClipId: null, entries: [entry1], characters: chars });
+      });
+      expect(result.current.lastClipText).toBe("text 1");
+
+      await act(async () => {
+        vi.advanceTimersByTime(QUEUE_EMPTY_MS);
+      });
+      expect(result.current.lastClipText).toBeNull();
+    });
+
+    it("話者本人がステージを退場してもlastClipTextが保持される", async () => {
+      const charA = makeChar("キャラA");
+      const charB = makeChar("キャラB");
+      // charA speaks clip 1, then charB speaks clips 2-7 to evict charA
+      const entries: TimelineEntry[] = [
+        makeClipEntry(1, "キャラA"),
+        ...Array.from({ length: 7 }, (_, i) => makeClipEntry(i + 2, "キャラB")),
+      ];
+      const chars = [charA, charB];
+
+      const { result, rerender } = renderHook(
+        ({
+          playingClipId,
+          entries,
+          characters,
+        }: {
+          playingClipId: number | null;
+          entries: TimelineEntry[];
+          characters: CharacterEntry[];
+        }) => useCharacterStage(playingClipId, entries, characters),
+        { initialProps: { playingClipId: null, entries, characters: chars } },
+      );
+
+      await act(async () => {
+        rerender({ playingClipId: 1, entries, characters: chars });
+      });
+      // charB speaks clips 2-7 (charA gets evicted after 5 charB clips)
+      for (let id = 2; id <= 7; id++) {
+        await act(async () => {
+          rerender({ playingClipId: id, entries, characters: chars });
+        });
+      }
+
+      // charA was evicted from stage but lastClipText still holds the last played text
+      expect(result.current.slots[0]).toBeNull(); // charA evicted
+      expect(result.current.lastClipText).toBe("text 7"); // last played clip
+    });
+  });
 });
