@@ -675,7 +675,7 @@ func loadCharacterSettingsFromSpeakerJSON(fsys fs.FS, basePath string, assetsDir
 
 		for _, style := range speakerJSON.Styles {
 			entry := characterEntry{
-				SpeakerName: speakerJSON.SpeakerName,
+				SpeakerName: speakerJSON.GetSpeakerName(),
 				StyleName:   style.StyleName,
 				MouthClosed: filepath.Join(dir.Name(), style.MouthClosed),
 				MouthOpen:   filepath.Join(dir.Name(), style.MouthOpened),
