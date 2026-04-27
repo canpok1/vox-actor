@@ -7,8 +7,20 @@ import (
 
 // SpeakerJSON は speaker.json のトップレベル構造を表す。
 type SpeakerJSON struct {
-	SpeakerName string           `json:"speakerName"`
-	Styles      []CharacterStyle `json:"styles"`
+	Name    string            `json:"name"`
+	Profile *CharacterProfile `json:"profile,omitempty"`
+	Styles  []CharacterStyle  `json:"styles"`
+	// 互換性のため、古いスキーマの speakerName も保持
+	SpeakerName string `json:"speakerName"`
+}
+
+// CharacterProfile は speaker.json の profile フィールドを表す。
+type CharacterProfile struct {
+	Pronoun         string         `json:"pronoun"`
+	SpeechSuffix    []string       `json:"speechSuffix"`
+	Personality     []string       `json:"personality"`
+	Speakers        map[string]int `json:"speakers"`
+	DescriptionPath string         `json:"descriptionPath"`
 }
 
 // CharacterStyle は speaker.json の styles 配列の各要素を表す。
@@ -27,10 +39,18 @@ func ParseSpeakerJSON(data []byte) (*SpeakerJSON, error) {
 	return &s, nil
 }
 
+// GetSpeakerName は speaker 名を返す。新スキーマの Name を優先し、互換性のため古い SpeakerName にフォールバックする。
+func (s *SpeakerJSON) GetSpeakerName() string {
+	if s.Name != "" {
+		return s.Name
+	}
+	return s.SpeakerName
+}
+
 // Validate は SpeakerJSON の必須フィールドを検証する。
 func (s *SpeakerJSON) Validate() error {
-	if s.SpeakerName == "" {
-		return fmt.Errorf("speakerName is required")
+	if s.GetSpeakerName() == "" {
+		return fmt.Errorf("name or speakerName is required")
 	}
 	for i, st := range s.Styles {
 		if st.StyleName == "" {

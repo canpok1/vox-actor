@@ -115,3 +115,81 @@ func TestValidateSpeakerJSON_DuplicateStyleName(t *testing.T) {
 		t.Errorf("duplicate styleName should be valid, got error: %v", err)
 	}
 }
+
+func TestParseSpeakerJSON_NewSchema_WithProfile(t *testing.T) {
+	input := `{
+		"name": "ずんだもん",
+		"profile": {
+			"pronoun": "ボク",
+			"speechSuffix": ["〜のだ", "〜なのだ"],
+			"personality": ["元気", "明るい"],
+			"speakers": {
+				"ノーマル": 3,
+				"あまあま": 1
+			},
+			"descriptionPath": "character.md"
+		},
+		"styles": [
+			{ "styleName": "ノーマル", "mouthClosed": "normal/close.png", "mouthOpened": "normal/open.png" }
+		]
+	}`
+
+	got, err := entity.ParseSpeakerJSON([]byte(input))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got.Name != "ずんだもん" {
+		t.Errorf("Name = %q, want %q", got.Name, "ずんだもん")
+	}
+	if got.Profile == nil {
+		t.Fatal("Profile is nil, want non-nil")
+	}
+	if got.Profile.Pronoun != "ボク" {
+		t.Errorf("Profile.Pronoun = %q, want %q", got.Profile.Pronoun, "ボク")
+	}
+	if len(got.Profile.SpeechSuffix) != 2 {
+		t.Errorf("len(Profile.SpeechSuffix) = %d, want 2", len(got.Profile.SpeechSuffix))
+	}
+	if len(got.Profile.Personality) != 2 {
+		t.Errorf("len(Profile.Personality) = %d, want 2", len(got.Profile.Personality))
+	}
+	if got.Profile.Speakers["ノーマル"] != 3 {
+		t.Errorf("Profile.Speakers[ノーマル] = %d, want 3", got.Profile.Speakers["ノーマル"])
+	}
+	if got.Profile.DescriptionPath != "character.md" {
+		t.Errorf("Profile.DescriptionPath = %q, want %q", got.Profile.DescriptionPath, "character.md")
+	}
+}
+
+func TestGetSpeakerName_Fallback(t *testing.T) {
+	tests := []struct {
+		name     string
+		sj       *entity.SpeakerJSON
+		expected string
+	}{
+		{
+			name:     "prefer Name over SpeakerName",
+			sj:       &entity.SpeakerJSON{Name: "new", SpeakerName: "old"},
+			expected: "new",
+		},
+		{
+			name:     "fallback to SpeakerName when Name is empty",
+			sj:       &entity.SpeakerJSON{Name: "", SpeakerName: "old"},
+			expected: "old",
+		},
+		{
+			name:     "return empty when both are empty",
+			sj:       &entity.SpeakerJSON{Name: "", SpeakerName: ""},
+			expected: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tt.sj.GetSpeakerName()
+			if got != tt.expected {
+				t.Errorf("GetSpeakerName() = %q, want %q", got, tt.expected)
+			}
+		})
+	}
+}
