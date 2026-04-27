@@ -639,10 +639,10 @@ func loadCharacterSettings(workspacePath string, logger *slog.Logger) ([]charact
 	}
 
 	validEntries := []characterEntry{}
-	charactersDir := filepath.Join(workspacePath, "assets")
+	assetsDir := filepath.Join(workspacePath, "assets")
 
 	for _, entry := range settingsPayload.Characters {
-		if err := validateCharacterEntry(entry, charactersDir); err != nil {
+		if err := validateCharacterEntry(entry, assetsDir); err != nil {
 			logger.Warn("skipping invalid character entry", "speakerName", entry.SpeakerName, "styleName", entry.StyleName, "error", err)
 			continue
 		}
