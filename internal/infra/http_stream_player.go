@@ -256,7 +256,7 @@ func (p *HTTPStreamPlayer) Start(_ context.Context) error {
 	mux.HandleFunc("/events", p.handleEvents)
 	mux.HandleFunc("/api/status", p.handleAPIStatus)
 	mux.HandleFunc("/api/characters", p.handleAPICharacters)
-	mux.HandleFunc("/assets/images/characters/", p.handleCharacterImage)
+	mux.HandleFunc("/assets/images/", p.handleCharacterImage)
 	mux.HandleFunc("/test-clip", p.handleTestClip)
 	mux.HandleFunc(clipPathPrefix, p.handleClip)
 
@@ -639,7 +639,7 @@ func loadCharacterSettings(workspacePath string, logger *slog.Logger) ([]charact
 	}
 
 	validEntries := []characterEntry{}
-	charactersDir := filepath.Join(workspacePath, "characters")
+	charactersDir := filepath.Join(workspacePath, "assets")
 
 	for _, entry := range settingsPayload.Characters {
 		if err := validateCharacterEntry(entry, charactersDir); err != nil {
@@ -717,18 +717,18 @@ func (p *HTTPStreamPlayer) handleCharacterImage(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	relPath := strings.TrimPrefix(r.URL.Path, "/assets/images/characters/")
+	relPath := strings.TrimPrefix(r.URL.Path, "/assets/images/")
 	if relPath == r.URL.Path {
 		http.NotFound(w, r)
 		return
 	}
 
-	if err := validateImagePath(relPath, filepath.Join(p.workspacePath, "characters")); err != nil {
+	if err := validateImagePath(relPath, filepath.Join(p.workspacePath, "assets")); err != nil {
 		http.Error(w, "invalid path", http.StatusBadRequest)
 		return
 	}
 
-	fullPath := filepath.Join(p.workspacePath, "characters", relPath)
+	fullPath := filepath.Join(p.workspacePath, "assets", relPath)
 	http.ServeFile(w, r, fullPath)
 }
 
