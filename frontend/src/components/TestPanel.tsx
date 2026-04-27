@@ -2,7 +2,6 @@ import { useMemo } from "react";
 import type { Speaker, CharacterEntry } from "../types/api";
 import { TestControls } from "./TestControls";
 import { LipSyncImage } from "./LipSyncImage";
-import { useAudioVolume } from "../hooks/useAudioVolume";
 
 interface TestPanelProps {
   hidden: boolean;
@@ -13,7 +12,7 @@ interface TestPanelProps {
   error: string;
   charactersEnabled: boolean;
   characters: CharacterEntry[];
-  audioRef: React.RefObject<HTMLAudioElement>;
+  volume: number;
 }
 
 export function TestPanel({
@@ -25,9 +24,8 @@ export function TestPanel({
   error,
   charactersEnabled,
   characters,
-  audioRef,
+  volume,
 }: TestPanelProps) {
-  const volume = useAudioVolume(audioRef, !hidden && charactersEnabled);
 
   const selectedSpeaker = useMemo(
     () => speakers.find((s) => s.id === Number(selectedSpeakerId)) ?? null,

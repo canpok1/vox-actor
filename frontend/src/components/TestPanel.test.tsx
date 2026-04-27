@@ -1,12 +1,7 @@
-import { createRef } from "react";
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { Speaker, CharacterEntry } from "../types/api";
 import { TestPanel } from "./TestPanel";
-
-vi.mock("../hooks/useAudioVolume", () => ({
-  useAudioVolume: vi.fn(() => 0),
-}));
 
 describe("TestPanel", () => {
   const mockSpeakers: Speaker[] = [
@@ -19,8 +14,6 @@ describe("TestPanel", () => {
     onPlay: vi.fn(),
   };
 
-  const mockAudioRef = createRef<HTMLAudioElement>();
-
   const baseProps = {
     speakers: mockSpeakers,
     selectedSpeakerId: "1",
@@ -29,7 +22,7 @@ describe("TestPanel", () => {
     error: "",
     charactersEnabled: false,
     characters: [] as CharacterEntry[],
-    audioRef: mockAudioRef,
+    volume: 0,
   };
 
   it("hidden=false で表示される", () => {
