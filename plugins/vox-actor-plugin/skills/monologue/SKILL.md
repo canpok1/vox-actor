@@ -3,7 +3,6 @@ name: monologue
 description: 作業開始時、作業終了時、想定外のことが起こった時に呼び出す独り言スキル。キャラクターになりきった一言コメントを通知する。
 argument-hint: "[キャラクター名]"
 allowed-tools:
-  - "Bash(echo $((RANDOM % 100 + 1)))"
   - "Skill"
 model: Haiku
 ---
@@ -13,10 +12,9 @@ model: Haiku
 ## 実行フロー
 
 1. `$ARGUMENTS` を独り言のテーマとして受け取る（未指定なら作業の文脈から生成する）
-2. メモリから `default_character`（既定 `zundamon`、`speak` スキルと共用）と `monologue_probability`（既定 `100`）を読み取る
-3. **確率判定**: `echo $((RANDOM % 100 + 1))` を Bash で実行し、1〜100 の判定値を取得する。判定値が `monologue_probability` より大きい場合はここで終了する（後続の `act` スキル呼び出しは行わない）
-4. キャラクター（解決順は下記参照）と「キャラクターになりきった1文程度の独り言を読み上げる」という演出指示を確立する
-5. Skill ツールで `vox-actor-plugin:act` を呼び出し、種別 `monologue`・本文・確立済みのキャラクター情報を引き継ぐ
+2. メモリから `default_character`（既定 `zundamon`、`speak` スキルと共用）を読み取る
+3. キャラクター（解決順は下記参照）と「キャラクターになりきった1文程度の独り言を読み上げる」という演出指示を確立する
+4. Skill ツールで `vox-actor-plugin:act` を呼び出し、種別 `monologue`・本文・確立済みのキャラクター情報を引き継ぐ
 
 ## キャラクター設定
 
@@ -28,14 +26,6 @@ model: Haiku
 
 キャラクター設定ファイルの所在・読み込み・`speakers` マップの扱いは `act` スキルが担う。
 
-## 通知確率
-
-- 初期値: 100%（10回に10回）
-- ユーザーの指示により調整可能（Claudeのメモリシステムに保存する）
-  - 例: 「独り言の頻度を30%にして」→ メモリに `monologue_probability: 30` を保存
-
-通知確率の判定はこの入口スキル側に残し、通知スキップ時は `act` を呼び出さない。
-
 ## メモリに保存する設定項目
 
 以下の設定をClaudeのメモリシステム（MEMORY.md）に保存・参照する:
@@ -43,7 +33,6 @@ model: Haiku
 | 項目 | キー | デフォルト値 | 説明 |
 |------|------|-------------|------|
 | デフォルトキャラクター | `default_character` | `zundamon` | `characters/<name>.md` の `<name>`。`speak` スキルと共用 |
-| 通知確率 | `monologue_probability` | 100 | 0〜100の整数。通知する確率（%）。`0` で常に通知されない、`100` で必ず通知される |
 
 ## 制約
 

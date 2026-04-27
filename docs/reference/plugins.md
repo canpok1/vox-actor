@@ -37,9 +37,6 @@ claude code に `vox-actor-plugin` を導入すると、以下のスラッシュ
 | 項目 | キー | デフォルト値 | 説明 |
 |------|------|-------------|------|
 | デフォルトキャラクター | `default_character` | `zundamon` | `characters/<name>.md` の `<name>`。`speak` スキルと共用。引数指定があればそちらが優先 |
-| 通知確率 | `monologue_probability` | `100` | 1〜100の整数。通知する確率（%） |
-
-ユーザー指示（例: 「独り言の頻度を30%にして」）で更新すると、以降の実行に反映されます。
 
 ## `/vox-actor-plugin:speak <内容>`
 

@@ -44,7 +44,7 @@ allowed-tools:
 | デフォルトキャラクター | `default_character` | `zundamon` | `characters/<name>.md` の `<name>` | `monologue` スキルと共用。例: 「読み上げはめたんで」→ `metan` を保存 |
 | 読み上げの長さ | `speak_length` | `medium` | `short` / `medium` / `long` | 上記の長さ表を参照 |
 
-`default_character` は `monologue` スキルと共有する。`speak_length` と `monologue_probability` はそれぞれのスキル固有で衝突しない。
+`default_character` は `monologue` スキルと共有する。`speak_length` は `speak` スキル固有で衝突しない。
 
 ## 制約
 
