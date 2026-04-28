@@ -14,13 +14,14 @@ var ErrUsage = errors.New("usage error")
 
 // Deps はルートコマンドの依存を保持する。
 type Deps struct {
-	Act        *ActDeps
-	Watch      *WatchDeps
-	Say        *SayDeps
-	AudioCheck *AudioCheckDeps
-	Viewer     *ViewerDeps
-	Assets     *AssetsDownloadDeps
-	Speakers   *SpeakersDeps
+	Act          *ActDeps
+	Watch        *WatchDeps
+	Say          *SayDeps
+	ScriptAppend *ScriptAppendDeps
+	AudioCheck   *AudioCheckDeps
+	Viewer       *ViewerDeps
+	Assets       *AssetsDownloadDeps
+	Speakers     *SpeakersDeps
 }
 
 func makeRootCmd(deps ...*Deps) *cobra.Command {
@@ -42,6 +43,7 @@ func makeRootCmd(deps ...*Deps) *cobra.Command {
 	var actDeps *ActDeps
 	var watchDeps *WatchDeps
 	var sayDeps *SayDeps
+	var scriptAppendDeps *ScriptAppendDeps
 	var audioCheckDeps *AudioCheckDeps
 	var assetsDeps *AssetsDownloadDeps
 	var speakersDeps *SpeakersDeps
@@ -49,6 +51,7 @@ func makeRootCmd(deps ...*Deps) *cobra.Command {
 		actDeps = d.Act
 		watchDeps = d.Watch
 		sayDeps = d.Say
+		scriptAppendDeps = d.ScriptAppend
 		audioCheckDeps = d.AudioCheck
 		assetsDeps = d.Assets
 		speakersDeps = d.Speakers
@@ -60,6 +63,7 @@ func makeRootCmd(deps ...*Deps) *cobra.Command {
 	cmd.AddCommand(makeActCmd(actDeps))
 	cmd.AddCommand(makeWatchCmd(watchDeps))
 	cmd.AddCommand(makeSayCmd(sayDeps))
+	cmd.AddCommand(makeScriptCmd(scriptAppendDeps))
 	cmd.AddCommand(makeConfigCmd())
 	cmd.AddCommand(makeAudioCheckCmd(audioCheckDeps))
 	cmd.AddCommand(makeViewerCmd(viewerDeps))

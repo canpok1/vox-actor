@@ -28,6 +28,26 @@ func buildLoggerFromFlags(cmd *cobra.Command) *slog.Logger {
 	}))
 }
 
+// speakerDefaultFromEnv は VOX_SPEAKER 環境変数からデフォルトのスピーカーIDを解決する。
+func speakerDefaultFromEnv() int {
+	if v := os.Getenv("VOX_SPEAKER"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			return n
+		}
+	}
+	return 3
+}
+
+// registerVoiceParamFlags はキャラクター音声パラメータ（speaker/speed/pitch/intonation/verbose）を登録する。
+// VOICEVOX エンジン接続が不要なコマンドでも使える共通フラグ群。
+func registerVoiceParamFlags(cmd *cobra.Command) {
+	cmd.Flags().Int("speaker", speakerDefaultFromEnv(), "キャラクターID")
+	cmd.Flags().Float64("speed", 1.0, "話速")
+	cmd.Flags().Float64("pitch", 0.0, "音高")
+	cmd.Flags().Float64("intonation", 1.0, "抑揚")
+	cmd.Flags().Bool("verbose", false, "詳細ログを出力")
+}
+
 // registerBaseFlags は dry-run を除く共通フラグを登録する。viewer など dry-run を持たないコマンドで使う。
 func registerBaseFlags(cmd *cobra.Command) {
 	engineURLDefault := "http://localhost:50021"
@@ -36,18 +56,7 @@ func registerBaseFlags(cmd *cobra.Command) {
 	}
 	cmd.Flags().String("engine-url", engineURLDefault, "VOICEVOXエンジンのURL")
 
-	speakerDefault := 3
-	if v := os.Getenv("VOX_SPEAKER"); v != "" {
-		if n, err := strconv.Atoi(v); err == nil {
-			speakerDefault = n
-		}
-	}
-	cmd.Flags().Int("speaker", speakerDefault, "キャラクターID")
-
-	cmd.Flags().Float64("speed", 1.0, "話速")
-	cmd.Flags().Float64("pitch", 0.0, "音高")
-	cmd.Flags().Float64("intonation", 1.0, "抑揚")
-	cmd.Flags().Bool("verbose", false, "詳細ログを出力")
+	registerVoiceParamFlags(cmd)
 }
 
 // registerCommonFlags は各サブコマンド共通のフラグを登録する。

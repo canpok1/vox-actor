@@ -20,7 +20,7 @@ allowed-tools: Bash(vox-actor *) Bash(scripts/play-script.sh *)
 - 使用可能なキャラクター一覧: `vox-actor speakers list`
 - キャラクター設定の確認方法: `vox-actor speakers profile --id {profile_id}`
     - `profile_id` は `vox-actor speakers list` の結果から選ぶ
-- セリフファイルへのセリフ追記方法: `vox-actor say -o {セリフファイルパス} {オプション} "{セリフ}"`
+- セリフファイルへのセリフ追記方法: `vox-actor script append {セリフファイルパス} {オプション} "{セリフ}"`
     - 話者指定オプション（省略化）: `--speaker {speaker_id}`
         - `speaker_id` は `vox-actor speakers profile` の結果の `speakers` フィールドから選ぶ
     - 抑揚変更オプション（省略化）: `--intonation {0.0〜1.5}`
