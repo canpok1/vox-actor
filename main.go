@@ -85,6 +85,8 @@ func main() {
 		Say: &cmd.SayDeps{
 			ClientFactory: clientFactory,
 			Player:        player,
+		},
+		ScriptAppend: &cmd.ScriptAppendDeps{
 			WriterFactory: func(logger *slog.Logger) app.ScriptWriter {
 				return infra.NewFileWriter(infra.WithFileWriterLogger(logger))
 			},
