@@ -40,5 +40,4 @@ allowed-tools: Bash(vox-actor *) Bash(scripts/play-script.sh *)
   - 例: `README.md` → 「リードミードットエムディー」、`config.json` → 「コンフィグドットジェイソン」、`merge` → 「マージ」
 - ファイルパス・URL・UUID 等の長い文字列はセリフに含めない
 - セリフ内のダブルクォート・バックスラッシュは JSON / JSONL 仕様でエスケープ
-- `vox-actor` 未インストール時はスクリプトが `[ERROR] vox-actor コマンドが必要です` を出して非0終了する
-- `speakers list` / `profile` 失敗時、または該当キャラ無しの場合は利用可能な id/name 一覧を提示してエラー終了する
+- 利用可能なキャラクターが存在しない場合は、 `--speaker` を省略してデフォルト声でセリフ生成する
