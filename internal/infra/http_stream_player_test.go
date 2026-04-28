@@ -1974,3 +1974,238 @@ func TestBuildAPICharactersJSON_LogsInfoOnSuccess(t *testing.T) {
 		t.Errorf("expected 'character settings loaded' in log, got: %s", logOutput)
 	}
 }
+
+// newValidAssetsDir は assets ディレクトリを直接作成する（workspacePath なしで WithAssetsDirs で使用）。
+func newValidAssetsDir(t *testing.T) string {
+	t.Helper()
+	assetsDir := t.TempDir()
+	speakerDir := filepath.Join(assetsDir, "zundamon")
+	if err := os.MkdirAll(speakerDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	speakerJSON := `{"speakerName":"ずんだもん","styles":[{"styleName":"ノーマル","mouthClosed":"normal_closed.png","mouthOpened":"normal_opened.png"}]}`
+	if err := os.WriteFile(filepath.Join(speakerDir, "speaker.json"), []byte(speakerJSON), 0o644); err != nil {
+		t.Fatalf("WriteFile speaker.json: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(speakerDir, "normal_closed.png"), []byte(""), 0o644); err != nil {
+		t.Fatalf("WriteFile normal_closed.png: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(speakerDir, "normal_opened.png"), []byte(""), 0o644); err != nil {
+		t.Fatalf("WriteFile normal_opened.png: %v", err)
+	}
+	return assetsDir
+}
+
+func TestHTTPStreamPlayer_WithAssetsDirs_EnablesCharacters(t *testing.T) {
+	t.Parallel()
+	assetsDir := newValidAssetsDir(t)
+	p, err := NewHTTPStreamPlayer("127.0.0.1:0", newTestStreamAssets(), WithAssetsDirs([]string{assetsDir}))
+	if err != nil {
+		t.Fatalf("NewHTTPStreamPlayer: %v", err)
+	}
+	if err := p.Start(context.Background()); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		_ = p.Shutdown(ctx)
+	})
+
+	resp, err := http.Get("http://" + p.Addr() + "/api/characters")
+	if err != nil {
+		t.Fatalf("GET /api/characters: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	var result map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if enabled, _ := result["enabled"].(bool); !enabled {
+		t.Errorf("expected enabled=true, got %v", result)
+	}
+}
+
+func TestHTTPStreamPlayer_WithAssetsDirs_MergesProjectAndHome(t *testing.T) {
+	t.Parallel()
+	projectDir := t.TempDir()
+	homeDir := t.TempDir()
+
+	// project: charA
+	charADir := filepath.Join(projectDir, "charA")
+	if err := os.MkdirAll(charADir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	speakerA := `{"speakerName":"キャラA","styles":[{"styleName":"ノーマル","mouthClosed":"a_closed.png","mouthOpened":"a_opened.png"}]}`
+	if err := os.WriteFile(filepath.Join(charADir, "speaker.json"), []byte(speakerA), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	for _, f := range []string{"a_closed.png", "a_opened.png"} {
+		if err := os.WriteFile(filepath.Join(charADir, f), []byte(""), 0o644); err != nil {
+			t.Fatalf("WriteFile %s: %v", f, err)
+		}
+	}
+
+	// home: charB
+	charBDir := filepath.Join(homeDir, "charB")
+	if err := os.MkdirAll(charBDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	speakerB := `{"speakerName":"キャラB","styles":[{"styleName":"ノーマル","mouthClosed":"b_closed.png","mouthOpened":"b_opened.png"}]}`
+	if err := os.WriteFile(filepath.Join(charBDir, "speaker.json"), []byte(speakerB), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	for _, f := range []string{"b_closed.png", "b_opened.png"} {
+		if err := os.WriteFile(filepath.Join(charBDir, f), []byte(""), 0o644); err != nil {
+			t.Fatalf("WriteFile %s: %v", f, err)
+		}
+	}
+
+	p, err := NewHTTPStreamPlayer("127.0.0.1:0", newTestStreamAssets(),
+		WithAssetsDirs([]string{projectDir, homeDir}),
+	)
+	if err != nil {
+		t.Fatalf("NewHTTPStreamPlayer: %v", err)
+	}
+	if err := p.Start(context.Background()); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		_ = p.Shutdown(ctx)
+	})
+
+	resp, err := http.Get("http://" + p.Addr() + "/api/characters")
+	if err != nil {
+		t.Fatalf("GET /api/characters: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	var result map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	chars, _ := result["characters"].([]interface{})
+	if len(chars) != 2 {
+		t.Errorf("expected 2 characters (merged), got %d: %v", len(chars), chars)
+	}
+}
+
+func TestHTTPStreamPlayer_WithAssetsDirs_ProjectPriorityOnDuplicateID(t *testing.T) {
+	t.Parallel()
+	projectDir := t.TempDir()
+	homeDir := t.TempDir()
+
+	// Both have "shared" but different speaker names
+	for dir, speakerName := range map[string]string{projectDir: "プロジェクト版", homeDir: "ホーム版"} {
+		d := filepath.Join(dir, "shared")
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatalf("MkdirAll: %v", err)
+		}
+		speakerJSON := `{"speakerName":"` + speakerName + `","styles":[{"styleName":"ノーマル","mouthClosed":"closed.png","mouthOpened":"opened.png"}]}`
+		if err := os.WriteFile(filepath.Join(d, "speaker.json"), []byte(speakerJSON), 0o644); err != nil {
+			t.Fatalf("WriteFile: %v", err)
+		}
+		for _, f := range []string{"closed.png", "opened.png"} {
+			if err := os.WriteFile(filepath.Join(d, f), []byte(""), 0o644); err != nil {
+				t.Fatalf("WriteFile %s: %v", f, err)
+			}
+		}
+	}
+
+	p, err := NewHTTPStreamPlayer("127.0.0.1:0", newTestStreamAssets(),
+		WithAssetsDirs([]string{projectDir, homeDir}),
+	)
+	if err != nil {
+		t.Fatalf("NewHTTPStreamPlayer: %v", err)
+	}
+	if err := p.Start(context.Background()); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		_ = p.Shutdown(ctx)
+	})
+
+	resp, err := http.Get("http://" + p.Addr() + "/api/characters")
+	if err != nil {
+		t.Fatalf("GET /api/characters: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	var result map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	chars, _ := result["characters"].([]interface{})
+	if len(chars) != 1 {
+		t.Fatalf("expected 1 character (deduplicated), got %d", len(chars))
+	}
+	char, _ := chars[0].(map[string]interface{})
+	if char["speakerName"] != "プロジェクト版" {
+		t.Errorf("expected speakerName 'プロジェクト版', got %v", char["speakerName"])
+	}
+}
+
+func TestHTTPStreamPlayer_HandleCharacterImage_SearchesAcrossAssetsDirs(t *testing.T) {
+	t.Parallel()
+	projectDir := t.TempDir()
+	homeDir := t.TempDir()
+
+	// project: charA with image
+	charADir := filepath.Join(projectDir, "charA")
+	if err := os.MkdirAll(charADir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	imageContent := []byte("project-image-data")
+	if err := os.WriteFile(filepath.Join(charADir, "icon.png"), imageContent, 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	speakerA := `{"speakerName":"キャラA","styles":[{"styleName":"ノーマル","mouthClosed":"icon.png","mouthOpened":"icon.png"}]}`
+	if err := os.WriteFile(filepath.Join(charADir, "speaker.json"), []byte(speakerA), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	// home: charB with image
+	charBDir := filepath.Join(homeDir, "charB")
+	if err := os.MkdirAll(charBDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	imageBContent := []byte("home-image-data")
+	if err := os.WriteFile(filepath.Join(charBDir, "icon.png"), imageBContent, 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	speakerB := `{"speakerName":"キャラB","styles":[{"styleName":"ノーマル","mouthClosed":"icon.png","mouthOpened":"icon.png"}]}`
+	if err := os.WriteFile(filepath.Join(charBDir, "speaker.json"), []byte(speakerB), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	p, err := NewHTTPStreamPlayer("127.0.0.1:0", newTestStreamAssets(),
+		WithAssetsDirs([]string{projectDir, homeDir}),
+	)
+	if err != nil {
+		t.Fatalf("NewHTTPStreamPlayer: %v", err)
+	}
+	if err := p.Start(context.Background()); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		_ = p.Shutdown(ctx)
+	})
+
+	// image from homeDir's charB should be served
+	resp, err := http.Get("http://" + p.Addr() + "/assets/images/charB/icon.png")
+	if err != nil {
+		t.Fatalf("GET /assets/images/charB/icon.png: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status: %d", resp.StatusCode)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	if string(body) != string(imageBContent) {
+		t.Errorf("expected home image content %q, got %q", imageBContent, body)
+	}
+}

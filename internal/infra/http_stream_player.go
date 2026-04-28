@@ -37,8 +37,11 @@ type HTTPStreamPlayer struct {
 	apiStatusJSON []byte
 
 	// workspacePath はキャラクター設定ファイルの読み込み先ワークスペースルート。
-	// 空文字の場合はキャラクター機能は無効。
+	// 空文字の場合はキャラクター機能は無効。WithWorkspacePath で設定される。
 	workspacePath string
+	// assetsDirs はキャラクター資産ディレクトリのリスト（優先順: index 0 が最高優先）。
+	// 設定されている場合、workspacePath の代わりにこちらが使われる。
+	assetsDirs []string
 	// apiCharactersJSON は Start 時に characters 設定から一度だけマーシャルしたレスポンス。
 	apiCharactersJSON []byte
 
@@ -193,6 +196,16 @@ func WithWorkspacePath(path string) HTTPStreamOption {
 	return func(p *HTTPStreamPlayer) {
 		if path != "" {
 			p.workspacePath = path
+			p.assetsDirs = []string{filepath.Join(path, workspaceAssetsDir)}
+		}
+	}
+}
+
+// WithAssetsDirs はキャラクター資産ディレクトリのリストを設定するオプション（index 0 が最高優先）。
+func WithAssetsDirs(dirs []string) HTTPStreamOption {
+	return func(p *HTTPStreamPlayer) {
+		if len(dirs) > 0 {
+			p.assetsDirs = dirs
 		}
 	}
 }
@@ -599,13 +612,21 @@ func (p *HTTPStreamPlayer) buildAPIStatusJSON() error {
 
 // buildAPICharactersJSON はキャラクター設定から /api/characters のレスポンスを
 // Start 時に一度だけマーシャルしてキャッシュする。
-// workspacePath が空の場合は enabled=false で固定する。
+// assetsDirs が空の場合は enabled=false で固定する。
 // speaker.json から読み込み、有効なエントリが見つからない場合は enabled=false。
 func (p *HTTPStreamPlayer) buildAPICharactersJSON() error {
 	entries := []characterEntry{}
 	enabled := false
 
-	if p.workspacePath != "" {
+	if len(p.assetsDirs) > 0 {
+		mergedEntries := p.loadMergedCharacterSettings()
+		if len(mergedEntries) > 0 {
+			entries = mergedEntries
+			enabled = true
+			p.logger.Info("character settings loaded", "count", len(entries))
+		}
+	} else if p.workspacePath != "" {
+		// backward compat: WithWorkspacePath 呼び出しで assetsDirs が未設定の場合
 		fsys := os.DirFS(p.workspacePath)
 		loadedEntries, loadErr := loadCharacterSettingsFromSpeakerJSON(fsys, p.workspacePath, workspaceAssetsDir, p.logger)
 		if loadErr != nil {
@@ -629,6 +650,38 @@ func (p *HTTPStreamPlayer) buildAPICharactersJSON() error {
 	}
 	p.apiCharactersJSON = payload
 	return nil
+}
+
+// loadMergedCharacterSettings は assetsDirs から優先順にキャラクター設定を読み込み、
+// 同一 charID の重複は高優先側（index 0）で上書きしたエントリリストを返す。
+func (p *HTTPStreamPlayer) loadMergedCharacterSettings() []characterEntry {
+	// charID → entries のマップ。高優先順に走査し、初回登録のみ採用。
+	seen := make(map[string]bool)
+	var result []characterEntry
+
+	for _, assetsDir := range p.assetsDirs {
+		fsys := os.DirFS(assetsDir)
+		loadedEntries, loadErr := loadCharacterSettingsFromSpeakerJSON(fsys, assetsDir, ".", p.logger)
+		if loadErr != nil {
+			p.logger.Warn("failed to load character settings",
+				"assetsDir", assetsDir,
+				"error", loadErr)
+			continue
+		}
+		// Group entries by charID (first path segment)
+		charGroups := make(map[string][]characterEntry)
+		for _, entry := range loadedEntries {
+			charID := strings.SplitN(entry.MouthClosed, "/", 2)[0]
+			charGroups[charID] = append(charGroups[charID], entry)
+		}
+		for charID, group := range charGroups {
+			if !seen[charID] {
+				seen[charID] = true
+				result = append(result, group...)
+			}
+		}
+	}
+	return result
 }
 
 // loadCharacterSettingsFromSpeakerJSON はfsys内のassetsDir/*/speaker.jsonを走査し、
@@ -776,24 +829,45 @@ func (p *HTTPStreamPlayer) handleAPICharacters(w http.ResponseWriter, _ *http.Re
 }
 
 func (p *HTTPStreamPlayer) handleCharacterImage(w http.ResponseWriter, r *http.Request) {
-	if p.workspacePath == "" {
-		http.NotFound(w, r)
-		return
-	}
-
 	relPath := strings.TrimPrefix(r.URL.Path, "/assets/images/")
 	if relPath == r.URL.Path {
 		http.NotFound(w, r)
 		return
 	}
 
+	if len(p.assetsDirs) > 0 {
+		// assetsDirs を優先順に検索し、charID が存在する最初の dir から配信する
+		segments := strings.SplitN(relPath, "/", 2)
+		if len(segments) < 2 {
+			http.NotFound(w, r)
+			return
+		}
+		charID := segments[0]
+		for _, assetsDir := range p.assetsDirs {
+			if _, err := os.Stat(filepath.Join(assetsDir, charID)); err != nil {
+				continue
+			}
+			if err := validateImagePath(relPath, assetsDir); err != nil {
+				http.Error(w, "invalid path", http.StatusBadRequest)
+				return
+			}
+			http.ServeFile(w, r, filepath.Join(assetsDir, relPath))
+			return
+		}
+		http.NotFound(w, r)
+		return
+	}
+
+	// backward compat: assetsDirs 未設定時は workspacePath から解決
+	if p.workspacePath == "" {
+		http.NotFound(w, r)
+		return
+	}
 	if err := validateImagePath(relPath, filepath.Join(p.workspacePath, workspaceAssetsDir)); err != nil {
 		http.Error(w, "invalid path", http.StatusBadRequest)
 		return
 	}
-
-	fullPath := filepath.Join(p.workspacePath, workspaceAssetsDir, relPath)
-	http.ServeFile(w, r, fullPath)
+	http.ServeFile(w, r, filepath.Join(p.workspacePath, workspaceAssetsDir, relPath))
 }
 
 func (p *HTTPStreamPlayer) handleTestClip(w http.ResponseWriter, r *http.Request) {

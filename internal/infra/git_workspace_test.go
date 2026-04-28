@@ -2,6 +2,7 @@ package infra
 
 import (
 	"errors"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -189,5 +190,71 @@ func TestResolveWorkspacePath_ReturnsErrGitNotFound_WhenRunnerReportsCommandMiss
 	_, err := ResolveWorkspacePath()
 	if !errors.Is(err, ErrGitNotFound) {
 		t.Errorf("expected ErrGitNotFound, got: %v", err)
+	}
+}
+
+func TestResolveHomeAssetsPath_ReturnsDotVoxActorAssetsUnderHome(t *testing.T) {
+	got, err := ResolveHomeAssetsPath()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	home, _ := os.UserHomeDir()
+	want := filepath.Join(home, ".vox-actor", "assets")
+	if got != want {
+		t.Errorf("ResolveHomeAssetsPath() = %q, want %q", got, want)
+	}
+}
+
+func TestResolveProjectAssetsPath_ReturnsGitRepoAssetsDir_WhenInGitRepo(t *testing.T) {
+	t.Setenv("VOX_ACTOR_WORKSPACE", "")
+	repoRoot := t.TempDir()
+	gitCommonDir := filepath.Join(repoRoot, ".git")
+
+	withGitRunner(t, func(name string, args ...string) *exec.Cmd {
+		return exec.Command("echo", gitCommonDir)
+	})
+
+	got, err := ResolveProjectAssetsPath()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	want := filepath.Join(repoRoot, ".vox-actor", "assets")
+	if got != want {
+		t.Errorf("ResolveProjectAssetsPath() = %q, want %q", got, want)
+	}
+}
+
+func TestResolveProjectAssetsPath_ReturnsCwdAssetsDir_WhenOutsideGitRepo(t *testing.T) {
+	t.Setenv("VOX_ACTOR_WORKSPACE", "")
+	withGitRunner(t, func(name string, args ...string) *exec.Cmd {
+		return exec.Command("false")
+	})
+
+	cwd, _ := os.Getwd()
+	got, err := ResolveProjectAssetsPath()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	want := filepath.Join(cwd, ".vox-actor", "assets")
+	if got != want {
+		t.Errorf("ResolveProjectAssetsPath() = %q, want %q", got, want)
+	}
+}
+
+func TestResolveProjectAssetsPath_RespectsVoxActorWorkspaceEnv(t *testing.T) {
+	workspace := t.TempDir()
+	t.Setenv("VOX_ACTOR_WORKSPACE", workspace)
+
+	withGitRunner(t, func(name string, args ...string) *exec.Cmd {
+		return exec.Command("false")
+	})
+
+	got, err := ResolveProjectAssetsPath()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	want := filepath.Join(workspace, "assets")
+	if got != want {
+		t.Errorf("ResolveProjectAssetsPath() = %q, want %q", got, want)
 	}
 }

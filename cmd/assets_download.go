@@ -6,10 +6,12 @@ import (
 	"strings"
 
 	"github.com/canpok1/vox-actor/internal/app"
+	"github.com/canpok1/vox-actor/internal/infra"
 	"github.com/spf13/cobra"
 )
 
 var resolveWorkspaceFunc = resolveWorkspaceWithFallback
+var resolveHomeAssetsFunc = infra.ResolveHomeAssetsPath
 
 // AssetsDownloadDeps はassets downloadコマンドの依存を保持する。
 type AssetsDownloadDeps struct {
@@ -36,6 +38,7 @@ func makeAssetsDownloadCmd(deps *AssetsDownloadDeps) *cobra.Command {
 
 	cmd.Flags().StringArray("speaker", nil, "ダウンロード対象の speaker 名（リピート可、カンマ区切り可）")
 	cmd.Flags().Bool("force", false, "ローカルに同名 speaker が存在する場合に上書き")
+	cmd.Flags().String("scope", "project", "配置先スコープ（home: ~/.vox-actor/assets/、project: プロジェクト配下）")
 
 	return cmd
 }
@@ -51,8 +54,13 @@ func runAssetsDownload(cmd *cobra.Command, args []string, deps *AssetsDownloadDe
 	speakers := splitSpeakers(speakerRaw)
 
 	force, _ := cmd.Flags().GetBool("force")
+	scope, _ := cmd.Flags().GetString("scope")
 
-	assetsDir, err := resolveAssetsDir(deps)
+	if scope != "home" && scope != "project" {
+		return fmt.Errorf("%w: --scope must be \"home\" or \"project\", got %q", ErrUsage, scope)
+	}
+
+	assetsDir, err := resolveAssetsDir(deps, scope)
 	if err != nil {
 		return err
 	}
@@ -82,9 +90,12 @@ func splitSpeakers(raw []string) []string {
 	return result
 }
 
-func resolveAssetsDir(deps *AssetsDownloadDeps) (string, error) {
+func resolveAssetsDir(deps *AssetsDownloadDeps, scope string) (string, error) {
 	if deps.AssetsDirFunc != nil {
 		return deps.AssetsDirFunc()
+	}
+	if scope == "home" {
+		return resolveHomeAssetsFunc()
 	}
 	ws, err := resolveWorkspaceFunc()
 	if err != nil {
