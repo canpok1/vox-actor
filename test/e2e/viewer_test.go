@@ -152,7 +152,8 @@ func TestViewerE2E_StatusEndpoint(t *testing.T) {
 	t.Parallel()
 
 	port := freePort(t)
-	vp := startViewer(t, nil, "--port", fmt.Sprintf("%d", port))
+	workspace := t.TempDir()
+	vp := startViewer(t, map[string]string{"VOX_ACTOR_WORKSPACE": workspace}, "--port", fmt.Sprintf("%d", port))
 
 	line := vp.waitForStderr("stream server listening", 10*time.Second)
 	addr := extractAddrFromLog(line)
@@ -249,7 +250,8 @@ func TestViewerE2E_InvalidPort_ReturnsUsageError(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			_, stderr, exitCode := runCLI(t, nil, "viewer", "--port", tc.port)
+			workspace := t.TempDir()
+			_, stderr, exitCode := runCLI(t, map[string]string{"VOX_ACTOR_WORKSPACE": workspace}, "viewer", "--port", tc.port)
 			if exitCode != 2 {
 				t.Fatalf("expected exit code 2 (usage error) for port %s, got %d\nstderr:\n%s",
 					tc.port, exitCode, stderr)
@@ -266,8 +268,9 @@ func TestViewerE2E_WatchNonDirectory_ReturnsUsageError(t *testing.T) {
 
 	dir := t.TempDir()
 	file := writeTempFile(t, dir, "notadir.txt", "hello")
+	workspace := t.TempDir()
 
-	_, stderr, exitCode := runCLI(t, nil, "viewer", "--watch", file)
+	_, stderr, exitCode := runCLI(t, map[string]string{"VOX_ACTOR_WORKSPACE": workspace}, "viewer", "--watch", file)
 	if exitCode != 2 {
 		t.Fatalf("expected exit code 2 for non-directory --watch, got %d\nstderr:\n%s", exitCode, stderr)
 	}
