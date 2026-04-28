@@ -61,6 +61,11 @@ type HTTPStreamPlayer struct {
 	// nowFunc は clipEvent の timestamp 生成に使う時刻取得関数（テスト差し替え用）。
 	nowFunc func() time.Time
 
+	// historyDir は再生履歴 JSONL ファイルの保存ディレクトリ。空文字の場合は履歴機能無効。
+	historyDir string
+	// apiHistoryJSON は Start 時に今日の履歴末尾 historyLoadSize 件からマーシャルしたレスポンス。
+	apiHistoryJSON []byte
+
 	// silentInterval は PlayText で使う固定待機時間（backpressure の暫定値）。
 	silentInterval time.Duration
 
@@ -104,12 +109,31 @@ const (
 	defaultSilentInterval = 500 * time.Millisecond
 	// workspaceAssetsDir は workspacePath 配下のアセットディレクトリ名。
 	workspaceAssetsDir = "assets"
+	// historyLoadSize は起動時に読み込む履歴の最大件数。
+	historyLoadSize = 50
+	// historyRetentionDays は履歴ファイルの保持日数。
+	historyRetentionDays = 30
 )
 
 var (
 	// pathSegmentPattern はファイルパスのセグメント検証に使う正規表現。
 	pathSegmentPattern = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
 )
+
+// historyRecord は履歴ファイル（YYYY-MM-DD.jsonl）の 1 行スキーマ。
+// WAV URL は viewer 再起動で失効するため含めない。
+type historyRecord struct {
+	ID          uint64 `json:"id"`
+	Text        string `json:"text"`
+	SpeakerName string `json:"speakerName"`
+	StyleName   string `json:"styleName"`
+	Timestamp   int64  `json:"timestamp"`
+}
+
+// apiHistoryResponse は GET /api/history のレスポンスペイロード。
+type apiHistoryResponse struct {
+	Entries []historyRecord `json:"entries"`
+}
 
 // clipEvent は SSE で配信する clip イベントのペイロード。
 type clipEvent struct {
@@ -210,6 +234,16 @@ func WithAssetsDirs(dirs []string) HTTPStreamOption {
 	}
 }
 
+// WithHistoryDir は再生履歴 JSONL ファイルの保存ディレクトリを設定するオプション。
+// 設定されない場合は履歴機能が無効になる。
+func WithHistoryDir(dir string) HTTPStreamOption {
+	return func(p *HTTPStreamPlayer) {
+		if dir != "" {
+			p.historyDir = dir
+		}
+	}
+}
+
 // withNowFunc は clipEvent の timestamp 取得に使う関数を設定する（テスト用）。
 func withNowFunc(now func() time.Time) HTTPStreamOption {
 	return func(p *HTTPStreamPlayer) {
@@ -262,6 +296,10 @@ func (p *HTTPStreamPlayer) Start(_ context.Context) error {
 	if err := p.buildAPICharactersJSON(); err != nil {
 		return err
 	}
+	p.pruneOldHistory()
+	if err := p.buildAPIHistoryJSON(); err != nil {
+		return err
+	}
 
 	lis, err := net.Listen("tcp", p.addr)
 	if err != nil {
@@ -275,6 +313,7 @@ func (p *HTTPStreamPlayer) Start(_ context.Context) error {
 	mux.Handle("/", withStaticCacheControl(fileServer))
 	mux.HandleFunc("/events", p.handleEvents)
 	mux.HandleFunc("/api/status", p.handleAPIStatus)
+	mux.HandleFunc("/api/history", p.handleAPIHistory)
 	mux.HandleFunc("/api/characters", p.handleAPICharacters)
 	mux.HandleFunc("/assets/images/", p.handleCharacterImage)
 	mux.HandleFunc("/test-clip", p.handleTestClip)
@@ -383,14 +422,15 @@ func (p *HTTPStreamPlayer) PlayText(ctx context.Context, meta app.PlayMeta) erro
 
 	id := p.nextClipID.Add(1)
 	speakerName, styleName := p.resolveSpeaker(meta.SpeakerID)
-	payload, err := json.Marshal(clipEvent{
+	ev := clipEvent{
 		ID:          id,
 		URL:         "",
 		Text:        meta.Text,
 		SpeakerName: speakerName,
 		StyleName:   styleName,
 		Timestamp:   p.nowFunc().UnixMilli(),
-	})
+	}
+	payload, err := json.Marshal(ev)
 	if err != nil {
 		return fmt.Errorf("failed to marshal clip payload: %w", err)
 	}
@@ -400,6 +440,7 @@ func (p *HTTPStreamPlayer) PlayText(ctx context.Context, meta app.PlayMeta) erro
 		p.logger.Warn("stream clip dropped for slow subscribers", "clipId", id, "dropped", dropped)
 	}
 	p.logger.Info("stream clip delivered (silent)", "clipId", id, "subscribers", n)
+	p.appendHistory(ev)
 
 	if p.silentInterval <= 0 {
 		return nil
@@ -443,14 +484,15 @@ func (p *HTTPStreamPlayer) Play(ctx context.Context, wavData []byte, meta app.Pl
 	p.clips.put(id, buf)
 
 	speakerName, styleName := p.resolveSpeaker(meta.SpeakerID)
-	payload, err := json.Marshal(clipEvent{
+	ev := clipEvent{
 		ID:          id,
 		URL:         clipPathPrefix + strconv.FormatUint(id, 10) + clipPathSuffix,
 		Text:        meta.Text,
 		SpeakerName: speakerName,
 		StyleName:   styleName,
 		Timestamp:   p.nowFunc().UnixMilli(),
-	})
+	}
+	payload, err := json.Marshal(ev)
 	if err != nil {
 		return fmt.Errorf("failed to marshal clip payload: %w", err)
 	}
@@ -460,6 +502,7 @@ func (p *HTTPStreamPlayer) Play(ctx context.Context, wavData []byte, meta app.Pl
 		p.logger.Warn("stream clip dropped for slow subscribers", "clipId", id, "dropped", dropped)
 	}
 	p.logger.Info("stream clip delivered", "clipId", id, "subscribers", n)
+	p.appendHistory(ev)
 
 	duration, err := estimateWAVDuration(wavData)
 	if err != nil {
@@ -816,6 +859,130 @@ func (p *HTTPStreamPlayer) handleAPIStatus(w http.ResponseWriter, _ *http.Reques
 func (p *HTTPStreamPlayer) handleAPICharacters(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	_, _ = w.Write(p.apiCharactersJSON)
+}
+
+func (p *HTTPStreamPlayer) handleAPIHistory(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	_, _ = w.Write(p.apiHistoryJSON)
+}
+
+// buildAPIHistoryJSON は今日の履歴ファイル末尾 historyLoadSize 件を読み込み、
+// /api/history のレスポンスとしてキャッシュする。historyDir が空なら空配列を返す。
+func (p *HTTPStreamPlayer) buildAPIHistoryJSON() error {
+	entries := p.loadHistory(historyLoadSize)
+	if entries == nil {
+		entries = []historyRecord{}
+	}
+	payload, err := json.Marshal(apiHistoryResponse{Entries: entries})
+	if err != nil {
+		return fmt.Errorf("failed to marshal api history: %w", err)
+	}
+	p.apiHistoryJSON = payload
+	return nil
+}
+
+// loadHistory は今日の履歴ファイルから末尾 n 件を読み込む。
+func (p *HTTPStreamPlayer) loadHistory(n int) []historyRecord {
+	if p.historyDir == "" {
+		return nil
+	}
+	filePath := p.historyFilePath(p.nowFunc())
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		if !errors.Is(err, fs.ErrNotExist) {
+			p.logger.Warn("failed to read history file", "error", err)
+		}
+		return nil
+	}
+	lines := strings.Split(strings.TrimRight(string(data), "\n"), "\n")
+	start := 0
+	if len(lines) > n {
+		start = len(lines) - n
+	}
+	records := make([]historyRecord, 0, len(lines)-start)
+	for _, line := range lines[start:] {
+		if line == "" {
+			continue
+		}
+		var r historyRecord
+		if err := json.Unmarshal([]byte(line), &r); err != nil {
+			p.logger.Warn("failed to parse history line", "error", err)
+			continue
+		}
+		records = append(records, r)
+	}
+	return records
+}
+
+// pruneOldHistory は historyDir 配下の 30日より古い *.jsonl を削除する（ベストエフォート）。
+func (p *HTTPStreamPlayer) pruneOldHistory() {
+	if p.historyDir == "" {
+		return
+	}
+	now := p.nowFunc()
+	cutoff := time.Date(now.Year(), now.Month(), now.Day()-historyRetentionDays, 0, 0, 0, 0, time.Local)
+
+	entries, err := os.ReadDir(p.historyDir)
+	if err != nil {
+		if !errors.Is(err, fs.ErrNotExist) {
+			p.logger.Warn("failed to read history dir for pruning", "error", err)
+		}
+		return
+	}
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".jsonl") {
+			continue
+		}
+		nameWithoutExt := strings.TrimSuffix(entry.Name(), ".jsonl")
+		t, err := time.ParseInLocation("2006-01-02", nameWithoutExt, time.Local)
+		if err != nil {
+			continue
+		}
+		if t.Before(cutoff) {
+			path := filepath.Join(p.historyDir, entry.Name())
+			if err := os.Remove(path); err != nil {
+				p.logger.Warn("failed to delete old history file", "path", path, "error", err)
+			} else {
+				p.logger.Info("deleted old history file", "path", path)
+			}
+		}
+	}
+}
+
+// appendHistory は clip イベントを今日の履歴ファイルに追記する（ベストエフォート）。
+func (p *HTTPStreamPlayer) appendHistory(ev clipEvent) {
+	if p.historyDir == "" {
+		return
+	}
+	record := historyRecord{
+		ID:          ev.ID,
+		Text:        ev.Text,
+		SpeakerName: ev.SpeakerName,
+		StyleName:   ev.StyleName,
+		Timestamp:   ev.Timestamp,
+	}
+	data, err := json.Marshal(record)
+	if err != nil {
+		p.logger.Warn("failed to marshal history record", "error", err)
+		return
+	}
+	filePath := p.historyFilePath(p.nowFunc())
+	if err := os.MkdirAll(filepath.Dir(filePath), 0o755); err != nil {
+		p.logger.Warn("failed to create history directory", "error", err)
+		return
+	}
+	f, err := os.OpenFile(filePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	if err != nil {
+		p.logger.Warn("failed to open history file", "error", err)
+		return
+	}
+	defer func() { _ = f.Close() }()
+	_, _ = fmt.Fprintf(f, "%s\n", data)
+}
+
+// historyFilePath は日付から履歴ファイルのパスを返す。
+func (p *HTTPStreamPlayer) historyFilePath(t time.Time) string {
+	return filepath.Join(p.historyDir, t.Format("2006-01-02")+".jsonl")
 }
 
 func (p *HTTPStreamPlayer) handleCharacterImage(w http.ResponseWriter, r *http.Request) {
