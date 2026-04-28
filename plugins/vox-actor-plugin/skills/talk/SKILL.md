@@ -1,29 +1,44 @@
 ---
 name: talk
-description: 渡されたトピックを複数キャラクターの会話形式JSONL台本として生成し、vox-actor経由で掛け合い・対話・漫才風の読み上げを届けるスキル。
-argument-hint: "<内容>"
-allowed-tools:
-  - "Skill"
+description: 指示に沿う形のセリフを生成して再生するスキル。
+argument-hint: "指示（テーマ、キャラクターなど）"
+allowed-tools: Bash(vox-actor *) Bash(scripts/play-script.sh *)
 ---
 
-## 実行フロー
+## 手順
+1. 指示内容に従ってセリフを生成する。
+2. セリフファイルを作成する。
+    - `touch $(vox-actor config path.tmp)/$(date +%s%3N).jsonl`
+3. セリフファイルにセリフを追記する。
+4. セリフファイルを再生する。
 
-1. `$ARGUMENTS` を読み上げ内容として受け取る
-2. メモリから `talk_characters`（既定 `[zundamon, metan]`）と `talk_length`（既定 `medium`）を読み取る
-3. 内容に応じて役割配分（解説役／聞き役／ツッコミ役 など）を組み立て、「冒頭で全キャラが登場し、本題は掛け合い・質問応答・補足で会話を展開する」演出指示と、長さ設定に応じたセリフ数の目安を確立する
-4. Skill ツールで `vox-actor-plugin:act` を呼び出し、種別 `talk`・本文・会話キャラクター一覧と役割配分・長さ設定を引き継ぐ
+## 利用可能なスクリプト
+スキルディレクトリの `scripts` フォルダ内に以下のスクリプトを格納しています。
+- play-script.sh: セリフファイルを再生するスクリプト。引数にセリフファイルパスを取る。
 
-## 読み上げの長さ
+## コンテキスト
+- 使用可能なキャラクター一覧: `vox-actor speakers list`
+- キャラクター設定の確認方法: `vox-actor speakers profile --id {profile_id}`
+    - `profile_id` は `vox-actor speakers list` の結果から選ぶ
+- セリフファイルへのセリフ追記方法: `vox-actor say -o {セリフファイルパス} {オプション} "{セリフ}"`
+    - 話者指定オプション（省略化）: `--speaker {speaker_id}`
+        - `speaker_id` は `vox-actor speakers profile` の結果の `speakers` フィールドから選ぶ
+    - 抑揚変更オプション（省略化）: `--intonation {0.0〜2.0}`
+        - 目安: 0.0（棒読み） 〜 1.0（標準） 〜 1.5（表現豊か）
+    - 音高変更オプション（省略化）: `--pitch {-0.1〜0.1}`
+        - 目安: -0.1（低い） 〜 0.0（標準） 〜 0.1（高い）
+    - 話速変更オプション（省略化）: `--speed {0.8〜1.2}`
+        - 目安: 0.8（ゆっくり） 〜 1.0（標準） 〜 1.2（早口）
+- セリフファイルの再生方法: `scripts/play-script.sh {セリフファイルパス}`
+- 指示内容: $ARGUMENTS
 
-| 設定 | セリフ数の目安 | 想定再生時間 |
-|------|---------------|------------|
-| `short` | 4〜6 | 〜30秒 |
-| `medium`（既定） | 8〜12 | 1〜2分 |
-| `long` | 14+ | 数分 |
-
-## メモリに保存する設定項目
-
-| 項目 | キー | デフォルト値 | 説明 |
-|------|------|-------------|------|
-| 会話キャラクター | `talk_characters` | `[zundamon, metan]` | `characters/<name>.md` の `<name>` の配列（2〜4人）。本スキル専用で `default_character` とは独立 |
-| 会話の長さ | `talk_length` | `medium` | `short` / `medium` / `long` |
+## 制約
+- キャラクターのセリフにはキャラクター設定を反映させる。
+- セリフ内容に合わせて抑揚・音高・話速を調整する。
+- 各セリフは1〜2文の短文とする。
+- 英単語・英語ファイル名は発音を表す日本語に置き換える（拡張子も省略しない）
+  - 例: `README.md` → 「リードミードットエムディー」、`config.json` → 「コンフィグドットジェイソン」、`merge` → 「マージ」
+- ファイルパス・URL・UUID 等の長い文字列はセリフに含めない
+- セリフ内のダブルクォート・バックスラッシュは JSON / JSONL 仕様でエスケープ
+- `vox-actor` 未インストール時はスクリプトが `[ERROR] vox-actor コマンドが必要です` を出して非0終了する
+- `speakers list` / `profile` 失敗時、または該当キャラ無しの場合は利用可能な id/name 一覧を提示してエラー終了する

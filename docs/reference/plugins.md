@@ -4,120 +4,44 @@ claude code に `vox-actor-plugin` を導入すると、以下のスラッシュ
 
 ## 対応キャラクター一覧
 
-`monologue` / `speak` / `talk` スキルで利用できるキャラクターは `plugins/vox-actor-plugin/skills/act/characters/` に設定ファイルとして同梱されています。キャラクター名（`<name>`）は `/vox-actor-plugin:monologue <name>` の引数や、`monologue` / `speak` 共通の `default_character`、`talk` 用の `talk_characters` メモリ設定で指定します。
+`talk` スキルで利用できるキャラクターは `vox-actor speakers list` で確認できます。各キャラクターの詳細プロフィール（声のスタイル、性格、口調）は `vox-actor speakers profile --id <id>` で参照可能です。
 
 同梱キャラクターはいずれも [東北ずん子・ずんだもんプロジェクト 音源利用規約](https://zunko.jp/con_ongen_kiyaku.html) の対象です。生成音声を公開・配布する際のクレジット表記については [クレジット表記](../credits.md) を参照してください。
 
-| キャラクター名 | `<name>` | 分類 | 特徴 |
+| キャラクター名 | `<id>` | 分類 | 特徴 |
 |---|---|---|---|
 | ずんだもん（既定） | `zundamon` | — | 元気で明るい／語尾「〜のだ」 |
 | 四国めたん | `metan` | 女性 | お嬢様口調／ずんだもんの定番相方 |
 | 九州そら | `sora` | 女性 | 上品で大人っぽい／物腰やわらか |
 | 中国うさぎ | `usagi` | — | 天真爛漫／表情豊かで素直 |
-| 中部つるぎ | `tsurugi` | 男性 | 真面目でクール／芯のある短い言い回し |
 | あんこもん | `ankomon` | 女性 | マイペース／強気と弱気の二面性 |
 | 東北ずん子 | `zunko` | 女性 | 明るくしっかり者／親しみやすい |
 | 東北きりたん | `kiritan` | 女性 | 真面目で礼儀正しい／落ち着いた丁寧口調 |
 | 東北イタコ | `itako` | 女性 | おっとり優しい／包容力のあるお姉さん |
 
-## `/vox-actor-plugin:monologue`
+## `/vox-actor-plugin:talk <指示>`
 
-作業開始／終了／想定外のことが起こった時など、節目のキャラクターの一言独り言を読み上げます。
+指示に沿うセリフを生成して再生する汎用スキルです。1文の独り言から、複数キャラクターの掛け合い、解説・朗読・結果報告まで、指示内容に応じて構成を変えて読み上げます。
 
 ```
-/vox-actor-plugin:monologue [キャラクター名]
+/vox-actor-plugin:talk <指示>
 ```
 
-- 1文程度の短い独り言を生成し、キャラクターになりきって読み上げます
-- キャラクター設定ファイルの `speakers` からセリフの感情に合うスピーカーIDを選定します
+- `<指示>`: テーマ、登場キャラクター、用途（独り言／会話／解説 など）を自由記述で渡します
+- セリフは JSONL 台本として一時ファイルに書き出され、`scripts/play-script.sh` 経由で再生されます
 - 再生方式は `direct` / `file` モードで自動切替されます（[再生モード](#再生モードdirectfile) を参照）
-
-### メモリ設定
-
-| 項目 | キー | デフォルト値 | 説明 |
-|------|------|-------------|------|
-| デフォルトキャラクター | `default_character` | `zundamon` | `characters/<name>.md` の `<name>`。`speak` スキルと共用。引数指定があればそちらが優先 |
-
-## `/vox-actor-plugin:speak <内容>`
-
-渡した内容を冒頭→本題→まとめの流れで、複数セリフのJSONL台本としてキャラクターに読み上げさせます。解説・朗読・作業結果の報告・ストーリーテリングなど、まとまった長さの音声アウトプット全般に利用できます。`monologue` が1文の独り言用であるのに対し、本スキルはまとまった長さを扱います。
-
-```
-/vox-actor-plugin:speak <内容>
-```
-
-- `<内容>`: 読み上げてほしい概念・メモ・調査結果・文章などを自由記述で渡します
-- 生成されたJSONL台本は一時ファイルに書き出され、`vox-actor act` で再生されます
-- 再生方式は `direct` / `file` モードで自動切替されます（[再生モード](#再生モードdirectfile) を参照）
-
-### メモリ設定
-
-以下の設定を claude code のメモリに保存しておくと、次回以降の実行に反映されます。
-
-| 項目 | キー | デフォルト値 | 値 | 説明 |
-|------|------|-------------|----|-----|
-| デフォルトキャラクター | `default_character` | `zundamon` | `characters/<name>.md` の `<name>` | `monologue` スキルと共用。例: 「読み上げはめたんで」→ `metan` を保存 |
-| 読み上げの長さ | `speak_length` | `medium` | `short` / `medium` / `long` | 下記の長さ表を参照 |
-
-#### 読み上げの長さ
-
-| 設定 | セリフ数の目安 | 想定再生時間 |
-|------|---------------|------------|
-| `short` | 3〜5 | 〜十数秒 |
-| `medium`（既定） | 6〜10 | 30秒〜1分 |
-| `long` | 10+ | 数分 |
 
 ### 呼び出し例
 
 ```
-/vox-actor-plugin:speak クロージャとは何か
-```
+# 1文の独り言
+/vox-actor-plugin:talk ずんだもんがタスク完了の独り言
 
-### JSONL出力例
+# 複数キャラの会話
+/vox-actor-plugin:talk ずんだもんとめたんでクロージャを解説
 
-解説用途の例（ずんだもん）。朗読・結果報告・ストーリーテリングでも同じJSONL形式で台本が生成されます:
-
-```jsonl
-{"text": "クロージャって何なのだ？説明するのだ！", "speaker": 3, "speedScale": 1.1}
-{"text": "簡単に言うと、関数が作られた時の周りの変数を覚えておく仕組みなのだ", "speaker": 3, "speedScale": 1.0}
-{"text": "むむっ、ちょっと難しいけど…例えるならお弁当箱に具材を詰めて持ち歩く感じなのだ", "speaker": 3, "speedScale": 1.0}
-{"text": "後から開けても中身がそのまま残ってるみたいに、変数の値も残るのだ〜", "speaker": 1, "speedScale": 0.9}
-{"text": "わかったかな？お疲れ様なのだ！", "speaker": 1, "speedScale": 1.0}
-```
-
-## `/vox-actor-plugin:talk <内容>`
-
-渡した内容を、複数キャラクターが会話する形式のJSONL台本として生成し、掛け合い・対話・漫才風・ニュース番組風などの読み上げを行います。`speak` が1キャラでまとまった長さを語るのに対し、本スキルは2〜4人のキャラによる役割配分と会話の流れを構成します。
-
-```
-/vox-actor-plugin:talk <内容>
-```
-
-- `<内容>`: 会話のトピックにしたい概念・メモ・調査結果・文章などを自由記述で渡します
-- 生成されたJSONL台本は一時ファイルに書き出され、`vox-actor act` で再生されます
-- 再生方式は `direct` / `file` モードで自動切替されます（[再生モード](#再生モードdirectfile) を参照）
-
-### メモリ設定
-
-以下の設定を claude code のメモリに保存しておくと、次回以降の実行に反映されます。
-
-| 項目 | キー | デフォルト値 | 値 | 説明 |
-|------|------|-------------|----|-----|
-| 会話キャラクター | `talk_characters` | `[zundamon, metan]` | `characters/<name>.md` の `<name>` の配列（2〜4人） | 本スキル専用。`default_character` とは別に管理 |
-| 会話の長さ | `talk_length` | `medium` | `short` / `medium` / `long` | 下記の長さ表を参照 |
-
-#### 会話の長さ
-
-| 設定 | セリフ数の目安 | 想定再生時間 |
-|------|---------------|------------|
-| `short` | 4〜6 | 〜30秒 |
-| `medium`（既定） | 8〜12 | 1〜2分 |
-| `long` | 14+ | 数分 |
-
-### 呼び出し例
-
-```
-/vox-actor-plugin:talk クロージャとは何か
+# まとまった長さの解説
+/vox-actor-plugin:talk クロージャとは何か、ずんだもんが解説
 ```
 
 ### JSONL出力例
@@ -135,7 +59,7 @@ claude code に `vox-actor-plugin` を導入すると、以下のスラッシュ
 
 ## 再生モード（direct／file）
 
-`monologue` / `speak` / `talk` スキルの再生方式は、実行環境に応じて2つのモードを自動切替します。
+`talk` スキルの再生方式は、実行環境に応じて2つのモードを自動切替します。
 
 以下のようなケースでは、`watch` コマンドを常駐させる `file` モードが適しています。
 
@@ -146,13 +70,13 @@ claude code に `vox-actor-plugin` を導入すると、以下のスラッシュ
 
 | 観点 | `direct` モード | `file` モード |
 |---|---|---|
-| 読み上げ方式 | `vox-actor say` をその場で直接呼び出す | テキスト等をファイルに書き出し、別プロセスの `vox-actor watch` が読み上げる |
+| 読み上げ方式 | `vox-actor act` をその場で直接呼び出す | JSONL ファイルをキューに移動し、別プロセスの `vox-actor watch` が読み上げる |
 | 監視プロセス | 不要 | `vox-actor watch` の常駐が必要 |
-| ファイル出力先 | エラーログのみ（`monologue` / `speak` / `talk` 共通でワークスペースルート直下の `play-script-errors.log`） | 通知ファイル（ワークスペース配下の `queue/*_monologue.json` / `*_speak.jsonl` / `*_talk.jsonl`）＋エラーログ |
+| ファイル出力先 | エラーログのみ（ワークスペースルート直下の `play-script-errors.log`） | 通知ファイル（ワークスペース配下の `queue/*.jsonl`）＋エラーログ |
 | 同時呼び出し時 | 同一セッション内は逐次再生、複数セッション間は並列再生 | 検知順に逐次再生 |
 | 前提 | `vox-actor` コマンドが `PATH` 上にあり、音声デバイスが利用可能（`vox-actor audio-check` が成功） | claude code 側と `vox-actor watch` 側で `VOX_ACTOR_WORKSPACE` を共有 |
 
-> **前提**: `vox-actor` コマンドのインストールは必須です（両スクリプトは起動時に `command -v vox-actor` で存在確認し、未インストール時は `[ERROR] vox-actor コマンドが必要です` を stderr に出して非0終了します）。
+> **前提**: `vox-actor` コマンドのインストールは必須です（`scripts/play-script.sh` は起動時に `command -v vox-actor` で存在確認し、未インストール時は `[ERROR] vox-actor コマンドが必要です` を stderr に出して非0終了します）。
 >
 > **ワークスペースの解決**: スクリプトは `vox-actor config path.workspace` / `vox-actor config path.queue` を呼ぶだけで、環境変数の分岐は CLI 側が担います。CLI の解決順は以下のとおりです。
 > 1. `VOX_ACTOR_WORKSPACE` が設定されていればその値をワークスペースルートとして使う（queue は `${VOX_ACTOR_WORKSPACE}/queue`）
@@ -226,4 +150,4 @@ vox-actor act --watch-delete /path/to/watch-dir
 
 `direct` モードでの失敗は以下のログに追記されます（末尾200行でローテーション）。`tail -f` で確認できます。`vox-actor config path.workspace` で解決されるワークスペースルート直下に配置されます。
 
-- `monologue` / `speak` / `talk` スキル共通: `<workspace>/play-script-errors.log`
+- `<workspace>/play-script-errors.log`

@@ -49,13 +49,7 @@
 4. **スキルの実行**
 
    ```
-   # 作業の節目で1文の独り言
-   /vox-actor-plugin:monologue
-
-   # まとまった長さの解説・朗読・結果報告
-   /vox-actor-plugin:speak クロージャとは何か
-
-   # 複数キャラクターの掛け合い・対話
+   # 指示に沿うセリフを生成して再生
    /vox-actor-plugin:talk クロージャとは何か
    ```
 
@@ -97,9 +91,7 @@ vox-actor watch /path/to/watch-dir
 claude code と `vox-actor` CLI が同じ環境で動作するケースです。プラグインをインストールするだけで、スキルから CLI が直接呼び出されます。
 
 ```
-/vox-actor-plugin:monologue                  # 1文の独り言
-/vox-actor-plugin:speak <内容>               # まとまった長さの解説・朗読・結果報告
-/vox-actor-plugin:talk <内容>                # 複数キャラクターの会話
+/vox-actor-plugin:talk <内容>                 # 指示に沿うセリフを生成して再生（独り言・解説・会話など）
 ```
 
 セットアップ手順は上記 [クイックスタート](#-クイックスタート) を参照してください。スキルの詳細は [プラグイン／スキルリファレンス](./docs/reference/plugins.md) を参照してください。
