@@ -5,6 +5,7 @@ import { TimelineItem } from "./TimelineItem";
 interface TimelineProps {
   entries: TimelineEntry[];
   playingClipId: number | null;
+  lastPlayingClipId?: number | null;
   showSpeakerName: boolean;
   showStyleName: boolean;
   showTimestamp: boolean;
@@ -14,6 +15,7 @@ interface TimelineProps {
 export function Timeline({
   entries,
   playingClipId,
+  lastPlayingClipId = null,
   showSpeakerName,
   showStyleName,
   showTimestamp,
@@ -32,9 +34,10 @@ export function Timeline({
     prevIsCharacterMode.current = isCharacterMode;
   }, [isCharacterMode]);
 
+  const characterModeClipId = playingClipId ?? lastPlayingClipId;
   const displayEntries = isCharacterMode
-    ? playingClipId !== null
-      ? entries.filter((e) => e.kind === "clip" && e.id === playingClipId)
+    ? characterModeClipId !== null
+      ? entries.filter((e) => e.kind === "clip" && e.id === characterModeClipId)
       : []
     : entries;
 

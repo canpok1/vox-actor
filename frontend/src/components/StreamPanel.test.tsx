@@ -242,4 +242,35 @@ describe("StreamPanel", () => {
     );
     expect(screen.queryByText("▶")).not.toBeInTheDocument();
   });
+
+  it("キャラモード時、再生終了後（playingClipId=null）もセリフが表示される", async () => {
+    const { rerender } = render(
+      <StreamPanel
+        {...defaultProps}
+        hidden={false}
+        entries={mockEntries}
+        characters={mockCharacters}
+        charactersEnabled={true}
+        showCharacters={true}
+        playingClipId={1}
+      />,
+    );
+    expect(screen.getByText("クリップテキスト")).toBeInTheDocument();
+
+    // 再生終了
+    rerender(
+      <StreamPanel
+        {...defaultProps}
+        hidden={false}
+        entries={mockEntries}
+        characters={mockCharacters}
+        charactersEnabled={true}
+        showCharacters={true}
+        playingClipId={null}
+      />,
+    );
+
+    // キャラ画像はまだステージに残るのでセリフも残るべき
+    expect(screen.getByText("クリップテキスト")).toBeInTheDocument();
+  });
 });

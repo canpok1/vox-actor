@@ -128,6 +128,34 @@ describe("Timeline", () => {
       expect(screen.getByRole("list")).toBeEmptyDOMElement();
     });
 
+    it("isCharacterMode=true かつ playingClipId=null でも lastPlayingClipId が設定されていれば最後のクリップが表示される", () => {
+      render(
+        <Timeline
+          {...defaultProps}
+          entries={entries}
+          playingClipId={null}
+          lastPlayingClipId={2}
+          isCharacterMode={true}
+        />,
+      );
+      expect(screen.queryByText("古いテキスト")).not.toBeInTheDocument();
+      expect(screen.getByText("新しいテキスト")).toBeInTheDocument();
+    });
+
+    it("isCharacterMode=true かつ playingClipId が設定されている場合は lastPlayingClipId より優先される", () => {
+      render(
+        <Timeline
+          {...defaultProps}
+          entries={entries}
+          playingClipId={1}
+          lastPlayingClipId={2}
+          isCharacterMode={true}
+        />,
+      );
+      expect(screen.getByText("古いテキスト")).toBeInTheDocument();
+      expect(screen.queryByText("新しいテキスト")).not.toBeInTheDocument();
+    });
+
     it("isCharacterMode=false のとき全件描画される", () => {
       render(
         <Timeline

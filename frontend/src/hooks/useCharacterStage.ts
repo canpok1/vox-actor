@@ -14,6 +14,7 @@ interface StageState {
   chars: StageChar[];
   isMultiSlot: boolean;
   lastClipText: string | null;
+  lastClipId: number | null;
 }
 
 type StageAction =
@@ -24,6 +25,7 @@ type StageAction =
       startedCharacter: CharacterEntry | null;
       startedEntryOrder: number;
       startedClipText: string | null;
+      startedClipId: number | null;
     }
   | { type: "ALL_EXIT" };
 
@@ -97,12 +99,13 @@ function stageReducer(state: StageState, action: StageAction): StageState {
         chars.length === 0 ? false : state.isMultiSlot || chars.length >= 2;
 
       const lastClipText = action.startedClipText ?? state.lastClipText;
+      const lastClipId = action.startedClipId ?? state.lastClipId;
 
-      return { chars, isMultiSlot, lastClipText };
+      return { chars, isMultiSlot, lastClipText, lastClipId };
     }
 
     case "ALL_EXIT":
-      return { chars: [], isMultiSlot: false, lastClipText: null };
+      return { chars: [], isMultiSlot: false, lastClipText: null, lastClipId: null };
 
     default:
       return state;
@@ -117,6 +120,7 @@ export interface CharacterStageResult {
   slots: (CharacterStageSlot | null)[];
   isMultiSlot: boolean;
   lastClipText: string | null;
+  lastClipId: number | null;
 }
 
 export function useCharacterStage(
@@ -128,6 +132,7 @@ export function useCharacterStage(
     chars: [],
     isMultiSlot: false,
     lastClipText: null,
+    lastClipId: null,
   });
 
   const prevPlayingClipIdRef = useRef<number | null>(null);
@@ -182,6 +187,7 @@ export function useCharacterStage(
       startedCharacter,
       startedEntryOrder,
       startedClipText,
+      startedClipId: curr,
     });
 
     if (curr === null && prev !== null) {
@@ -209,5 +215,6 @@ export function useCharacterStage(
     slots,
     isMultiSlot: state.isMultiSlot,
     lastClipText: state.lastClipText,
+    lastClipId: state.lastClipId,
   };
 }

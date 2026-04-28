@@ -70,7 +70,7 @@ export function StreamPanel(props: StreamPanelProps) {
     volume,
   } = props;
 
-  const { slots, isMultiSlot } = useCharacterStage(
+  const { slots, isMultiSlot, lastClipId } = useCharacterStage(
     playingClipId,
     entries,
     characters,
@@ -209,6 +209,7 @@ export function StreamPanel(props: StreamPanelProps) {
       <Timeline
         entries={entries}
         playingClipId={playingClipId}
+        lastPlayingClipId={lastClipId}
         showSpeakerName={showSpeakerName}
         showStyleName={showStyleName}
         showTimestamp={showTimestamp}

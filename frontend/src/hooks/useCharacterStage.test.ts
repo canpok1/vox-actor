@@ -692,4 +692,146 @@ describe("useCharacterStage", () => {
       expect(result.current.lastClipText).toBe("text 7"); // last played clip
     });
   });
+
+  describe("lastClipId", () => {
+    it("初期状態ではlastClipIdがnull", () => {
+      const { result } = renderHook(() => useCharacterStage(null, [], []));
+      expect(result.current.lastClipId).toBeNull();
+    });
+
+    it("クリップ再生開始でlastClipIdが更新される", async () => {
+      const charA = makeChar("キャラA");
+      const entry1 = makeClipEntry(1, "キャラA");
+
+      const { result, rerender } = renderHook(
+        ({
+          playingClipId,
+          entries,
+          characters,
+        }: {
+          playingClipId: number | null;
+          entries: TimelineEntry[];
+          characters: CharacterEntry[];
+        }) => useCharacterStage(playingClipId, entries, characters),
+        {
+          initialProps: {
+            playingClipId: null,
+            entries: [entry1],
+            characters: [charA],
+          },
+        },
+      );
+
+      await act(async () => {
+        rerender({ playingClipId: 1, entries: [entry1], characters: [charA] });
+      });
+
+      expect(result.current.lastClipId).toBe(1);
+    });
+
+    it("クリップ再生終了後もlastClipIdが保持される", async () => {
+      const charA = makeChar("キャラA");
+      const entry1 = makeClipEntry(1, "キャラA");
+
+      const { result, rerender } = renderHook(
+        ({
+          playingClipId,
+          entries,
+          characters,
+        }: {
+          playingClipId: number | null;
+          entries: TimelineEntry[];
+          characters: CharacterEntry[];
+        }) => useCharacterStage(playingClipId, entries, characters),
+        {
+          initialProps: {
+            playingClipId: null,
+            entries: [entry1],
+            characters: [charA],
+          },
+        },
+      );
+
+      await act(async () => {
+        rerender({ playingClipId: 1, entries: [entry1], characters: [charA] });
+      });
+      await act(async () => {
+        rerender({
+          playingClipId: null,
+          entries: [entry1],
+          characters: [charA],
+        });
+      });
+
+      expect(result.current.lastClipId).toBe(1);
+    });
+
+    it("次のクリップ再生開始でlastClipIdが切り替わる", async () => {
+      const charA = makeChar("キャラA");
+      const charB = makeChar("キャラB");
+      const entries = [makeClipEntry(1, "キャラA"), makeClipEntry(2, "キャラB")];
+      const chars = [charA, charB];
+
+      const { result, rerender } = renderHook(
+        ({
+          playingClipId,
+          entries,
+          characters,
+        }: {
+          playingClipId: number | null;
+          entries: TimelineEntry[];
+          characters: CharacterEntry[];
+        }) => useCharacterStage(playingClipId, entries, characters),
+        { initialProps: { playingClipId: null, entries, characters: chars } },
+      );
+
+      await act(async () => {
+        rerender({ playingClipId: 1, entries, characters: chars });
+      });
+      expect(result.current.lastClipId).toBe(1);
+
+      await act(async () => {
+        rerender({ playingClipId: 2, entries, characters: chars });
+      });
+      expect(result.current.lastClipId).toBe(2);
+    });
+
+    it("ALL_EXIT後にlastClipIdがnullになる", async () => {
+      const charA = makeChar("キャラA");
+      const entry1 = makeClipEntry(1, "キャラA");
+      const chars = [charA];
+
+      const { result, rerender } = renderHook(
+        ({
+          playingClipId,
+          entries,
+          characters,
+        }: {
+          playingClipId: number | null;
+          entries: TimelineEntry[];
+          characters: CharacterEntry[];
+        }) => useCharacterStage(playingClipId, entries, characters),
+        {
+          initialProps: {
+            playingClipId: null,
+            entries: [entry1],
+            characters: chars,
+          },
+        },
+      );
+
+      await act(async () => {
+        rerender({ playingClipId: 1, entries: [entry1], characters: chars });
+      });
+      await act(async () => {
+        rerender({ playingClipId: null, entries: [entry1], characters: chars });
+      });
+      expect(result.current.lastClipId).toBe(1);
+
+      await act(async () => {
+        vi.advanceTimersByTime(QUEUE_EMPTY_MS);
+      });
+      expect(result.current.lastClipId).toBeNull();
+    });
+  });
 });
