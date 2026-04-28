@@ -6,6 +6,6 @@ cat > /dev/null
 jq -n '{
   hookSpecificOutput: {
     hookEventName: "PostToolUse",
-    additionalContext: "タスクに進捗があったので /vox-actor-plugin:monologue スキルを必ず呼び出してキャラクターの独り言を通知してください。呼び出しをスキップしてはいけません。"
+    additionalContext: "タスクに進捗があったので /vox-actor-plugin:talk スキルを必ず呼び出してキャラクターの短い独り言を生成・再生してください。呼び出しをスキップしてはいけません。"
   }
 }'

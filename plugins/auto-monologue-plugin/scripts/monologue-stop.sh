@@ -11,5 +11,5 @@ fi
 
 jq -n '{
   decision: "block",
-  reason: "区切りがいいので/vox-actor-plugin:monologueスキルを活用して。"
+  reason: "区切りがいいので/vox-actor-plugin:talkスキルでキャラクターの短い独り言を生成・再生して。"
 }'
