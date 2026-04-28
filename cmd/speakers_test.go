@@ -504,6 +504,186 @@ func TestSpeakersProfileCmd_NameDuplicate_Error(t *testing.T) {
 	}
 }
 
+func TestSpeakersListCmd_HomeOnly_ReturnsSpeakers(t *testing.T) {
+	homeDir := t.TempDir()
+
+	dir := filepath.Join(homeDir, "homechar")
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "speaker.json"), []byte(`{"name": "ホームキャラ", "styles": []}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	deps := &Deps{
+		Speakers: &SpeakersDeps{
+			AssetsDirsMergedFunc: func() ([]string, error) {
+				return []string{homeDir}, nil
+			},
+		},
+	}
+	rootCmd := makeRootCmd(deps)
+	buf := new(bytes.Buffer)
+	rootCmd.SetOut(buf)
+	rootCmd.SetArgs([]string{"speakers", "list"})
+
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	var items []SpeakerListItem
+	if err := json.Unmarshal(buf.Bytes(), &items); err != nil {
+		t.Fatalf("expected valid JSON, got: %v (output: %s)", err, buf.String())
+	}
+	if len(items) != 1 {
+		t.Fatalf("expected 1 item, got %d", len(items))
+	}
+	if items[0].ID != "homechar" {
+		t.Errorf("expected id 'homechar', got %q", items[0].ID)
+	}
+}
+
+func TestSpeakersListCmd_MergeProjectAndHome_ReturnsBoth(t *testing.T) {
+	projectDir := t.TempDir()
+	homeDir := t.TempDir()
+
+	// project: charA
+	dirA := filepath.Join(projectDir, "charA")
+	if err := os.MkdirAll(dirA, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dirA, "speaker.json"), []byte(`{"name": "キャラA", "styles": []}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// home: charB
+	dirB := filepath.Join(homeDir, "charB")
+	if err := os.MkdirAll(dirB, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dirB, "speaker.json"), []byte(`{"name": "キャラB", "styles": []}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	deps := &Deps{
+		Speakers: &SpeakersDeps{
+			AssetsDirsMergedFunc: func() ([]string, error) {
+				return []string{projectDir, homeDir}, nil
+			},
+		},
+	}
+	rootCmd := makeRootCmd(deps)
+	buf := new(bytes.Buffer)
+	rootCmd.SetOut(buf)
+	rootCmd.SetArgs([]string{"speakers", "list"})
+
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	var items []SpeakerListItem
+	if err := json.Unmarshal(buf.Bytes(), &items); err != nil {
+		t.Fatalf("expected valid JSON, got: %v (output: %s)", err, buf.String())
+	}
+	if len(items) != 2 {
+		t.Fatalf("expected 2 items, got %d: %+v", len(items), items)
+	}
+	found := map[string]string{}
+	for _, item := range items {
+		found[item.ID] = item.Name
+	}
+	if found["charA"] != "キャラA" {
+		t.Errorf("expected charA name 'キャラA', got %q", found["charA"])
+	}
+	if found["charB"] != "キャラB" {
+		t.Errorf("expected charB name 'キャラB', got %q", found["charB"])
+	}
+}
+
+func TestSpeakersListCmd_ProjectPriority_WhenSameID(t *testing.T) {
+	projectDir := t.TempDir()
+	homeDir := t.TempDir()
+
+	// Both have "shared" but different names
+	for dir, name := range map[string]string{projectDir: "プロジェクト版", homeDir: "ホーム版"} {
+		d := filepath.Join(dir, "shared")
+		if err := os.MkdirAll(d, 0755); err != nil {
+			t.Fatal(err)
+		}
+		content := `{"name": "` + name + `", "styles": []}`
+		if err := os.WriteFile(filepath.Join(d, "speaker.json"), []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	deps := &Deps{
+		Speakers: &SpeakersDeps{
+			AssetsDirsMergedFunc: func() ([]string, error) {
+				return []string{projectDir, homeDir}, nil
+			},
+		},
+	}
+	rootCmd := makeRootCmd(deps)
+	buf := new(bytes.Buffer)
+	rootCmd.SetOut(buf)
+	rootCmd.SetArgs([]string{"speakers", "list"})
+
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	var items []SpeakerListItem
+	if err := json.Unmarshal(buf.Bytes(), &items); err != nil {
+		t.Fatalf("expected valid JSON, got: %v (output: %s)", err, buf.String())
+	}
+	if len(items) != 1 {
+		t.Fatalf("expected 1 item (merged), got %d: %+v", len(items), items)
+	}
+	if items[0].Name != "プロジェクト版" {
+		t.Errorf("expected project name 'プロジェクト版', got %q", items[0].Name)
+	}
+}
+
+func TestSpeakersProfileCmd_ProjectPriority_WhenSameID(t *testing.T) {
+	projectDir := t.TempDir()
+	homeDir := t.TempDir()
+
+	for dir, name := range map[string]string{projectDir: "プロジェクト版", homeDir: "ホーム版"} {
+		d := filepath.Join(dir, "shared")
+		if err := os.MkdirAll(d, 0755); err != nil {
+			t.Fatal(err)
+		}
+		content := `{"name": "` + name + `", "styles": []}`
+		if err := os.WriteFile(filepath.Join(d, "speaker.json"), []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	deps := &Deps{
+		Speakers: &SpeakersDeps{
+			AssetsDirsMergedFunc: func() ([]string, error) {
+				return []string{projectDir, homeDir}, nil
+			},
+		},
+	}
+	rootCmd := makeRootCmd(deps)
+	buf := new(bytes.Buffer)
+	rootCmd.SetOut(buf)
+	rootCmd.SetArgs([]string{"speakers", "profile", "--id", "shared"})
+
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	var result map[string]interface{}
+	if err := json.Unmarshal(buf.Bytes(), &result); err != nil {
+		t.Fatalf("expected valid JSON, got: %v", err)
+	}
+	if result["name"] != "プロジェクト版" {
+		t.Errorf("expected project name 'プロジェクト版', got %v", result["name"])
+	}
+}
+
 func TestSpeakersProfileCmd_DescriptionFileMissing_ContinuesWithWarning(t *testing.T) {
 	assetsDir := t.TempDir()
 

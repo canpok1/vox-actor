@@ -44,9 +44,15 @@ func main() {
 			infra.WithOrderedSpeakerIDs(orderedSpeakerIDs),
 			infra.WithVoicevoxClient(client),
 		}
-		workspacePath, wsErr := infra.ResolveWorkspacePath()
-		if wsErr == nil {
-			opts = append(opts, infra.WithWorkspacePath(workspacePath))
+		var assetsDirs []string
+		if projectAssets, err := infra.ResolveProjectAssetsPath(); err == nil {
+			assetsDirs = append(assetsDirs, projectAssets)
+		}
+		if homeAssets, err := infra.ResolveHomeAssetsPath(); err == nil {
+			assetsDirs = append(assetsDirs, homeAssets)
+		}
+		if len(assetsDirs) > 0 {
+			opts = append(opts, infra.WithAssetsDirs(assetsDirs))
 		}
 		return infra.NewHTTPStreamPlayer(addr, staticFS, opts...)
 	}

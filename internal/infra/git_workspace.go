@@ -2,6 +2,7 @@ package infra
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -62,4 +63,30 @@ func ResolveQueuePath() (string, error) {
 		return "", err
 	}
 	return filepath.Join(workspace, "queue"), nil
+}
+
+// ResolveHomeAssetsPath はホームスコープのアセットルートパス (~/.vox-actor/assets/) を返す。
+func ResolveHomeAssetsPath() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("failed to get home directory: %w", err)
+	}
+	return filepath.Join(home, ".vox-actor", "assets"), nil
+}
+
+// ResolveProjectAssetsPath はプロジェクトスコープのアセットルートパスを返す。
+// git リポジトリ内なら <repoRoot>/.vox-actor/assets/、それ以外は <cwd>/.vox-actor/assets/。
+func ResolveProjectAssetsPath() (string, error) {
+	path, err := ResolveWorkspacePath()
+	if errors.Is(err, ErrNotInGitRepo) {
+		cwd, cwdErr := os.Getwd()
+		if cwdErr != nil {
+			return "", cwdErr
+		}
+		return filepath.Join(cwd, ".vox-actor", "assets"), nil
+	}
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(path, "assets"), nil
 }

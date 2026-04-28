@@ -170,3 +170,13 @@ export VOX_ACTOR_MONOLOGUE_MODE=file
 [MIT License](LICENSE)
 
 キャラクター設定は `vox-actor assets download` で別リポジトリから取得します。利用規約とクレジット表記は取得元リポジトリの案内に従ってください。
+
+`--scope` フラグで配置先を切り替えられます。
+
+| `--scope` | 配置先 |
+|-----------|--------|
+| 省略（既定） | `<repoRoot>/.vox-actor/assets/`（git リポジトリ外は `<cwd>/.vox-actor/assets/`） |
+| `project` | 同上 |
+| `home` | `~/.vox-actor/assets/`（複数プロジェクト共用に便利） |
+
+`speakers list` / `speakers profile` / viewer 画面はプロジェクト・ホーム両方の assets をマージして返します（同一 ID はプロジェクト優先）。

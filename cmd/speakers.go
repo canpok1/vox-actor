@@ -5,15 +5,20 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 
 	"github.com/canpok1/vox-actor/internal/domain/entity"
+	"github.com/canpok1/vox-actor/internal/infra"
 	"github.com/spf13/cobra"
 )
 
 // SpeakersDeps は speakers コマンドの依存を保持する。
 type SpeakersDeps struct {
-	// AssetsDirFunc はアセットの配置先ルートディレクトリを返す。nil の場合はワークスペース解決を使う。
+	// AssetsDirFunc はアセットの配置先ルートディレクトリを返す（後方互換）。nil の場合はワークスペース解決を使う。
 	AssetsDirFunc func() (string, error)
+	// AssetsDirsMergedFunc は優先順位付きのアセットディレクトリ一覧を返す（index 0 が最高優先）。
+	// 設定されると AssetsDirFunc より優先される。
+	AssetsDirsMergedFunc func() ([]string, error)
 }
 
 // SpeakerListItem は speakers list コマンドの出力要素を表す。
@@ -59,57 +64,83 @@ func makeSpeakersListCmd(deps *SpeakersDeps) *cobra.Command {
 }
 
 func runSpeakersList(cmd *cobra.Command, deps *SpeakersDeps) error {
-	assetsDir, err := resolveAssetsDirForSpeakers(deps)
+	charDirMap, err := buildCharacterDirMap(cmd, deps)
 	if err != nil {
 		return err
 	}
 
-	entries, err := os.ReadDir(assetsDir)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return outputSpeakerList(cmd, []SpeakerListItem{})
-		}
-		return fmt.Errorf("failed to read assets dir: %w", err)
-	}
-
 	var items []SpeakerListItem
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			continue
-		}
-		id := entry.Name()
+	for id, assetsDir := range charDirMap {
 		speakerJSONPath := filepath.Join(assetsDir, id, "speaker.json")
-
 		data, err := os.ReadFile(speakerJSONPath)
 		if err != nil {
 			_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: skipping %s: failed to read speaker.json: %v\n", id, err)
 			continue
 		}
-
 		s, err := entity.ParseSpeakerJSON(data)
 		if err != nil {
 			_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: skipping %s: failed to parse speaker.json: %v\n", id, err)
 			continue
 		}
-
-		items = append(items, SpeakerListItem{
-			ID:   id,
-			Name: s.GetSpeakerName(),
-		})
+		items = append(items, SpeakerListItem{ID: id, Name: s.GetSpeakerName()})
 	}
 
+	sort.Slice(items, func(i, j int) bool { return items[i].ID < items[j].ID })
 	return outputSpeakerList(cmd, items)
 }
 
-func resolveAssetsDirForSpeakers(deps *SpeakersDeps) (string, error) {
-	if deps != nil && deps.AssetsDirFunc != nil {
-		return deps.AssetsDirFunc()
-	}
-	ws, err := resolveWorkspaceWithFallback()
+// buildCharacterDirMap はマージされた charID → assetsDir マップを返す。
+// dirs は優先順位順（index 0 が最高優先）。同一 ID は先に登録された dir が優先される。
+func buildCharacterDirMap(cmd *cobra.Command, deps *SpeakersDeps) (map[string]string, error) {
+	dirs, err := resolveAssetsDirsForSpeakers(deps)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	return filepath.Join(ws, "assets"), nil
+
+	result := make(map[string]string)
+	for _, dir := range dirs {
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: skipping assets dir %s: %v\n", dir, err)
+			continue
+		}
+		for _, e := range entries {
+			if !e.IsDir() {
+				continue
+			}
+			if _, exists := result[e.Name()]; !exists {
+				result[e.Name()] = dir
+			}
+		}
+	}
+	return result, nil
+}
+
+// resolveAssetsDirsForSpeakers は優先順位付きのアセットディレクトリ一覧を返す（index 0 が最高優先）。
+func resolveAssetsDirsForSpeakers(deps *SpeakersDeps) ([]string, error) {
+	if deps != nil && deps.AssetsDirsMergedFunc != nil {
+		return deps.AssetsDirsMergedFunc()
+	}
+	if deps != nil && deps.AssetsDirFunc != nil {
+		dir, err := deps.AssetsDirFunc()
+		if err != nil {
+			return nil, err
+		}
+		return []string{dir}, nil
+	}
+
+	projectDir, err := infra.ResolveProjectAssetsPath()
+	if err != nil {
+		return nil, err
+	}
+	homeDir, err := infra.ResolveHomeAssetsPath()
+	if err != nil {
+		return nil, err
+	}
+	return []string{projectDir, homeDir}, nil
 }
 
 func outputSpeakerList(cmd *cobra.Command, items []SpeakerListItem) error {
@@ -148,44 +179,37 @@ func runSpeakersProfile(cmd *cobra.Command, deps *SpeakersDeps, id string, name 
 		return fmt.Errorf("either --id or --name must be specified (not both)")
 	}
 
-	assetsDir, err := resolveAssetsDirForSpeakers(deps)
+	charDirMap, err := buildCharacterDirMap(cmd, deps)
 	if err != nil {
 		return err
 	}
 
 	var characterID string
+	var assetsDir string
 	if id != "" {
-		characterID = id
-	} else {
-		// Search by name
-		var matches []string
-		entries, err := os.ReadDir(assetsDir)
-		if err != nil && !os.IsNotExist(err) {
-			return fmt.Errorf("failed to read assets dir: %w", err)
+		dir, exists := charDirMap[id]
+		if !exists {
+			return fmt.Errorf("character not found: %q", id)
 		}
-
-		for _, entry := range entries {
-			if !entry.IsDir() {
-				continue
-			}
-			dirID := entry.Name()
-			speakerJSONPath := filepath.Join(assetsDir, dirID, "speaker.json")
-
+		characterID = id
+		assetsDir = dir
+	} else {
+		// Search by name across merged dirs
+		var matches []string
+		for charID, charDir := range charDirMap {
+			speakerJSONPath := filepath.Join(charDir, charID, "speaker.json")
 			data, err := os.ReadFile(speakerJSONPath)
 			if err != nil {
 				continue
 			}
-
 			s, err := entity.ParseSpeakerJSON(data)
 			if err != nil {
 				continue
 			}
-
 			if s.GetSpeakerName() == name {
-				matches = append(matches, dirID)
+				matches = append(matches, charID)
 			}
 		}
-
 		if len(matches) == 0 {
 			return fmt.Errorf("character not found: %q", name)
 		}
@@ -194,6 +218,7 @@ func runSpeakersProfile(cmd *cobra.Command, deps *SpeakersDeps, id string, name 
 			return fmt.Errorf("duplicate character name")
 		}
 		characterID = matches[0]
+		assetsDir = charDirMap[characterID]
 	}
 
 	speakerJSONPath := filepath.Join(assetsDir, characterID, "speaker.json")
@@ -210,20 +235,17 @@ func runSpeakersProfile(cmd *cobra.Command, deps *SpeakersDeps, id string, name 
 		return fmt.Errorf("failed to parse speaker.json: %w", err)
 	}
 
-	// Build output
 	output := SpeakerProfileOutput{
 		ID:   characterID,
 		Name: speaker.GetSpeakerName(),
 	}
 
-	// Add profile fields if available
 	if speaker.Profile != nil {
 		output.Pronoun = speaker.Profile.Pronoun
 		output.SpeechSuffix = speaker.Profile.SpeechSuffix
 		output.Personality = speaker.Profile.Personality
 		output.Speakers = speaker.Profile.Speakers
 
-		// Read description file
 		if speaker.Profile.DescriptionPath != "" {
 			descPath := filepath.Join(assetsDir, characterID, speaker.Profile.DescriptionPath)
 			descData, err := os.ReadFile(descPath)
@@ -239,14 +261,12 @@ func runSpeakersProfile(cmd *cobra.Command, deps *SpeakersDeps, id string, name 
 		}
 	}
 
-	// Build styles array from speaker.Profile.Speakers keys
 	if output.Speakers != nil {
 		for styleName := range output.Speakers {
 			output.Styles = append(output.Styles, styleName)
 		}
 	}
 
-	// Output JSON
 	resultData, err := json.Marshal(output)
 	if err != nil {
 		return fmt.Errorf("failed to marshal profile: %w", err)

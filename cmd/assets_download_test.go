@@ -225,7 +225,7 @@ func TestResolveAssetsDir_WithAssetsDirFunc_ReturnsCustomPath(t *testing.T) {
 		AssetsDirFunc: func() (string, error) { return expectedPath, nil },
 	}
 
-	result, err := resolveAssetsDir(deps)
+	result, err := resolveAssetsDir(deps, "project")
 	if err != nil {
 		t.Fatalf("expected no error, got: %v", err)
 	}
@@ -244,7 +244,7 @@ func TestResolveAssetsDir_WithoutAssetsDirFunc_ReturnsWorkspacePlusAssets(t *tes
 	resolveWorkspaceFunc = func() (string, error) { return workspacePath, nil }
 	defer func() { resolveWorkspaceFunc = originalResolveFunc }()
 
-	result, err := resolveAssetsDir(deps)
+	result, err := resolveAssetsDir(deps, "project")
 	if err != nil {
 		t.Fatalf("expected no error, got: %v", err)
 	}
@@ -252,5 +252,118 @@ func TestResolveAssetsDir_WithoutAssetsDirFunc_ReturnsWorkspacePlusAssets(t *tes
 	expectedPath := filepath.Join(workspacePath, "assets")
 	if result != expectedPath {
 		t.Errorf("expected %q, got: %q", expectedPath, result)
+	}
+}
+
+func TestAssetsDownloadCmd_HasScopeFlag(t *testing.T) {
+	rootCmd := makeRootCmd()
+	cmd := findAssetsDownloadCmdFromRoot(t, rootCmd)
+	f := cmd.Flags().Lookup("scope")
+	if f == nil {
+		t.Fatal("expected --scope flag to exist")
+	}
+	if f.DefValue != "project" {
+		t.Errorf("expected --scope default to be %q, got %q", "project", f.DefValue)
+	}
+}
+
+func TestAssetsDownloadCmd_InvalidScope_ReturnsUsageError(t *testing.T) {
+	assetsDir := t.TempDir()
+	deps := &Deps{
+		Assets: &AssetsDownloadDeps{
+			Cloner:        &testGitCloner{},
+			AssetsDirFunc: func() (string, error) { return assetsDir, nil },
+		},
+	}
+	rootCmd := makeRootCmd(deps)
+	buf := new(bytes.Buffer)
+	rootCmd.SetOut(buf)
+	rootCmd.SetErr(buf)
+	rootCmd.SetArgs([]string{"assets", "download", "--scope", "invalid", "https://example.com/repo.git"})
+
+	err := rootCmd.Execute()
+	if err == nil {
+		t.Fatal("expected error for invalid scope, got nil")
+	}
+	if !errors.Is(err, ErrUsage) {
+		t.Errorf("expected ErrUsage, got: %v", err)
+	}
+}
+
+func TestAssetsDownloadCmd_ScopeHome_UsesHomeAssetsDir(t *testing.T) {
+	homeAssetsDir := t.TempDir()
+	cloner := &testGitCloner{
+		assetsJSONContent: `{"assets": {"charA": {"path": "img/charA"}}}`,
+		files:             map[string]string{"img/charA/icon.png": "data"},
+	}
+
+	deps := &Deps{
+		Assets: &AssetsDownloadDeps{
+			Cloner: cloner,
+		},
+	}
+
+	origHome := resolveHomeAssetsFunc
+	resolveHomeAssetsFunc = func() (string, error) { return homeAssetsDir, nil }
+	defer func() { resolveHomeAssetsFunc = origHome }()
+
+	rootCmd := makeRootCmd(deps)
+	buf := new(bytes.Buffer)
+	rootCmd.SetOut(buf)
+	rootCmd.SetErr(buf)
+	rootCmd.SetArgs([]string{"assets", "download", "--scope", "home", "https://example.com/repo.git"})
+
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	if _, err := os.Stat(filepath.Join(homeAssetsDir, "charA")); err != nil {
+		t.Errorf("expected charA dir in home assets, got: %v", err)
+	}
+}
+
+func TestAssetsDownloadCmd_ScopeProject_UsesProjectAssetsDir(t *testing.T) {
+	projectWorkspace := t.TempDir()
+	projectAssetsDir := filepath.Join(projectWorkspace, "assets")
+	cloner := &testGitCloner{
+		assetsJSONContent: `{"assets": {"charB": {"path": "img/charB"}}}`,
+		files:             map[string]string{"img/charB/icon.png": "data"},
+	}
+
+	deps := &Deps{
+		Assets: &AssetsDownloadDeps{
+			Cloner: cloner,
+		},
+	}
+
+	origWorkspace := resolveWorkspaceFunc
+	resolveWorkspaceFunc = func() (string, error) { return projectWorkspace, nil }
+	defer func() { resolveWorkspaceFunc = origWorkspace }()
+
+	rootCmd := makeRootCmd(deps)
+	buf := new(bytes.Buffer)
+	rootCmd.SetOut(buf)
+	rootCmd.SetErr(buf)
+	rootCmd.SetArgs([]string{"assets", "download", "--scope", "project", "https://example.com/repo.git"})
+
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	if _, err := os.Stat(filepath.Join(projectAssetsDir, "charB")); err != nil {
+		t.Errorf("expected charB dir in project assets, got: %v", err)
+	}
+}
+
+func TestAssetsDownloadCmd_HelpContainsScopeFlag(t *testing.T) {
+	rootCmd := makeRootCmd()
+	buf := new(bytes.Buffer)
+	rootCmd.SetOut(buf)
+	rootCmd.SetArgs([]string{"assets", "download", "--help"})
+	_ = rootCmd.Execute()
+
+	output := buf.String()
+	if !strings.Contains(output, "--scope") {
+		t.Errorf("expected --scope in help output, got: %s", output)
 	}
 }
