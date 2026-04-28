@@ -645,6 +645,11 @@ func (p *HTTPStreamPlayer) loadMergedCharacterSettings() []characterEntry {
 	var result []characterEntry
 
 	for _, assetsDir := range p.assetsDirs {
+		if _, err := os.Stat(assetsDir); errors.Is(err, fs.ErrNotExist) {
+			p.logger.Info("assets directory not found, skipping load",
+				"assetsDir", assetsDir)
+			continue
+		}
 		fsys := os.DirFS(assetsDir)
 		loadedEntries, loadErr := loadCharacterSettingsFromSpeakerJSON(fsys, assetsDir, ".", p.logger)
 		if loadErr != nil {
