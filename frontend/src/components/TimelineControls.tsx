@@ -8,6 +8,9 @@ interface TimelineControlsProps {
   onShowSpeakerNameChange: (value: boolean) => void;
   onShowStyleNameChange: (value: boolean) => void;
   onShowTimestampChange: (value: boolean) => void;
+  charactersEnabled?: boolean;
+  showCharacters?: boolean;
+  onShowCharactersChange?: (value: boolean) => void;
 }
 
 interface CheckboxToggleProps {
@@ -40,6 +43,9 @@ export function TimelineControls(props: TimelineControlsProps) {
     onShowSpeakerNameChange,
     onShowStyleNameChange,
     onShowTimestampChange,
+    charactersEnabled = false,
+    showCharacters = false,
+    onShowCharactersChange,
   } = props;
   return (
     <div className="my-2 flex flex-wrap items-center gap-x-[0.6rem] gap-y-[0.35rem] text-[0.9rem] text-ctp-subtext sm:gap-x-4 sm:gap-y-2">
@@ -71,6 +77,13 @@ export function TimelineControls(props: TimelineControlsProps) {
         checked={showTimestamp}
         onChange={onShowTimestampChange}
       />
+      {charactersEnabled && onShowCharactersChange && (
+        <CheckboxToggle
+          label="キャラ画像を表示"
+          checked={showCharacters}
+          onChange={onShowCharactersChange}
+        />
+      )}
     </div>
   );
 }

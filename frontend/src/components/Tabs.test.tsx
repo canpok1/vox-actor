@@ -55,4 +55,9 @@ describe("Tabs", () => {
     render(<Tabs active="stream" onChange={() => {}} />);
     expect(screen.getByRole("tab", { name: "音声テスト" })).toBeInTheDocument();
   });
+
+  it("キャラタブは存在しない", () => {
+    render(<Tabs active="stream" onChange={() => {}} />);
+    expect(screen.queryByRole("tab", { name: "キャラ" })).not.toBeInTheDocument();
+  });
 });

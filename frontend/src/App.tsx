@@ -4,7 +4,6 @@ import { StatusBadge } from "./components/StatusBadge";
 import { StreamPanel } from "./components/StreamPanel";
 import { type TabName, Tabs } from "./components/Tabs";
 import { TestPanel } from "./components/TestPanel";
-import { CharacterPanel } from "./components/CharacterPanel";
 import { VolumeControls } from "./components/VolumeControls";
 import { useAudioVolume } from "./hooks/useAudioVolume";
 import { useEventSource } from "./hooks/useEventSource";
@@ -28,6 +27,7 @@ const STORAGE_KEYS = {
   showSpeakerName: "vox-actor.stream.showSpeakerName",
   showStyleName: "vox-actor.stream.showStyleName",
   showTimestamp: "vox-actor.stream.showTimestamp",
+  showCharacters: "vox-actor.stream.showCharacters",
 } as const;
 
 const DEFAULT_HISTORY_SIZE = 20;
@@ -36,7 +36,7 @@ const HISTORY_SIZE_OPTIONS: readonly number[] = [10, 20, 30, 50, 100, 200];
 const TEST_ERROR_DISPLAY_MS = 4000;
 
 const parseTab = (raw: string): TabName | null =>
-  raw === "stream" || raw === "test" || raw === "character" ? raw : null;
+  raw === "stream" || raw === "test" ? raw : null;
 
 const parseHistorySize = (raw: string): number | null => {
   const n = parseInt(raw, 10);
@@ -108,6 +108,12 @@ export function App() {
     parseBool,
     String,
   );
+  const [showCharacters, setShowCharacters] = usePersistedState(
+    STORAGE_KEYS.showCharacters,
+    false,
+    parseBool,
+    String,
+  );
   const [testSpeakerId, setTestSpeakerId] = usePersistedState<string>(
     STORAGE_KEYS.testSpeakerId,
     "",
@@ -126,12 +132,11 @@ export function App() {
 
   const { playingClipId, enqueue } = usePlaybackQueue(
     audioRef,
-    activeTab === "stream" || activeTab === "character",
+    activeTab === "stream",
   );
   const audioVolume = useAudioVolume(
     audioRef,
-    activeTab === "character" ||
-      (activeTab === "test" && charactersEnabled),
+    charactersEnabled && (showCharacters || activeTab === "test"),
   );
   const playingClipIdRef = useRef<number | null>(null);
   playingClipIdRef.current = playingClipId;
@@ -237,13 +242,6 @@ export function App() {
     }
   }, [silent, activeTab, setActiveTab]);
 
-  // キャラクター機能が無効な場合は「キャラ」タブを非表示にし、選択中だった場合は配信タブに戻す。
-  useEffect(() => {
-    if (!charactersEnabled && activeTab === "character") {
-      setActiveTab("stream");
-    }
-  }, [charactersEnabled, activeTab, setActiveTab]);
-
   const handleClip = useCallback(
     (data: string): void => {
       let parsed: unknown;
@@ -331,12 +329,7 @@ export function App() {
           onVolumeChange={setVolume}
           onMuteChange={setMuted}
         />
-        <Tabs
-          active={activeTab}
-          onChange={setActiveTab}
-          hideTest={silent}
-          hideCharacter={!charactersEnabled}
-        />
+        <Tabs active={activeTab} onChange={setActiveTab} hideTest={silent} />
       </div>
       <div className="min-h-0 flex-1 overflow-hidden">
         <StreamPanel
@@ -352,16 +345,12 @@ export function App() {
           onShowSpeakerNameChange={setShowSpeakerName}
           onShowStyleNameChange={setShowStyleName}
           onShowTimestampChange={setShowTimestamp}
+          characters={characters}
+          charactersEnabled={charactersEnabled}
+          showCharacters={showCharacters}
+          onShowCharactersChange={setShowCharacters}
+          volume={audioVolume}
         />
-        {charactersEnabled && (
-          <CharacterPanel
-            hidden={activeTab !== "character"}
-            characters={characters}
-            playingClipId={playingClipId}
-            entries={entries}
-            volume={audioVolume}
-          />
-        )}
         {!silent && (
           <TestPanel
             hidden={activeTab !== "test"}
