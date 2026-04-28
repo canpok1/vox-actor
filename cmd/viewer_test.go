@@ -6,6 +6,7 @@ import (
 	"errors"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -423,5 +424,35 @@ func TestViewerCmd_EnvVarVOXSpeaker(t *testing.T) {
 	speaker, _ := viewerCmd.Flags().GetInt("speaker")
 	if speaker != 42 {
 		t.Errorf("expected speaker to be 42, got: %d", speaker)
+	}
+}
+
+func TestViewerCmd_AlreadyRunning_ReturnsError(t *testing.T) {
+	dir := t.TempDir()
+	lockPath := filepath.Join(dir, "run", "viewer.lock")
+
+	// 先に別インスタンスとしてロックを取得しておく
+	first, err := infra.AcquireViewerLock(lockPath)
+	if err != nil {
+		t.Fatalf("pre-lock failed: %v", err)
+	}
+	defer first.Release() //nolint:errcheck
+
+	deps := &Deps{
+		Viewer: &ViewerDeps{
+			ClientFactory: func(_ string) app.VoicevoxClient { return &stubVoicevoxClient{} },
+			StreamPlayerFactory: func(_ string, _ *slog.Logger, _ map[int]entity.SpeakerStyleInfo, _ []int, _ app.VoicevoxClient) (app.StreamPlayer, error) {
+				return &stubStreamPlayer{}, nil
+			},
+			LockPathResolver: func() (string, error) { return lockPath, nil },
+		},
+	}
+
+	err = runViewerWithDeps(t, deps, "viewer")
+	if err == nil {
+		t.Fatal("expected error when viewer is already running")
+	}
+	if !strings.Contains(err.Error(), "viewer は既に起動中です") {
+		t.Errorf("expected error to contain 'viewer は既に起動中です', got: %v", err)
 	}
 }
