@@ -11,7 +11,8 @@ package infra_test
 // - 未知拡張子は本文のみ書き出される           → TestFileWriter_Write_UnknownExt_TextOnly
 // - .txt + speaker指定 で WARN ログ          → TestFileWriter_Write_Txt_WithSpeaker_LogsWarn
 // - .txt で全パラメータnilなら WARN なし      → TestFileWriter_Write_Txt_NoParams_NoWarn
-// - 既存ファイル衝突時 <name>_<UnixNano><ext> → TestFileWriter_Write_CollisionAddsSuffix
+// - 既存ファイルがある場合は末尾に追記される    → TestFileWriter_Write_ExistingFile_Appends
+// - 既存ファイルがある場合に別ファイルを作らない  → TestFileWriter_Write_ExistingFile_NoSuffix
 // - 親ディレクトリ未存在時はエラー             → TestFileWriter_Write_MissingParentDir_ReturnsError
 
 import (
@@ -284,12 +285,78 @@ func filterLines(output, needle string) []string {
 	return matched
 }
 
-func TestFileWriter_Write_CollisionAddsSuffix(t *testing.T) {
+func TestFileWriter_Write_ExistingFile_Appends(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	dest := filepath.Join(dir, "out.txt")
-	if err := os.WriteFile(dest, []byte("既存"), 0o644); err != nil {
+	dest := filepath.Join(dir, "out.jsonl")
+
+	w := infra.NewFileWriter()
+
+	// 1回目
+	written1, err := w.Write(dest, entity.Script{Text: "A"})
+	if err != nil {
+		t.Fatalf("first Write failed: %v", err)
+	}
+	if written1 != dest {
+		t.Errorf("expected written=%q, got %q", dest, written1)
+	}
+
+	// 2回目（既存ファイルへの追記）
+	written2, err := w.Write(dest, entity.Script{Text: "B"})
+	if err != nil {
+		t.Fatalf("second Write failed: %v", err)
+	}
+	if written2 != dest {
+		t.Errorf("expected written=%q, got %q", dest, written2)
+	}
+
+	// ファイルが1つだけ存在すること
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("ReadDir failed: %v", err)
+	}
+	if len(entries) != 1 {
+		names := make([]string, len(entries))
+		for i, e := range entries {
+			names[i] = e.Name()
+		}
+		t.Errorf("expected 1 file, got %d: %v", len(entries), names)
+	}
+
+	// 2行記録されていること
+	data, err := os.ReadFile(dest)
+	if err != nil {
+		t.Fatalf("read failed: %v", err)
+	}
+	lines := strings.Split(strings.TrimRight(string(data), "\n"), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("expected 2 lines, got %d: %q", len(lines), string(data))
+	}
+
+	var got1 map[string]any
+	if err := json.Unmarshal([]byte(lines[0]), &got1); err != nil {
+		t.Fatalf("invalid JSON line 0: %v", err)
+	}
+	if got1["text"] != "A" {
+		t.Errorf("line 0 text mismatch: %v", got1["text"])
+	}
+
+	var got2 map[string]any
+	if err := json.Unmarshal([]byte(lines[1]), &got2); err != nil {
+		t.Fatalf("invalid JSON line 1: %v", err)
+	}
+	if got2["text"] != "B" {
+		t.Errorf("line 1 text mismatch: %v", got2["text"])
+	}
+}
+
+func TestFileWriter_Write_ExistingFile_NoSuffix(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	dest := filepath.Join(dir, "out.jsonl")
+	if err := os.WriteFile(dest, []byte(""), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -299,34 +366,22 @@ func TestFileWriter_Write_CollisionAddsSuffix(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if written == dest {
-		t.Fatalf("expected renamed path, got original: %s", written)
+	// 別ファイルが作られず、同一パスが返ること
+	if written != dest {
+		t.Errorf("expected same path %q, got %q", dest, written)
 	}
 
-	// 末尾は .txt で、ベース名は out_<UnixNano>.txt 形式
-	if filepath.Ext(written) != ".txt" {
-		t.Errorf("expected extension .txt, got: %s", written)
-	}
-	if !strings.HasPrefix(filepath.Base(written), "out_") {
-		t.Errorf("expected basename to start with 'out_', got: %s", filepath.Base(written))
-	}
-
-	// 既存ファイルは変更されていない
-	existing, err := os.ReadFile(dest)
+	// ディレクトリに1ファイルだけ存在すること
+	entries, err := os.ReadDir(dir)
 	if err != nil {
-		t.Fatalf("existing file unreadable: %v", err)
+		t.Fatalf("ReadDir failed: %v", err)
 	}
-	if string(existing) != "既存" {
-		t.Errorf("existing file changed unexpectedly: %s", string(existing))
-	}
-
-	// 新ファイルには新規内容
-	newContents, err := os.ReadFile(written)
-	if err != nil {
-		t.Fatalf("new file unreadable: %v", err)
-	}
-	if string(newContents) != "新規" {
-		t.Errorf("new file content mismatch: %s", string(newContents))
+	if len(entries) != 1 {
+		names := make([]string, len(entries))
+		for i, e := range entries {
+			names[i] = e.Name()
+		}
+		t.Errorf("expected 1 file, got %d: %v", len(entries), names)
 	}
 }
 

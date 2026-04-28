@@ -39,7 +39,7 @@ func makeSayCmd(deps *SayDeps) *cobra.Command {
 	}
 
 	registerCommonFlags(cmd)
-	cmd.Flags().StringP("output", "o", "", "セリフをファイル出力する（指定時はVOICEVOX接続・音声再生を行わない）")
+	cmd.Flags().StringP("output", "o", "", "セリフをファイル出力する（既存ファイルには追記）（指定時はVOICEVOX接続・音声再生を行わない）")
 
 	return cmd
 }
