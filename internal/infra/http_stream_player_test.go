@@ -1924,7 +1924,11 @@ func TestBuildAPICharactersJSON_LogsWarnOnLoadError(t *testing.T) {
 	var logBuf bytes.Buffer
 	logger := slog.New(slog.NewJSONHandler(&logBuf, &slog.HandlerOptions{Level: slog.LevelDebug}))
 
-	workspaceDir := t.TempDir() // no assets/ subdir
+	// assets/ dir exists but is empty (no valid entries) → WARN "failed to load character settings"
+	workspaceDir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(workspaceDir, "assets"), 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
 
 	p, err := NewHTTPStreamPlayer("127.0.0.1:0", newTestStreamAssets(),
 		WithHTTPStreamLogger(logger),
@@ -1972,6 +1976,36 @@ func TestBuildAPICharactersJSON_LogsInfoOnSuccess(t *testing.T) {
 	}
 	if !strings.Contains(logOutput, "character settings loaded") {
 		t.Errorf("expected 'character settings loaded' in log, got: %s", logOutput)
+	}
+}
+
+func TestBuildAPICharactersJSON_LogsInfoOnDirNotFound(t *testing.T) {
+	t.Parallel()
+	var logBuf bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&logBuf, &slog.HandlerOptions{Level: slog.LevelDebug}))
+
+	workspaceDir := t.TempDir() // no assets/ subdir → dir not found
+
+	p, err := NewHTTPStreamPlayer("127.0.0.1:0", newTestStreamAssets(),
+		WithHTTPStreamLogger(logger),
+		WithWorkspacePath(workspaceDir),
+	)
+	if err != nil {
+		t.Fatalf("NewHTTPStreamPlayer: %v", err)
+	}
+	if err := p.buildAPICharactersJSON(); err != nil {
+		t.Fatalf("buildAPICharactersJSON: %v", err)
+	}
+
+	logOutput := logBuf.String()
+	if !strings.Contains(logOutput, "INFO") {
+		t.Errorf("expected INFO log, got: %s", logOutput)
+	}
+	if !strings.Contains(logOutput, "assets directory not found, skipping load") {
+		t.Errorf("expected info message in log, got: %s", logOutput)
+	}
+	if !strings.Contains(logOutput, workspaceDir) {
+		t.Errorf("expected workspaceDir in log, got: %s", logOutput)
 	}
 }
 
