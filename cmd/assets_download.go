@@ -9,6 +9,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var resolveWorkspaceFunc = resolveWorkspaceWithFallback
+
 // AssetsDownloadDeps はassets downloadコマンドの依存を保持する。
 type AssetsDownloadDeps struct {
 	Cloner app.GitCloner
@@ -84,9 +86,9 @@ func resolveAssetsDir(deps *AssetsDownloadDeps) (string, error) {
 	if deps.AssetsDirFunc != nil {
 		return deps.AssetsDirFunc()
 	}
-	ws, err := resolveWorkspaceWithFallback()
+	ws, err := resolveWorkspaceFunc()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(ws, ".vox-actor", "assets"), nil
+	return filepath.Join(ws, "assets"), nil
 }

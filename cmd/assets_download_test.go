@@ -218,3 +218,39 @@ func TestAssetsDownloadCmd_HelpContainsExpectedFlags(t *testing.T) {
 		}
 	}
 }
+
+func TestResolveAssetsDir_WithAssetsDirFunc_ReturnsCustomPath(t *testing.T) {
+	expectedPath := "/custom/assets"
+	deps := &AssetsDownloadDeps{
+		AssetsDirFunc: func() (string, error) { return expectedPath, nil },
+	}
+
+	result, err := resolveAssetsDir(deps)
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+	if result != expectedPath {
+		t.Errorf("expected %q, got: %q", expectedPath, result)
+	}
+}
+
+func TestResolveAssetsDir_WithoutAssetsDirFunc_ReturnsWorkspacePlusAssets(t *testing.T) {
+	workspacePath := "/repo/.vox-actor"
+	deps := &AssetsDownloadDeps{
+		AssetsDirFunc: nil,
+	}
+
+	originalResolveFunc := resolveWorkspaceFunc
+	resolveWorkspaceFunc = func() (string, error) { return workspacePath, nil }
+	defer func() { resolveWorkspaceFunc = originalResolveFunc }()
+
+	result, err := resolveAssetsDir(deps)
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	expectedPath := filepath.Join(workspacePath, "assets")
+	if result != expectedPath {
+		t.Errorf("expected %q, got: %q", expectedPath, result)
+	}
+}
