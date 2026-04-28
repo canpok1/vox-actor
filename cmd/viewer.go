@@ -6,11 +6,13 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
 	"github.com/canpok1/vox-actor/internal/app"
 	"github.com/canpok1/vox-actor/internal/domain/entity"
+	"github.com/canpok1/vox-actor/internal/infra"
 	"github.com/spf13/cobra"
 )
 
@@ -85,6 +87,7 @@ type ViewerDeps struct {
 	DirWatcherFactory   func(logger *slog.Logger) app.DirWatcher
 	StreamPlayerFactory func(addr string, logger *slog.Logger, speakerLookup map[int]entity.SpeakerStyleInfo, orderedSpeakerIDs []int, client app.VoicevoxClient) (app.StreamPlayer, error)
 	QueuePathResolver   func() (string, error)
+	LockPathResolver    func() (string, error)
 }
 
 func makeViewerCmd(deps *ViewerDeps) *cobra.Command {
@@ -108,7 +111,28 @@ func makeViewerCmd(deps *ViewerDeps) *cobra.Command {
 	return cmd
 }
 
+func resolveViewerLockPath(deps *ViewerDeps) (string, error) {
+	if deps != nil && deps.LockPathResolver != nil {
+		return deps.LockPathResolver()
+	}
+	ws, err := resolveWorkspaceWithFallback()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(ws, "run", "viewer.lock"), nil
+}
+
 func runViewer(cmd *cobra.Command, deps *ViewerDeps) error {
+	lockPath, err := resolveViewerLockPath(deps)
+	if err != nil {
+		return err
+	}
+	viewerLock, err := infra.AcquireViewerLock(lockPath)
+	if err != nil {
+		return err
+	}
+	defer viewerLock.Release() //nolint:errcheck
+
 	host, _ := cmd.Flags().GetString("host")
 	port, _ := cmd.Flags().GetInt("port")
 	watchDirs, _ := cmd.Flags().GetStringArray("watch")

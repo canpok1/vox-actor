@@ -4,6 +4,7 @@ go 1.26.1
 
 require (
 	github.com/ebitengine/oto/v3 v3.3.2
+	github.com/gofrs/flock v0.13.0
 	github.com/gopxl/beep/v2 v2.1.1
 	github.com/spf13/cobra v1.10.2
 	golang.org/x/term v0.42.0
