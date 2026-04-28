@@ -164,10 +164,9 @@ export VOX_ACTOR_MONOLOGUE_MODE=file
 - [CLIリファレンス](./docs/reference/cli.md) — `say` / `act` / `watch` サブコマンドの詳細
 - [プラグイン／スキルリファレンス](./docs/reference/plugins.md) — 対応キャラクター、スキルごとの仕様、再生モード、音声デバイス利用不可環境のセットアップ
 - [開発者向け情報](./docs/development/contributing.md) — ビルド・テスト・Lint等のコマンド、レイヤー構成と責務ルール
-- [クレジット表記](./docs/credits.md) — 同梱キャラクターのクレジット表記と利用規約
 
 ## ライセンス
 
 [MIT License](LICENSE)
 
-本プラグインに同梱しているキャラクター設定の利用にあたっては、各キャラクターの利用規約に従ってクレジット表記を行ってください。詳細は [クレジット表記](./docs/credits.md) を参照。
+キャラクター設定は `vox-actor assets download` で別リポジトリから取得します。利用規約とクレジット表記は取得元リポジトリの案内に従ってください。
