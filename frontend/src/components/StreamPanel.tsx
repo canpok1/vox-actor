@@ -1,4 +1,5 @@
 import type { CharacterEntry, TimelineEntry } from "../types/api";
+import type { CharacterStageSlot } from "../hooks/useCharacterStage";
 import { useCharacterStage } from "../hooks/useCharacterStage";
 import { LipSyncImage } from "./LipSyncImage";
 import { Timeline } from "./Timeline";
@@ -30,6 +31,13 @@ const MULTI_SLOT_LAYOUT = [
   { slotIndex: 0, flip: false }, // 内側右
   { slotIndex: 2, flip: false }, // 外側右
 ] as const;
+
+type FilledSlot = { slotIndex: number; flip: boolean; slot: CharacterStageSlot };
+
+const PLACEHOLDER_STYLE: React.CSSProperties = {
+  aspectRatio: "3 / 4",
+  backgroundColor: "var(--ctp-base)",
+};
 
 function getCharacterImageUrls(character: CharacterEntry): {
   closed: string;
@@ -71,15 +79,14 @@ export function StreamPanel(props: StreamPanelProps) {
   const hasCharactersOnStage = slots.some((s) => s !== null);
   const isCharacterMode = showCharacters && hasCharactersOnStage;
 
-  const playingClipEntry = playingClipId
-    ? entries.find((e) => e.kind === "clip" && e.id === playingClipId)
+  const playingClipData = playingClipId
+    ? (entries.find((e) => e.kind === "clip" && e.id === playingClipId) ?? null)
     : null;
-  const playingClipData =
-    playingClipEntry?.kind === "clip" ? playingClipEntry : null;
 
   function isPlayingCharacter(character: CharacterEntry): boolean {
     return (
       playingClipData !== null &&
+      playingClipData.kind === "clip" &&
       character.speakerName === playingClipData.speakerName &&
       character.styleName === playingClipData.styleName
     );
@@ -90,7 +97,6 @@ export function StreamPanel(props: StreamPanelProps) {
     ? getCharacterImageUrls(singleSlotChar.character)
     : null;
 
-  type FilledSlot = { slotIndex: number; flip: boolean; slot: NonNullable<(typeof slots)[number]> };
   const filledSlots: FilledSlot[] = !isMultiSlot
     ? []
     : MULTI_SLOT_LAYOUT.flatMap(({ slotIndex, flip }) => {
@@ -98,18 +104,13 @@ export function StreamPanel(props: StreamPanelProps) {
         return slot ? [{ slotIndex, flip, slot }] : [];
       });
 
-  const placeholderStyle: React.CSSProperties = {
-    aspectRatio: "3 / 4",
-    backgroundColor: "var(--ctp-base)",
-  };
-
   return (
     <section
       id="panel-stream"
       role="tabpanel"
       aria-labelledby="tab-stream"
       hidden={hidden}
-      className={`mt-2${isCharacterMode ? " flex h-full flex-col gap-2" : ""}`}
+      className={isCharacterMode ? "mt-2 flex h-full flex-col gap-2" : "mt-2"}
     >
       <TimelineControls
         historySize={historySize}
@@ -139,7 +140,7 @@ export function StreamPanel(props: StreamPanelProps) {
             ) : (
               <div
                 className="h-full w-auto max-w-full"
-                style={placeholderStyle}
+                style={PLACEHOLDER_STYLE}
               />
             )
           ) : (
@@ -175,8 +176,7 @@ export function StreamPanel(props: StreamPanelProps) {
 
               {/* Mobile layout: absolute positioning with overlap */}
               <div className="relative h-full w-full sm:hidden">
-                {filledSlots.map((_, index) => {
-                  const { slotIndex, flip, slot } = filledSlots[index];
+                {filledSlots.map(({ slotIndex, flip, slot }, index) => {
                   const urls = getCharacterImageUrls(slot.character);
                   const isPlaying = isPlayingCharacter(slot.character);
                   const charCount = filledSlots.length;
