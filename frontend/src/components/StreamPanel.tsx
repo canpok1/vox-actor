@@ -212,7 +212,7 @@ export function StreamPanel(props: StreamPanelProps) {
         showSpeakerName={showSpeakerName}
         showStyleName={showStyleName}
         showTimestamp={showTimestamp}
-        latestOnly={isCharacterMode}
+        isCharacterMode={isCharacterMode}
       />
     </section>
   );

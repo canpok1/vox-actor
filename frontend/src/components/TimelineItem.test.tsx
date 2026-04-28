@@ -48,6 +48,23 @@ describe("TimelineItem - clip", () => {
     const item = screen.getByRole("listitem");
     expect(item).not.toHaveClass("bg-ctp-overlay");
   });
+
+  it("highlightPlaying=false のとき playing=true でもハイライトクラスが付かない", () => {
+    render(<TimelineItem {...defaultProps} playing={true} highlightPlaying={false} />);
+    const item = screen.getByRole("listitem");
+    expect(item).not.toHaveClass("bg-ctp-overlay");
+  });
+
+  it("highlightPlaying=false のとき playing=true でも再生アイコンが表示されない", () => {
+    render(<TimelineItem {...defaultProps} playing={true} highlightPlaying={false} />);
+    expect(screen.queryByText("▶")).not.toBeInTheDocument();
+  });
+
+  it("highlightPlaying=true（デフォルト）のとき playing=true でハイライトクラスが付く", () => {
+    render(<TimelineItem {...defaultProps} playing={true} />);
+    const item = screen.getByRole("listitem");
+    expect(item).toHaveClass("bg-ctp-overlay");
+  });
 });
 
 describe("TimelineItem - clip meta toggles", () => {

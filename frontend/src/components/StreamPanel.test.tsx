@@ -105,7 +105,7 @@ describe("StreamPanel", () => {
       />,
     );
     expect(
-      screen.queryByLabelText("キャラ画像を表示"),
+      screen.queryByLabelText("キャラ画像"),
     ).not.toBeInTheDocument();
   });
 
@@ -118,7 +118,7 @@ describe("StreamPanel", () => {
         showCharacters={false}
       />,
     );
-    expect(screen.getByLabelText("キャラ画像を表示")).toBeInTheDocument();
+    expect(screen.getByLabelText("キャラ画像")).toBeInTheDocument();
   });
 
   it("showCharacters=false のとき履歴モードで全エントリが表示される", () => {
@@ -154,7 +154,7 @@ describe("StreamPanel", () => {
     expect(screen.getByText("新しいテキスト")).toBeInTheDocument();
   });
 
-  it("キャラモード時は Timeline が latestOnly で最新 1 件のみ表示される", () => {
+  it("キャラモード時は再生中クリップのセリフのみ表示される", () => {
     const entries: TimelineEntry[] = [
       {
         kind: "clip",
@@ -190,5 +190,56 @@ describe("StreamPanel", () => {
     );
     expect(screen.queryByText("古いテキスト")).not.toBeInTheDocument();
     expect(screen.getByText("新しいテキスト")).toBeInTheDocument();
+  });
+
+  it("キャラモード時は再生中でない最新エントリではなく playingClipId のエントリが表示される", () => {
+    const entries: TimelineEntry[] = [
+      {
+        kind: "clip",
+        id: 1,
+        url: "http://example.com/1.mp3",
+        text: "古いテキスト",
+        speakerName: "話者A",
+        styleName: "ノーマル",
+        timestamp: 1700000000000,
+      },
+      {
+        kind: "clip",
+        id: 2,
+        url: "http://example.com/2.mp3",
+        text: "新しいテキスト",
+        speakerName: "話者A",
+        styleName: "ノーマル",
+        timestamp: 1700000001000,
+      },
+    ];
+    render(
+      <StreamPanel
+        {...defaultProps}
+        hidden={false}
+        entries={entries}
+        characters={mockCharacters}
+        charactersEnabled={true}
+        showCharacters={true}
+        playingClipId={1}
+      />,
+    );
+    expect(screen.getByText("古いテキスト")).toBeInTheDocument();
+    expect(screen.queryByText("新しいテキスト")).not.toBeInTheDocument();
+  });
+
+  it("キャラモード時は再生中ハイライト（▶）が表示されない", () => {
+    render(
+      <StreamPanel
+        {...defaultProps}
+        hidden={false}
+        entries={mockEntries}
+        characters={mockCharacters}
+        charactersEnabled={true}
+        showCharacters={true}
+        playingClipId={1}
+      />,
+    );
+    expect(screen.queryByText("▶")).not.toBeInTheDocument();
   });
 });
