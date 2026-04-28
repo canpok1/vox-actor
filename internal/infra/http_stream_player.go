@@ -641,7 +641,6 @@ func (p *HTTPStreamPlayer) buildAPICharactersJSON() error {
 // loadMergedCharacterSettings は assetsDirs から優先順にキャラクター設定を読み込み、
 // 同一 charID の重複は高優先側（index 0）で上書きしたエントリリストを返す。
 func (p *HTTPStreamPlayer) loadMergedCharacterSettings() []characterEntry {
-	// charID → entries のマップ。高優先順に走査し、初回登録のみ採用。
 	seen := make(map[string]bool)
 	var result []characterEntry
 

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 
 	"github.com/canpok1/vox-actor/internal/domain/entity"
 	"github.com/canpok1/vox-actor/internal/infra"
@@ -84,6 +85,7 @@ func runSpeakersList(cmd *cobra.Command, deps *SpeakersDeps) error {
 		items = append(items, SpeakerListItem{ID: id, Name: s.GetSpeakerName()})
 	}
 
+	sort.Slice(items, func(i, j int) bool { return items[i].ID < items[j].ID })
 	return outputSpeakerList(cmd, items)
 }
 
