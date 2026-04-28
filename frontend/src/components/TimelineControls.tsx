@@ -63,7 +63,7 @@ export function TimelineControls(props: TimelineControlsProps) {
         ))}
       </select>
       <CheckboxToggle
-        label="話者名"
+        label="キャラ名"
         checked={showSpeakerName}
         onChange={onShowSpeakerNameChange}
       />
@@ -79,7 +79,7 @@ export function TimelineControls(props: TimelineControlsProps) {
       />
       {charactersEnabled && onShowCharactersChange && (
         <CheckboxToggle
-          label="キャラ画像を表示"
+          label="キャラ画像"
           checked={showCharacters}
           onChange={onShowCharactersChange}
         />

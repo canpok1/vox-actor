@@ -12,7 +12,7 @@ test.describe("各種設定の localStorage 永続化", () => {
     await page.goto("/");
 
     await page.getByLabel("履歴上限").selectOption("50");
-    await page.getByRole("checkbox", { name: "話者名" }).uncheck();
+    await page.getByRole("checkbox", { name: "キャラ名" }).uncheck();
     await page.getByRole("checkbox", { name: "スタイル" }).uncheck();
     await page.getByRole("checkbox", { name: "時刻" }).uncheck();
 
@@ -32,7 +32,7 @@ test.describe("各種設定の localStorage 永続化", () => {
     await page.reload();
     await expect(page.getByLabel("履歴上限")).toHaveValue("50");
     await expect(
-      page.getByRole("checkbox", { name: "話者名" }),
+      page.getByRole("checkbox", { name: "キャラ名" }),
     ).not.toBeChecked();
     await expect(
       page.getByRole("checkbox", { name: "スタイル" }),

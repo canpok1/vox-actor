@@ -13,7 +13,7 @@ test.describe("キャラ画像表示（配信タブ統合）", () => {
     ).not.toBeVisible();
   });
 
-  test("charactersEnabled=true のとき「キャラ画像を表示」チェックボックスが配信タブに表示される", async ({
+  test("charactersEnabled=true のとき「キャラ画像」チェックボックスが配信タブに表示される", async ({
     page,
     request,
   }) => {
@@ -31,11 +31,11 @@ test.describe("キャラ画像表示（配信タブ統合）", () => {
 
     await page.goto("/");
     await expect(
-      page.getByRole("checkbox", { name: "キャラ画像を表示" }),
+      page.getByRole("checkbox", { name: "キャラ画像" }),
     ).toBeVisible();
   });
 
-  test("charactersEnabled=false のとき「キャラ画像を表示」チェックボックスが非表示になる", async ({
+  test("charactersEnabled=false のとき「キャラ画像」チェックボックスが非表示になる", async ({
     page,
     request,
   }) => {
@@ -43,7 +43,7 @@ test.describe("キャラ画像表示（配信タブ統合）", () => {
 
     await page.goto("/");
     await expect(
-      page.getByRole("checkbox", { name: "キャラ画像を表示" }),
+      page.getByRole("checkbox", { name: "キャラ画像" }),
     ).not.toBeVisible();
   });
 });

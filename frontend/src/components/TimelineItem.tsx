@@ -7,6 +7,7 @@ interface TimelineItemProps {
   showSpeakerName: boolean;
   showStyleName: boolean;
   showTimestamp: boolean;
+  highlightPlaying?: boolean;
 }
 
 function formatTimestamp(ms: number): string {
@@ -26,6 +27,7 @@ export function TimelineItem({
   showSpeakerName,
   showStyleName,
   showTimestamp,
+  highlightPlaying = true,
 }: TimelineItemProps) {
   const ref = useRef<HTMLLIElement>(null);
   // 初期値は false 固定。マウント時点で playing=true のケース（SSE で
@@ -85,7 +87,7 @@ export function TimelineItem({
     );
   }
 
-  const playingCls = playing ? "bg-ctp-overlay font-bold" : "";
+  const playingCls = playing && highlightPlaying ? "bg-ctp-overlay font-bold" : "";
   return (
     <li
       ref={ref}
@@ -114,7 +116,7 @@ export function TimelineItem({
           aria-hidden
           className="inline-block w-[1em] flex-none text-ctp-blue"
         >
-          {playing ? "▶" : ""}
+          {playing && highlightPlaying ? "▶" : ""}
         </span>
         <span>{entry.text}</span>
       </div>

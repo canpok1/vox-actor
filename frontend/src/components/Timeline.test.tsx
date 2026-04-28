@@ -83,34 +83,92 @@ describe("Timeline", () => {
     expect(screen.getByText("合成に失敗しました")).toBeInTheDocument();
   });
 
-  describe("latestOnly", () => {
+  describe("isCharacterMode", () => {
     const entries: TimelineEntry[] = [
       clipEntry(1, "古いテキスト"),
       clipEntry(2, "新しいテキスト"),
     ];
 
-    it("latestOnly=true のとき最後の 1 件のみ描画される", () => {
-      render(<Timeline {...defaultProps} entries={entries} latestOnly={true} />);
+    it("isCharacterMode=true のとき再生中クリップのみ描画される", () => {
+      render(
+        <Timeline
+          {...defaultProps}
+          entries={entries}
+          playingClipId={2}
+          isCharacterMode={true}
+        />,
+      );
       expect(screen.queryByText("古いテキスト")).not.toBeInTheDocument();
       expect(screen.getByText("新しいテキスト")).toBeInTheDocument();
       expect(screen.getAllByRole("listitem")).toHaveLength(1);
     });
 
-    it("latestOnly=false のとき全件描画される", () => {
-      render(<Timeline {...defaultProps} entries={entries} latestOnly={false} />);
+    it("isCharacterMode=true かつ playingClipId が最新でないエントリでも、そのエントリが描画される", () => {
+      render(
+        <Timeline
+          {...defaultProps}
+          entries={entries}
+          playingClipId={1}
+          isCharacterMode={true}
+        />,
+      );
+      expect(screen.getByText("古いテキスト")).toBeInTheDocument();
+      expect(screen.queryByText("新しいテキスト")).not.toBeInTheDocument();
+    });
+
+    it("isCharacterMode=true かつ playingClipId=null のとき何も描画されない", () => {
+      render(
+        <Timeline
+          {...defaultProps}
+          entries={entries}
+          playingClipId={null}
+          isCharacterMode={true}
+        />,
+      );
+      expect(screen.getByRole("list")).toBeEmptyDOMElement();
+    });
+
+    it("isCharacterMode=false のとき全件描画される", () => {
+      render(
+        <Timeline
+          {...defaultProps}
+          entries={entries}
+          isCharacterMode={false}
+        />,
+      );
       expect(screen.getByText("古いテキスト")).toBeInTheDocument();
       expect(screen.getByText("新しいテキスト")).toBeInTheDocument();
       expect(screen.getAllByRole("listitem")).toHaveLength(2);
     });
 
-    it("latestOnly を省略したとき全件描画される", () => {
+    it("isCharacterMode を省略したとき全件描画される", () => {
       render(<Timeline {...defaultProps} entries={entries} />);
       expect(screen.getAllByRole("listitem")).toHaveLength(2);
     });
 
-    it("latestOnly=true かつ entries が空のとき何も描画されない", () => {
-      render(<Timeline {...defaultProps} entries={[]} latestOnly={true} />);
-      expect(screen.getByRole("list")).toBeEmptyDOMElement();
+    it("isCharacterMode=true のとき再生中ハイライト（▶）が表示されない", () => {
+      render(
+        <Timeline
+          {...defaultProps}
+          entries={entries}
+          playingClipId={2}
+          isCharacterMode={true}
+        />,
+      );
+      expect(screen.queryByText("▶")).not.toBeInTheDocument();
+    });
+
+    it("isCharacterMode=true のとき話者名が常に表示される", () => {
+      render(
+        <Timeline
+          {...defaultProps}
+          entries={entries}
+          playingClipId={1}
+          showSpeakerName={false}
+          isCharacterMode={true}
+        />,
+      );
+      expect(screen.getByText("話者A")).toBeInTheDocument();
     });
   });
 });
