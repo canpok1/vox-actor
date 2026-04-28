@@ -1,12 +1,10 @@
-export type TabName = "stream" | "test" | "character";
+export type TabName = "stream" | "test";
 
 interface TabsProps {
   active: TabName;
   onChange: (tab: TabName) => void;
   // hideTest が true の場合「音声テスト」タブは描画しない（無音モード向け）。
   hideTest?: boolean;
-  // hideCharacter が true の場合「キャラ」タブは描画しない。
-  hideCharacter?: boolean;
 }
 
 interface TabButtonProps {
@@ -38,12 +36,7 @@ function TabButton({ id, panelId, active, label, onClick }: TabButtonProps) {
   );
 }
 
-export function Tabs({
-  active,
-  onChange,
-  hideTest = false,
-  hideCharacter = false,
-}: TabsProps) {
+export function Tabs({ active, onChange, hideTest = false }: TabsProps) {
   return (
     <div
       role="tablist"
@@ -63,15 +56,6 @@ export function Tabs({
           active={active === "test"}
           label="音声テスト"
           onClick={() => onChange("test")}
-        />
-      )}
-      {!hideCharacter && (
-        <TabButton
-          id="tab-character"
-          panelId="panel-character"
-          active={active === "character"}
-          label="キャラ"
-          onClick={() => onChange("character")}
         />
       )}
     </div>

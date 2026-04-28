@@ -82,4 +82,35 @@ describe("Timeline", () => {
     render(<Timeline {...defaultProps} entries={entries} />);
     expect(screen.getByText("合成に失敗しました")).toBeInTheDocument();
   });
+
+  describe("latestOnly", () => {
+    const entries: TimelineEntry[] = [
+      clipEntry(1, "古いテキスト"),
+      clipEntry(2, "新しいテキスト"),
+    ];
+
+    it("latestOnly=true のとき最後の 1 件のみ描画される", () => {
+      render(<Timeline {...defaultProps} entries={entries} latestOnly={true} />);
+      expect(screen.queryByText("古いテキスト")).not.toBeInTheDocument();
+      expect(screen.getByText("新しいテキスト")).toBeInTheDocument();
+      expect(screen.getAllByRole("listitem")).toHaveLength(1);
+    });
+
+    it("latestOnly=false のとき全件描画される", () => {
+      render(<Timeline {...defaultProps} entries={entries} latestOnly={false} />);
+      expect(screen.getByText("古いテキスト")).toBeInTheDocument();
+      expect(screen.getByText("新しいテキスト")).toBeInTheDocument();
+      expect(screen.getAllByRole("listitem")).toHaveLength(2);
+    });
+
+    it("latestOnly を省略したとき全件描画される", () => {
+      render(<Timeline {...defaultProps} entries={entries} />);
+      expect(screen.getAllByRole("listitem")).toHaveLength(2);
+    });
+
+    it("latestOnly=true かつ entries が空のとき何も描画されない", () => {
+      render(<Timeline {...defaultProps} entries={[]} latestOnly={true} />);
+      expect(screen.getByRole("list")).toBeEmptyDOMElement();
+    });
+  });
 });

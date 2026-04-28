@@ -1,9 +1,22 @@
 import { expect, test } from "@playwright/test";
 import { resetStub, setApiCharacters } from "./helpers";
 
-test.describe("キャラタブ", () => {
+test.describe("キャラ画像表示（配信タブ統合）", () => {
   test.beforeEach(async ({ request }) => {
     await resetStub(request);
+  });
+
+  test("「キャラ」タブが存在しないこと", async ({ page }) => {
+    await page.goto("/");
+    await expect(
+      page.getByRole("tab", { name: "キャラ" }),
+    ).not.toBeVisible();
+  });
+
+  test("charactersEnabled=true のとき「キャラ画像を表示」チェックボックスが配信タブに表示される", async ({
+    page,
+    request,
+  }) => {
     await setApiCharacters(request, {
       enabled: true,
       characters: [
@@ -15,62 +28,22 @@ test.describe("キャラタブ", () => {
         },
       ],
     });
+
+    await page.goto("/");
+    await expect(
+      page.getByRole("checkbox", { name: "キャラ画像を表示" }),
+    ).toBeVisible();
   });
 
-  test("キャラタブが表示され、キャラクター画像エリアとセリフエリアが見える", async ({
+  test("charactersEnabled=false のとき「キャラ画像を表示」チェックボックスが非表示になる", async ({
     page,
+    request,
   }) => {
+    await setApiCharacters(request, { enabled: false, characters: [] });
+
     await page.goto("/");
-    await page.getByRole("tab", { name: "キャラ" }).click();
-
-    const panel = page.locator("#panel-character");
-    await expect(panel).toBeVisible();
-  });
-
-  test("縦長ビューポートでもキャラタブがビューポートからはみ出さない", async ({
-    page,
-  }) => {
-    await page.setViewportSize({ width: 400, height: 600 });
-    await page.goto("/");
-    await page.getByRole("tab", { name: "キャラ" }).click();
-
-    const panel = page.locator("#panel-character");
-    await expect(panel).toBeVisible();
-
-    const panelBox = await panel.boundingBox();
-    expect(panelBox).not.toBeNull();
-    if (panelBox) {
-      expect(panelBox.y + panelBox.height).toBeLessThanOrEqual(600);
-    }
-  });
-
-  test("横長ビューポートでもキャラタブがビューポートからはみ出さない", async ({
-    page,
-  }) => {
-    await page.setViewportSize({ width: 800, height: 450 });
-    await page.goto("/");
-    await page.getByRole("tab", { name: "キャラ" }).click();
-
-    const panel = page.locator("#panel-character");
-    await expect(panel).toBeVisible();
-
-    const panelBox = await panel.boundingBox();
-    expect(panelBox).not.toBeNull();
-    if (panelBox) {
-      expect(panelBox.y + panelBox.height).toBeLessThanOrEqual(450);
-    }
-  });
-
-  test("セリフ欄はパネル内に収まる", async ({ page }) => {
-    await page.setViewportSize({ width: 400, height: 600 });
-    await page.goto("/");
-    await page.getByRole("tab", { name: "キャラ" }).click();
-
-    const panel = page.locator("#panel-character");
-    const panelBox = await panel.boundingBox();
-    expect(panelBox).not.toBeNull();
-    if (panelBox) {
-      expect(panelBox.y + panelBox.height).toBeLessThanOrEqual(600);
-    }
+    await expect(
+      page.getByRole("checkbox", { name: "キャラ画像を表示" }),
+    ).not.toBeVisible();
   });
 });

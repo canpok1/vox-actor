@@ -110,3 +110,64 @@ describe("TimelineControls - チェックボックストグル", () => {
     expect(onShowTimestampChange).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("TimelineControls - キャラ画像チェックボックス", () => {
+  it("charactersEnabled=false のときキャラ画像チェックボックスが描画されない", () => {
+    render(<TimelineControls {...defaultProps} charactersEnabled={false} />);
+    expect(
+      screen.queryByLabelText("キャラ画像を表示"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("charactersEnabled=true のときキャラ画像チェックボックスが描画される", () => {
+    render(
+      <TimelineControls
+        {...defaultProps}
+        charactersEnabled={true}
+        showCharacters={false}
+        onShowCharactersChange={vi.fn()}
+      />,
+    );
+    expect(screen.getByLabelText("キャラ画像を表示")).toBeInTheDocument();
+  });
+
+  it("showCharacters=true のときキャラ画像チェックボックスが checked になる", () => {
+    render(
+      <TimelineControls
+        {...defaultProps}
+        charactersEnabled={true}
+        showCharacters={true}
+        onShowCharactersChange={vi.fn()}
+      />,
+    );
+    expect(screen.getByLabelText("キャラ画像を表示")).toBeChecked();
+  });
+
+  it("showCharacters=false のときキャラ画像チェックボックスが unchecked になる", () => {
+    render(
+      <TimelineControls
+        {...defaultProps}
+        charactersEnabled={true}
+        showCharacters={false}
+        onShowCharactersChange={vi.fn()}
+      />,
+    );
+    expect(screen.getByLabelText("キャラ画像を表示")).not.toBeChecked();
+  });
+
+  it("キャラ画像チェックボックスをクリックすると onShowCharactersChange が呼ばれる", async () => {
+    const user = userEvent.setup();
+    const onShowCharactersChange = vi.fn();
+    render(
+      <TimelineControls
+        {...defaultProps}
+        charactersEnabled={true}
+        showCharacters={false}
+        onShowCharactersChange={onShowCharactersChange}
+      />,
+    );
+    await user.click(screen.getByLabelText("キャラ画像を表示"));
+    expect(onShowCharactersChange).toHaveBeenCalledWith(true);
+    expect(onShowCharactersChange).toHaveBeenCalledTimes(1);
+  });
+});
