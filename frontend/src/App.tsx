@@ -12,6 +12,7 @@ import { usePlaybackQueue } from "./hooks/usePlaybackQueue";
 import {
   isApiStatus,
   isApiCharacters,
+  isApiHistory,
   isClipEvent,
   isErrorEventPayload,
   type Speaker,
@@ -203,6 +204,37 @@ export function App() {
       cancelled = true;
     };
   }, [showTestError]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = async (): Promise<void> => {
+      try {
+        const resp = await fetch("/api/history");
+        if (!resp.ok) throw new Error(`history ${resp.status}`);
+        const data: unknown = await resp.json();
+        if (!isApiHistory(data)) {
+          throw new Error("invalid api history payload");
+        }
+        if (cancelled) return;
+        const historyEntries: TimelineEntry[] = data.entries.map((e) => ({
+          kind: "clip" as const,
+          id: e.id,
+          url: "",
+          text: e.text,
+          speakerName: e.speakerName,
+          styleName: e.styleName,
+          timestamp: e.timestamp,
+        }));
+        setEntries(historyEntries);
+      } catch (err) {
+        console.error("failed to load api history", err);
+      }
+    };
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;

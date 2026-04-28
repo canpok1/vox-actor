@@ -168,3 +168,38 @@ export function isApiCharacters(value: unknown): value is ApiCharacters {
     v.characters.every(isCharacterEntry)
   );
 }
+
+// HistoryEntry は /api/history の 1 エントリ（WAV URL なし）。
+export interface HistoryEntry {
+  id: number;
+  text: string;
+  speakerName: string;
+  styleName: string;
+  timestamp: number;
+}
+
+export interface ApiHistory {
+  entries: HistoryEntry[];
+}
+
+export function isHistoryEntry(value: unknown): value is HistoryEntry {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+  const v = value as Record<string, unknown>;
+  return (
+    typeof v.id === "number" &&
+    typeof v.text === "string" &&
+    typeof v.speakerName === "string" &&
+    typeof v.styleName === "string" &&
+    typeof v.timestamp === "number"
+  );
+}
+
+export function isApiHistory(value: unknown): value is ApiHistory {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+  const v = value as Record<string, unknown>;
+  return Array.isArray(v.entries) && v.entries.every(isHistoryEntry);
+}
