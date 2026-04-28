@@ -65,7 +65,7 @@ func NewFileWriter(opts ...FileWriterOption) *FileWriter {
 // ディレクトリ指定時に末尾が "/" で未存在ならば os.MkdirAll で作成する。
 // path がファイル名の場合、拡張子で書き出し形式を判定：.json / .jsonl のみ JSON 出力、.txt は本文のみ。
 // ファイル指定時は拡張子必須で、.json / .jsonl / .txt 以外はエラーで返す。
-// 既存ファイルがある場合は <name>_<UnixNano><ext> で連番を付与する。
+// 既存ファイルがある場合は末尾に追記する。
 // 戻り値は実際の書き出し先パス。
 func (w *FileWriter) Write(path string, script entity.Script) (string, error) {
 	// ディレクトリ判定：末尾が "/" または os.Stat で IsDir
@@ -110,7 +110,7 @@ func (w *FileWriter) Write(path string, script entity.Script) (string, error) {
 		return "", fmt.Errorf("parent path is not a directory: %s", parent)
 	}
 
-	dest := w.resolveDest(path)
+	dest := path
 
 	ext := strings.ToLower(filepath.Ext(dest))
 	switch ext {
@@ -120,18 +120,6 @@ func (w *FileWriter) Write(path string, script entity.Script) (string, error) {
 		w.warnUnsavedParams(dest, script)
 		return dest, writeText(dest, script.Text)
 	}
-}
-
-// resolveDest は出力先パスを返す。同名ファイルが既に存在する場合は <name>_<UnixNano><ext> を付与する。
-func (w *FileWriter) resolveDest(path string) string {
-	if _, err := os.Stat(path); err != nil {
-		return path
-	}
-	dir := filepath.Dir(path)
-	base := filepath.Base(path)
-	ext := filepath.Ext(base)
-	name := strings.TrimSuffix(base, ext)
-	return filepath.Join(dir, fmt.Sprintf("%s_%d%s", name, w.now().UnixNano(), ext))
 }
 
 // warnUnsavedParams は .txt / 未知拡張子の出力時に保存できないパラメータが指定されていれば WARN ログを出す。
@@ -178,17 +166,28 @@ func toJSONScript(script entity.Script) jsonScriptOut {
 	}
 }
 
-// writeJSONLine は1行JSON（末尾改行付き）を書き出す。
-// .json / .jsonl で同じ実装。.jsonl が将来複数行追記をサポートする場合は分岐させる。
+// writeJSONLine は1行JSON（末尾改行付き）を追記モードで書き出す。
 func writeJSONLine(path string, script entity.Script) error {
 	data, err := json.Marshal(toJSONScript(script))
 	if err != nil {
 		return fmt.Errorf("failed to marshal JSON: %w", err)
 	}
 	data = append(data, '\n')
-	return os.WriteFile(path, data, 0o644)
+	return appendToFile(path, data)
 }
 
 func writeText(path string, text string) error {
-	return os.WriteFile(path, []byte(text), 0o644)
+	return appendToFile(path, []byte(text))
+}
+
+func appendToFile(path string, data []byte) error {
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	if err != nil {
+		return fmt.Errorf("failed to open file: %w", err)
+	}
+	defer func() { _ = f.Close() }()
+	if _, err := f.Write(data); err != nil {
+		return fmt.Errorf("failed to write file: %w", err)
+	}
+	return nil
 }
