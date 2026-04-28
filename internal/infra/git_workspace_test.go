@@ -258,3 +258,17 @@ func TestResolveProjectAssetsPath_RespectsVoxActorWorkspaceEnv(t *testing.T) {
 		t.Errorf("ResolveProjectAssetsPath() = %q, want %q", got, want)
 	}
 }
+
+func TestResolveViewerHistoryPath_ReturnsViewerHistoryDir_WhenEnvIsSet(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("VOX_ACTOR_WORKSPACE", dir)
+
+	got, err := ResolveViewerHistoryPath()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	want := filepath.Join(dir, "viewer", "history")
+	if got != want {
+		t.Errorf("ResolveViewerHistoryPath() = %q, want %q", got, want)
+	}
+}

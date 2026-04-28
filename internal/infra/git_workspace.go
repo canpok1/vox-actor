@@ -65,6 +65,15 @@ func ResolveQueuePath() (string, error) {
 	return filepath.Join(workspace, "queue"), nil
 }
 
+// ResolveViewerHistoryPath はワークスペース配下の viewer 履歴ディレクトリパスを返す。
+func ResolveViewerHistoryPath() (string, error) {
+	workspace, err := ResolveWorkspacePath()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(workspace, "viewer", "history"), nil
+}
+
 // ResolveHomeAssetsPath はホームスコープのアセットルートパス (~/.vox-actor/assets/) を返す。
 func ResolveHomeAssetsPath() (string, error) {
 	home, err := os.UserHomeDir()
