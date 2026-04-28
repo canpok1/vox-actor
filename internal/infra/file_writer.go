@@ -166,7 +166,6 @@ func toJSONScript(script entity.Script) jsonScriptOut {
 	}
 }
 
-// writeJSONLine は1行JSON（末尾改行付き）を追記モードで書き出す。
 func writeJSONLine(path string, script entity.Script) error {
 	data, err := json.Marshal(toJSONScript(script))
 	if err != nil {
@@ -183,11 +182,11 @@ func writeText(path string, text string) error {
 func appendToFile(path string, data []byte) error {
 	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 	if err != nil {
-		return fmt.Errorf("failed to open file: %w", err)
+		return fmt.Errorf("failed to open %s: %w", path, err)
 	}
 	defer func() { _ = f.Close() }()
 	if _, err := f.Write(data); err != nil {
-		return fmt.Errorf("failed to write file: %w", err)
+		return fmt.Errorf("failed to write %s: %w", path, err)
 	}
 	return nil
 }
