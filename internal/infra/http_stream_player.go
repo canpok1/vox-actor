@@ -625,20 +625,6 @@ func (p *HTTPStreamPlayer) buildAPICharactersJSON() error {
 			enabled = true
 			p.logger.Info("character settings loaded", "count", len(entries))
 		}
-	} else if p.workspacePath != "" {
-		// backward compat: WithWorkspacePath 呼び出しで assetsDirs が未設定の場合
-		fsys := os.DirFS(p.workspacePath)
-		loadedEntries, loadErr := loadCharacterSettingsFromSpeakerJSON(fsys, p.workspacePath, workspaceAssetsDir, p.logger)
-		if loadErr != nil {
-			p.logger.Warn("failed to load character settings",
-				"workspacePath", p.workspacePath,
-				"assetsDir", workspaceAssetsDir,
-				"error", loadErr)
-		} else if len(loadedEntries) > 0 {
-			entries = loadedEntries
-			enabled = true
-			p.logger.Info("character settings loaded", "count", len(entries))
-		}
 	}
 
 	payload, err := json.Marshal(apiCharactersJSON{
@@ -858,16 +844,7 @@ func (p *HTTPStreamPlayer) handleCharacterImage(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	// backward compat: assetsDirs 未設定時は workspacePath から解決
-	if p.workspacePath == "" {
-		http.NotFound(w, r)
-		return
-	}
-	if err := validateImagePath(relPath, filepath.Join(p.workspacePath, workspaceAssetsDir)); err != nil {
-		http.Error(w, "invalid path", http.StatusBadRequest)
-		return
-	}
-	http.ServeFile(w, r, filepath.Join(p.workspacePath, workspaceAssetsDir, relPath))
+	http.NotFound(w, r)
 }
 
 func (p *HTTPStreamPlayer) handleTestClip(w http.ResponseWriter, r *http.Request) {

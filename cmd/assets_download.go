@@ -13,6 +13,11 @@ import (
 var resolveWorkspaceFunc = resolveWorkspaceWithFallback
 var resolveHomeAssetsFunc = infra.ResolveHomeAssetsPath
 
+const (
+	scopeHome    = "home"
+	scopeProject = "project"
+)
+
 // AssetsDownloadDeps はassets downloadコマンドの依存を保持する。
 type AssetsDownloadDeps struct {
 	Cloner app.GitCloner
@@ -56,8 +61,8 @@ func runAssetsDownload(cmd *cobra.Command, args []string, deps *AssetsDownloadDe
 	force, _ := cmd.Flags().GetBool("force")
 	scope, _ := cmd.Flags().GetString("scope")
 
-	if scope != "home" && scope != "project" {
-		return fmt.Errorf("%w: --scope must be \"home\" or \"project\", got %q", ErrUsage, scope)
+	if scope != scopeHome && scope != scopeProject {
+		return fmt.Errorf("%w: --scope must be %q or %q, got %q", ErrUsage, scopeHome, scopeProject, scope)
 	}
 
 	assetsDir, err := resolveAssetsDir(deps, scope)
@@ -94,7 +99,7 @@ func resolveAssetsDir(deps *AssetsDownloadDeps, scope string) (string, error) {
 	if deps.AssetsDirFunc != nil {
 		return deps.AssetsDirFunc()
 	}
-	if scope == "home" {
+	if scope == scopeHome {
 		return resolveHomeAssetsFunc()
 	}
 	ws, err := resolveWorkspaceFunc()

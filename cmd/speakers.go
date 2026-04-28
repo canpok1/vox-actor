@@ -102,9 +102,7 @@ func buildCharacterDirMap(cmd *cobra.Command, deps *SpeakersDeps) (map[string]st
 			if os.IsNotExist(err) {
 				continue
 			}
-			if cmd != nil {
-				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: skipping assets dir %s: %v\n", dir, err)
-			}
+			_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: skipping assets dir %s: %v\n", dir, err)
 			continue
 		}
 		for _, e := range entries {
