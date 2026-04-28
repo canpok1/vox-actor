@@ -20,17 +20,6 @@
         ]
       }
     ],
-    "PreToolUse": [
-      {
-        "matcher": "Skill",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/monologue-pre-skill.sh"
-          }
-        ]
-      }
-    ],
     "PostToolUse": [
       {
         "matcher": "TaskCreate|TaskUpdate|TodoWrite",
