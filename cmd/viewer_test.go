@@ -427,9 +427,24 @@ func TestViewerCmd_EnvVarVOXSpeaker(t *testing.T) {
 	}
 }
 
+func TestResolveViewerLockPath_UsesViewerSubdir(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("VOX_ACTOR_WORKSPACE", dir)
+
+	path, err := resolveViewerLockPath(nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	expected := filepath.Join(dir, "viewer", "viewer.lock")
+	if path != expected {
+		t.Errorf("expected path %q, got %q", expected, path)
+	}
+}
+
 func TestViewerCmd_AlreadyRunning_ReturnsError(t *testing.T) {
 	dir := t.TempDir()
-	lockPath := filepath.Join(dir, "run", "viewer.lock")
+	lockPath := filepath.Join(dir, "viewer", "viewer.lock")
 
 	// 先に別インスタンスとしてロックを取得しておく
 	first, err := infra.AcquireViewerLock(lockPath)
