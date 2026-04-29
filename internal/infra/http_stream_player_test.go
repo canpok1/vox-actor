@@ -2564,3 +2564,125 @@ func TestHTTPStreamPlayer_APIHistory_EmptyWhenNoFile(t *testing.T) {
 		t.Errorf("expected 0 entries, got %d", len(result.Entries))
 	}
 }
+
+// TestHTTPStreamPlayer_APIHistory_ReturnsUpdatedHistory は Start() 後にファイルへ追記された
+// 履歴エントリが /api/history リクエスト時に反映されることを検証する。
+func TestHTTPStreamPlayer_APIHistory_ReturnsUpdatedHistory(t *testing.T) {
+	historyDir := t.TempDir()
+	fixedNow := time.Date(2026, 4, 28, 10, 0, 0, 0, time.Local)
+
+	p, err := NewHTTPStreamPlayer("127.0.0.1:0", newTestStreamAssets(),
+		WithHistoryDir(historyDir),
+		withNowFunc(func() time.Time { return fixedNow }),
+	)
+	if err != nil {
+		t.Fatalf("NewHTTPStreamPlayer: %v", err)
+	}
+	if err := p.Start(context.Background()); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		_ = p.Shutdown(ctx)
+	})
+
+	// Start() 後に履歴ファイルへエントリを追記する。
+	filePath := filepath.Join(historyDir, "2026-04-28.jsonl")
+	rec := historyRecord{
+		ID:          1,
+		Text:        "Start後に追記されたテキスト",
+		SpeakerName: "ずんだもん",
+		StyleName:   "ノーマル",
+		Timestamp:   fixedNow.UnixMilli(),
+	}
+	data, _ := json.Marshal(rec)
+	data = append(data, '\n')
+	if err := os.WriteFile(filePath, data, 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	resp, err := http.Get("http://" + p.Addr() + "/api/history")
+	if err != nil {
+		t.Fatalf("GET /api/history: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var result apiHistoryResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+	if len(result.Entries) != 1 {
+		t.Fatalf("expected 1 entry, got %d", len(result.Entries))
+	}
+	if result.Entries[0].Text != "Start後に追記されたテキスト" {
+		t.Errorf("expected text %q, got %q", "Start後に追記されたテキスト", result.Entries[0].Text)
+	}
+}
+
+// TestHTTPStreamPlayer_APIHistory_CrossDayReturnsNewFile は日付を跨いだ後に
+// /api/history が新しい日付のファイルを読み込むことを検証する。
+func TestHTTPStreamPlayer_APIHistory_CrossDayReturnsNewFile(t *testing.T) {
+	historyDir := t.TempDir()
+	day1 := time.Date(2026, 4, 28, 23, 59, 0, 0, time.Local)
+	day2 := time.Date(2026, 4, 29, 0, 1, 0, 0, time.Local)
+	nowPtr := &day1
+
+	p, err := NewHTTPStreamPlayer("127.0.0.1:0", newTestStreamAssets(),
+		WithHistoryDir(historyDir),
+		withNowFunc(func() time.Time { return *nowPtr }),
+	)
+	if err != nil {
+		t.Fatalf("NewHTTPStreamPlayer: %v", err)
+	}
+	if err := p.Start(context.Background()); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		_ = p.Shutdown(ctx)
+	})
+
+	// Day1 のファイルを作成。
+	file1 := filepath.Join(historyDir, "2026-04-28.jsonl")
+	rec1 := historyRecord{ID: 1, Text: "day1エントリ", SpeakerName: "ずんだもん", StyleName: "ノーマル", Timestamp: day1.UnixMilli()}
+	data1, _ := json.Marshal(rec1)
+	data1 = append(data1, '\n')
+	if err := os.WriteFile(file1, data1, 0o644); err != nil {
+		t.Fatalf("WriteFile day1: %v", err)
+	}
+
+	// Day2 へ日付変更し、Day2 のファイルを作成。
+	*nowPtr = day2
+	file2 := filepath.Join(historyDir, "2026-04-29.jsonl")
+	rec2 := historyRecord{ID: 2, Text: "day2エントリ", SpeakerName: "ずんだもん", StyleName: "ノーマル", Timestamp: day2.UnixMilli()}
+	data2, _ := json.Marshal(rec2)
+	data2 = append(data2, '\n')
+	if err := os.WriteFile(file2, data2, 0o644); err != nil {
+		t.Fatalf("WriteFile day2: %v", err)
+	}
+
+	resp, err := http.Get("http://" + p.Addr() + "/api/history")
+	if err != nil {
+		t.Fatalf("GET /api/history: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var result apiHistoryResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+	if len(result.Entries) != 1 {
+		t.Fatalf("expected 1 entry from day2, got %d", len(result.Entries))
+	}
+	if result.Entries[0].Text != "day2エントリ" {
+		t.Errorf("expected day2 entry, got %q", result.Entries[0].Text)
+	}
+}
