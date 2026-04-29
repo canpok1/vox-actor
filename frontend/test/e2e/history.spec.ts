@@ -81,12 +81,10 @@ test.describe("配信タブ: 再生履歴", () => {
     await page.goto("/");
     await expect(page.getByText("● 接続中")).toBeVisible();
 
-    // 最新（末尾）エントリが表示範囲内に存在する
     const lastEntry = page.locator(`[data-clip-id="${entries[entries.length - 1].id}"]`);
     await expect(lastEntry).toBeVisible();
     await expect(lastEntry).toBeInViewport();
 
-    // 最古（先頭）エントリはスクロールにより表示範囲外
     const firstEntry = page.locator(`[data-clip-id="${entries[0].id}"]`);
     await expect(firstEntry).not.toBeInViewport();
   });
