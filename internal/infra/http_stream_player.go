@@ -80,7 +80,6 @@ type HTTPStreamPlayer struct {
 	mu          sync.Mutex
 	started     bool
 	shutdown    bool
-	nextClipID  atomic.Uint64
 	nextErrorID atomic.Uint64
 	clips       *clipRingBuffer
 	subscribers *subscriberRegistry
@@ -121,7 +120,6 @@ var (
 // historyRecord は履歴ファイル（YYYY-MM-DD.jsonl）の 1 行スキーマ。
 // WAV URL は viewer 再起動で失効するため含めない。
 type historyRecord struct {
-	ID          uint64 `json:"id"`
 	Text        string `json:"text"`
 	SpeakerName string `json:"speakerName"`
 	StyleName   string `json:"styleName"`
@@ -135,12 +133,12 @@ type apiHistoryResponse struct {
 
 // clipEvent は SSE で配信する clip イベントのペイロード。
 type clipEvent struct {
-	ID          uint64 `json:"id"`
 	URL         string `json:"url"`
 	Text        string `json:"text"`
 	SpeakerName string `json:"speakerName"`
 	StyleName   string `json:"styleName"`
 	// Timestamp は配信時刻の Unix ms（UTC）。ブラウザ側で HH:MM:SS に整形する。
+	// セッションをまたいでも単調増加するため再起動後の id 衝突が発生しない。
 	Timestamp int64 `json:"timestamp"`
 }
 
@@ -415,15 +413,14 @@ func (p *HTTPStreamPlayer) PlayText(ctx context.Context, meta app.PlayMeta) erro
 		return fmt.Errorf("HTTPStreamPlayer is not started")
 	}
 
-	id := p.nextClipID.Add(1)
+	ts := p.nowFunc().UnixMilli()
 	speakerName, styleName := p.resolveSpeaker(meta.SpeakerID)
 	ev := clipEvent{
-		ID:          id,
 		URL:         "",
 		Text:        meta.Text,
 		SpeakerName: speakerName,
 		StyleName:   styleName,
-		Timestamp:   p.nowFunc().UnixMilli(),
+		Timestamp:   ts,
 	}
 	payload, err := json.Marshal(ev)
 	if err != nil {
@@ -432,9 +429,9 @@ func (p *HTTPStreamPlayer) PlayText(ctx context.Context, meta app.PlayMeta) erro
 
 	n, dropped := p.subscribers.broadcast(sseEventClip, payload)
 	if dropped > 0 {
-		p.logger.Warn("stream clip dropped for slow subscribers", "clipId", id, "dropped", dropped)
+		p.logger.Warn("stream clip dropped for slow subscribers", "clipTimestamp", ts, "dropped", dropped)
 	}
-	p.logger.Info("stream clip delivered (silent)", "clipId", id, "subscribers", n)
+	p.logger.Info("stream clip delivered (silent)", "clipTimestamp", ts, "subscribers", n)
 	p.appendHistory(ev)
 
 	if p.silentInterval <= 0 {
@@ -472,20 +469,19 @@ func (p *HTTPStreamPlayer) Play(ctx context.Context, wavData []byte, meta app.Pl
 		return fmt.Errorf("HTTPStreamPlayer is not started")
 	}
 
-	id := p.nextClipID.Add(1)
+	ts := p.nowFunc().UnixMilli()
 	// 呼び出し元のバッファ再利用に備えてコピーを保持する。
 	buf := make([]byte, len(wavData))
 	copy(buf, wavData)
-	p.clips.put(id, buf)
+	p.clips.put(ts, buf)
 
 	speakerName, styleName := p.resolveSpeaker(meta.SpeakerID)
 	ev := clipEvent{
-		ID:          id,
-		URL:         clipPathPrefix + strconv.FormatUint(id, 10) + clipPathSuffix,
+		URL:         clipPathPrefix + strconv.FormatInt(ts, 10) + clipPathSuffix,
 		Text:        meta.Text,
 		SpeakerName: speakerName,
 		StyleName:   styleName,
-		Timestamp:   p.nowFunc().UnixMilli(),
+		Timestamp:   ts,
 	}
 	payload, err := json.Marshal(ev)
 	if err != nil {
@@ -494,14 +490,14 @@ func (p *HTTPStreamPlayer) Play(ctx context.Context, wavData []byte, meta app.Pl
 
 	n, dropped := p.subscribers.broadcast(sseEventClip, payload)
 	if dropped > 0 {
-		p.logger.Warn("stream clip dropped for slow subscribers", "clipId", id, "dropped", dropped)
+		p.logger.Warn("stream clip dropped for slow subscribers", "clipTimestamp", ts, "dropped", dropped)
 	}
-	p.logger.Info("stream clip delivered", "clipId", id, "subscribers", n)
+	p.logger.Info("stream clip delivered", "clipTimestamp", ts, "subscribers", n)
 	p.appendHistory(ev)
 
 	duration, err := estimateWAVDuration(wavData)
 	if err != nil {
-		p.logger.Warn("failed to estimate WAV duration, skipping playback backpressure", "clipId", id, "error", err)
+		p.logger.Warn("failed to estimate WAV duration, skipping playback backpressure", "clipTimestamp", ts, "error", err)
 		return nil
 	}
 	if duration <= 0 {
@@ -553,12 +549,12 @@ func (p *HTTPStreamPlayer) BroadcastError(e app.StreamError) {
 }
 
 func (p *HTTPStreamPlayer) handleClip(w http.ResponseWriter, r *http.Request) {
-	id, ok := parseClipID(r.URL.Path)
+	ts, ok := parseClipTimestamp(r.URL.Path)
 	if !ok {
 		http.NotFound(w, r)
 		return
 	}
-	data, ok := p.clips.get(id)
+	data, ok := p.clips.get(ts)
 	if !ok {
 		http.NotFound(w, r)
 		return
@@ -566,16 +562,16 @@ func (p *HTTPStreamPlayer) handleClip(w http.ResponseWriter, r *http.Request) {
 	writeWAV(w, data)
 }
 
-func parseClipID(path string) (uint64, bool) {
+func parseClipTimestamp(path string) (int64, bool) {
 	if !strings.HasPrefix(path, clipPathPrefix) || !strings.HasSuffix(path, clipPathSuffix) {
 		return 0, false
 	}
 	raw := strings.TrimSuffix(strings.TrimPrefix(path, clipPathPrefix), clipPathSuffix)
-	id, err := strconv.ParseUint(raw, 10, 64)
-	if err != nil {
+	ts, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil || ts <= 0 {
 		return 0, false
 	}
-	return id, true
+	return ts, true
 }
 
 // speakerJSON は /api/status の speakers 配列要素のペイロード。
@@ -945,7 +941,6 @@ func (p *HTTPStreamPlayer) appendHistory(ev clipEvent) {
 		return
 	}
 	record := historyRecord{
-		ID:          ev.ID,
 		Text:        ev.Text,
 		SpeakerName: ev.SpeakerName,
 		StyleName:   ev.StyleName,
@@ -1097,8 +1092,8 @@ func (p *HTTPStreamPlayer) handleEvents(w http.ResponseWriter, r *http.Request) 
 // --- ring buffer ---
 
 type clipEntry struct {
-	id   uint64
-	data []byte
+	timestamp int64
+	data      []byte
 }
 
 type clipRingBuffer struct {
@@ -1111,7 +1106,7 @@ func newClipRingBuffer(capacity int) *clipRingBuffer {
 	return &clipRingBuffer{cap: capacity, entries: make([]clipEntry, 0, capacity)}
 }
 
-func (b *clipRingBuffer) put(id uint64, data []byte) {
+func (b *clipRingBuffer) put(timestamp int64, data []byte) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if len(b.entries) >= b.cap {
@@ -1119,14 +1114,14 @@ func (b *clipRingBuffer) put(id uint64, data []byte) {
 		b.entries[0] = clipEntry{}
 		b.entries = b.entries[1:]
 	}
-	b.entries = append(b.entries, clipEntry{id: id, data: data})
+	b.entries = append(b.entries, clipEntry{timestamp: timestamp, data: data})
 }
 
-func (b *clipRingBuffer) get(id uint64) ([]byte, bool) {
+func (b *clipRingBuffer) get(timestamp int64) ([]byte, bool) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	for _, e := range b.entries {
-		if e.id == id {
+		if e.timestamp == timestamp {
 			return e.data, true
 		}
 	}
