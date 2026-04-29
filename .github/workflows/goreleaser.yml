@@ -22,8 +22,14 @@ jobs:
           fetch-depth: 0
           ref: ${{ inputs.checkout-ref || github.ref }}
 
-      - name: Install ALSA development library
-        run: sudo apt-get update && sudo apt-get install -y libasound2-dev
+      - name: Install ALSA development libraries (amd64 + arm64) and cross compiler
+        run: |
+          sudo dpkg --add-architecture arm64
+          sudo apt-get update
+          sudo apt-get install -y \
+            libasound2-dev \
+            libasound2-dev:arm64 \
+            gcc-aarch64-linux-gnu
 
       - uses: actions/setup-go@v6
         with:
