@@ -14,13 +14,11 @@ import (
 
 // ActDeps はactコマンドの依存を保持する。
 type ActDeps struct {
-	Reader            app.ScriptReader
-	ClientFactory     func(engineURL string) app.VoicevoxClient
-	Player            app.AudioPlayer
-	Mover             app.FileMover
-	DirWatcherFactory func(logger *slog.Logger) app.DirWatcher
-	LockPathResolver  func() (string, error)
-	Logger            *slog.Logger
+	Reader           app.ScriptReader
+	ClientFactory    func(engineURL string) app.VoicevoxClient
+	Player           app.AudioPlayer
+	LockPathResolver func() (string, error)
+	Logger           *slog.Logger
 }
 
 func makeActCmd(deps *ActDeps) *cobra.Command {
@@ -34,14 +32,26 @@ func makeActCmd(deps *ActDeps) *cobra.Command {
 			}
 			return nil
 		},
+		PreRunE: func(cmd *cobra.Command, _ []string) error {
+			if cmd.Flags().Changed("watch") {
+				return fmt.Errorf("%w: --watch is removed; use 'vox-actor watch <dir>' instead", ErrUsage)
+			}
+			if cmd.Flags().Changed("watch-delete") {
+				return fmt.Errorf("%w: --watch-delete is removed; use 'vox-actor watch --delete <dir>' instead", ErrUsage)
+			}
+			return nil
+		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runAct(cmd, args, deps)
 		},
 	}
 
 	registerCommonFlags(cmd)
-	cmd.Flags().Bool("watch", false, "ディレクトリ監視モードを有効化")
-	cmd.Flags().Bool("watch-delete", false, "ディレクトリ監視モード（処理済みファイルを削除）")
+	// --watch / --watch-delete は廃止済み。廃止フラグが渡された場合は PreRunE でエラーを返す。
+	cmd.Flags().Bool("watch", false, "")
+	cmd.Flags().Bool("watch-delete", false, "")
+	_ = cmd.Flags().MarkHidden("watch")
+	_ = cmd.Flags().MarkHidden("watch-delete")
 
 	return cmd
 }
@@ -54,28 +64,6 @@ func resolveActLockPath(deps *ActDeps) (string, error) {
 }
 
 func runAct(cmd *cobra.Command, args []string, deps *ActDeps) error {
-	watch, _ := cmd.Flags().GetBool("watch")
-	watchDelete, _ := cmd.Flags().GetBool("watch-delete")
-
-	if watch && watchDelete {
-		return fmt.Errorf("%w: --watch and --watch-delete cannot be used together", ErrUsage)
-	}
-
-	if watch || watchDelete {
-		path := args[0]
-		info, err := os.Stat(path)
-		if err != nil {
-			return fmt.Errorf("%w: %v", ErrUsage, err)
-		}
-		flagName := "--watch"
-		if watchDelete {
-			flagName = "--watch-delete"
-		}
-		if !info.IsDir() {
-			return fmt.Errorf("%w: %s requires a directory path, not a file", ErrUsage, flagName)
-		}
-	}
-
 	if deps == nil || deps.ClientFactory == nil || deps.Reader == nil || deps.Player == nil {
 		return fmt.Errorf("act command dependencies are not initialized")
 	}
@@ -100,26 +88,6 @@ func runAct(cmd *cobra.Command, args []string, deps *ActDeps) error {
 	client := deps.ClientFactory(engineURL)
 	if client == nil {
 		return fmt.Errorf("failed to create VoicevoxClient for %s", engineURL)
-	}
-
-	if watch || watchDelete {
-		if deps.Mover == nil || deps.DirWatcherFactory == nil {
-			return fmt.Errorf("watch mode dependencies are not initialized")
-		}
-		watcher := deps.DirWatcherFactory(logger)
-		opts := []app.WatchOption{app.WithWatchLogger(logger)}
-		if watchDelete {
-			opts = append(opts, app.WithDeleteMode())
-		}
-		uc := app.NewWatchUsecase(deps.Reader, client, deps.Player, deps.Mover, watcher, opts...)
-		return uc.Run(ctx, app.WatchParams{
-			Paths:      []string{args[0]},
-			SpeakerID:  speakerID,
-			Speed:      &speed,
-			Pitch:      &pitch,
-			Intonation: &intonation,
-			DryRun:     dryRun,
-		})
 	}
 
 	if !dryRun {

@@ -121,47 +121,11 @@ func TestActCmd_HelpContainsFlags(t *testing.T) {
 	}
 
 	output := buf.String()
-	flags := []string{"--engine-url", "--speaker", "--speed", "--pitch", "--intonation", "--watch", "--verbose", "--dry-run"}
+	flags := []string{"--engine-url", "--speaker", "--speed", "--pitch", "--intonation", "--verbose", "--dry-run"}
 	for _, flag := range flags {
 		if !strings.Contains(output, flag) {
 			t.Errorf("expected help output to contain '%s'", flag)
 		}
-	}
-}
-
-func TestActCmd_WatchWithFile_ReturnsError(t *testing.T) {
-	// --watchフラグ付きでファイルパスを指定した場合はエラー
-	dir := t.TempDir()
-	file := dir + "/test.txt"
-	if err := os.WriteFile(file, []byte("hello"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	rootCmd := makeRootCmd()
-	buf := new(bytes.Buffer)
-	rootCmd.SetOut(buf)
-	rootCmd.SetErr(buf)
-	rootCmd.SetArgs([]string{"act", "--watch", file})
-
-	err := rootCmd.Execute()
-	if err == nil {
-		t.Fatal("expected error when --watch is used with a file path")
-	}
-	if !errors.Is(err, ErrUsage) {
-		t.Errorf("expected ErrUsage, got: %v", err)
-	}
-}
-
-func TestActCmd_WatchFlag_DefaultFalse(t *testing.T) {
-	rootCmd := makeRootCmd()
-	actCmd := findActCmd(t, rootCmd)
-
-	watch, err := actCmd.Flags().GetBool("watch")
-	if err != nil {
-		t.Fatalf("expected --watch flag to exist, got error: %v", err)
-	}
-	if watch {
-		t.Error("expected --watch default to be false")
 	}
 }
 
@@ -238,76 +202,6 @@ func TestActCmd_CLIFlagOverridesEnvSpeaker(t *testing.T) {
 	speaker, _ := actCmd.Flags().GetInt("speaker")
 	if speaker != 7 {
 		t.Errorf("expected CLI flag to override env var, got: %d", speaker)
-	}
-}
-
-func TestActCmd_WatchDeleteFlag_DefaultFalse(t *testing.T) {
-	rootCmd := makeRootCmd()
-	actCmd := findActCmd(t, rootCmd)
-
-	watchDelete, err := actCmd.Flags().GetBool("watch-delete")
-	if err != nil {
-		t.Fatalf("expected --watch-delete flag to exist, got error: %v", err)
-	}
-	if watchDelete {
-		t.Error("expected --watch-delete default to be false")
-	}
-}
-
-func TestActCmd_WatchAndWatchDelete_ReturnsError(t *testing.T) {
-	dir := t.TempDir()
-
-	rootCmd := makeRootCmd()
-	buf := new(bytes.Buffer)
-	rootCmd.SetOut(buf)
-	rootCmd.SetErr(buf)
-	rootCmd.SetArgs([]string{"act", "--watch", "--watch-delete", dir})
-
-	err := rootCmd.Execute()
-	if err == nil {
-		t.Fatal("expected error when both --watch and --watch-delete are specified")
-	}
-	if !errors.Is(err, ErrUsage) {
-		t.Errorf("expected ErrUsage, got: %v", err)
-	}
-}
-
-func TestActCmd_WatchDeleteWithFile_ReturnsError(t *testing.T) {
-	dir := t.TempDir()
-	file := dir + "/test.txt"
-	if err := os.WriteFile(file, []byte("hello"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	rootCmd := makeRootCmd()
-	buf := new(bytes.Buffer)
-	rootCmd.SetOut(buf)
-	rootCmd.SetErr(buf)
-	rootCmd.SetArgs([]string{"act", "--watch-delete", file})
-
-	err := rootCmd.Execute()
-	if err == nil {
-		t.Fatal("expected error when --watch-delete is used with a file path")
-	}
-	if !errors.Is(err, ErrUsage) {
-		t.Errorf("expected ErrUsage, got: %v", err)
-	}
-}
-
-func TestActCmd_HelpContainsWatchDeleteFlag(t *testing.T) {
-	rootCmd := makeRootCmd()
-	buf := new(bytes.Buffer)
-	rootCmd.SetOut(buf)
-	rootCmd.SetArgs([]string{"act", "--help"})
-
-	err := rootCmd.Execute()
-	if err != nil {
-		t.Fatalf("expected no error for --help, got: %v", err)
-	}
-
-	output := buf.String()
-	if !strings.Contains(output, "--watch-delete") {
-		t.Error("expected help output to contain '--watch-delete'")
 	}
 }
 
@@ -512,6 +406,48 @@ func TestRunAct_ViewerRunning_SilentMode_Warns(t *testing.T) {
 	output := buf.String()
 	if !strings.Contains(output, "WARN") {
 		t.Errorf("expected WARN log for silent mode, got: %s", output)
+	}
+}
+
+func TestActCmd_WatchFlag_ReturnsMigrationError(t *testing.T) {
+	dir := t.TempDir()
+
+	rootCmd := makeRootCmd()
+	buf := new(bytes.Buffer)
+	rootCmd.SetOut(buf)
+	rootCmd.SetErr(buf)
+	rootCmd.SetArgs([]string{"act", "--watch", dir})
+
+	err := rootCmd.Execute()
+	if err == nil {
+		t.Fatal("expected error when --watch is used, got nil")
+	}
+	if !errors.Is(err, ErrUsage) {
+		t.Errorf("expected ErrUsage, got: %v", err)
+	}
+	if !strings.Contains(err.Error(), "watch <dir>") {
+		t.Errorf("expected migration guide in error, got: %v", err)
+	}
+}
+
+func TestActCmd_WatchDeleteFlag_ReturnsMigrationError(t *testing.T) {
+	dir := t.TempDir()
+
+	rootCmd := makeRootCmd()
+	buf := new(bytes.Buffer)
+	rootCmd.SetOut(buf)
+	rootCmd.SetErr(buf)
+	rootCmd.SetArgs([]string{"act", "--watch-delete", dir})
+
+	err := rootCmd.Execute()
+	if err == nil {
+		t.Fatal("expected error when --watch-delete is used, got nil")
+	}
+	if !errors.Is(err, ErrUsage) {
+		t.Errorf("expected ErrUsage, got: %v", err)
+	}
+	if !strings.Contains(err.Error(), "watch --delete") {
+		t.Errorf("expected migration guide in error, got: %v", err)
 	}
 }
 

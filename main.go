@@ -65,11 +65,9 @@ func main() {
 			Cloner: &infra.GitCloner{},
 		},
 		Act: &cmd.ActDeps{
-			Reader:            reader,
-			ClientFactory:     clientFactory,
-			Player:            player,
-			Mover:             mover,
-			DirWatcherFactory: dirWatcherFactory,
+			Reader:        reader,
+			ClientFactory: clientFactory,
+			Player:        player,
 		},
 		Watch: &cmd.WatchDeps{
 			Reader:            reader,
