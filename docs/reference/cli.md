@@ -139,10 +139,15 @@ vox-actor act <path>
 | `--speed` | — | `1.0` | 話速 |
 | `--pitch` | — | `0.0` | 音高 |
 | `--intonation` | — | `1.0` | 抑揚 |
-| `--watch` | — | `false` | ディレクトリ監視モードを有効化（後方互換。[plugins.md の該当節](./plugins.md#act---watch--act---watch-delete後方互換)参照） |
-| `--watch-delete` | — | `false` | ディレクトリ監視モード（処理済みファイルを削除。後方互換） |
 | `--verbose` | — | `false` | 詳細ログを出力 |
 | `--dry-run` | — | `false` | VOICEVOX・音声再生を行わず、読み上げ対象をログ出力（[詳細](#dry-runモード)） |
+
+> **注意**: `act --watch` および `act --watch-delete` は削除されました。ディレクトリ監視は [`watch` サブコマンド](#watch-サブコマンド)を使用してください。
+>
+> | 旧コマンド | 新コマンド |
+> |---|---|
+> | `act --watch <dir>` | `watch <dir>` |
+> | `act --watch-delete <dir>` | `watch --delete <dir>` |
 
 ## `watch` サブコマンド
 
@@ -472,4 +477,4 @@ vox-actor watch --dry-run /path/to/watch-dir
 - `synthesis completed` の `wavSize` は `0`（実際には合成していないため）です
 - `playback completed` には dry-run 時のみ `text` / `speaker` / `speed` / `pitch` / `intonation` が属性として付与されます
 - 疎通確認（`HealthCheck`）も行いません
-- `watch` / `act --watch` ではディレクトリ監視・`done/` への移動／削除は通常通り実施されるため、監視フロー全体を検証できます
+- `watch` ではディレクトリ監視・`done/` への移動／削除は通常通り実施されるため、監視フロー全体を検証できます
