@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"path/filepath"
 	"strings"
 
 	"github.com/canpok1/vox-actor/internal/infra"
@@ -41,17 +40,9 @@ func runConfig(cmd *cobra.Command, key string) error {
 	)
 	switch key {
 	case "path.queue":
-		var ws string
-		ws, err = infra.ResolveWorkspacePath()
-		if err == nil {
-			path = filepath.Join(ws, "queue")
-		}
+		path, err = infra.ResolveQueuePath()
 	case "path.tmp":
-		var ws string
-		ws, err = infra.ResolveWorkspacePath()
-		if err == nil {
-			path = filepath.Join(ws, "tmp")
-		}
+		path, err = infra.ResolveTmpPath()
 	case "path.workspace":
 		path, err = infra.ResolveWorkspacePath()
 	default:

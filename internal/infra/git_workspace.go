@@ -62,15 +62,21 @@ func cwdDotVoxActor() (string, error) {
 }
 
 // ResolveQueuePath はワークスペースルート配下の queue ディレクトリ絶対パスを返す。
-//
-// 実装は ResolveWorkspacePath の結果に `queue` を結合するだけで、環境変数/git解決は
-// ResolveWorkspacePath に一元化する。ディレクトリの作成は行わない。
 func ResolveQueuePath() (string, error) {
 	workspace, err := ResolveWorkspacePath()
 	if err != nil {
 		return "", err
 	}
 	return filepath.Join(workspace, "queue"), nil
+}
+
+// ResolveTmpPath はワークスペースルート配下の tmp ディレクトリ絶対パスを返す。
+func ResolveTmpPath() (string, error) {
+	workspace, err := ResolveWorkspacePath()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(workspace, "tmp"), nil
 }
 
 func resolveHomeViewerDir() (string, error) {

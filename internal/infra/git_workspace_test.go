@@ -130,6 +130,60 @@ func TestResolveQueuePath_ReturnsVoxActorWorkspaceQueue_WhenEnvIsSet(t *testing.
 	}
 }
 
+func TestResolveTmpPath_ReturnsGitCommonDirParentJoinedWithVoxActorTmp(t *testing.T) {
+	t.Setenv("VOX_ACTOR_WORKSPACE", "")
+	repoRoot := t.TempDir()
+	gitCommonDir := filepath.Join(repoRoot, ".git")
+
+	withGitRunner(t, func(name string, args ...string) *exec.Cmd {
+		return exec.Command("echo", gitCommonDir)
+	})
+
+	got, err := ResolveTmpPath()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	want := filepath.Join(repoRoot, ".vox-actor", "tmp")
+	if got != want {
+		t.Errorf("ResolveTmpPath() = %q, want %q", got, want)
+	}
+}
+
+func TestResolveTmpPath_ReturnsCwdVoxActorTmp_WhenGitRunnerFailsWithNonZeroExit(t *testing.T) {
+	t.Setenv("VOX_ACTOR_WORKSPACE", "")
+	withGitRunner(t, func(name string, args ...string) *exec.Cmd {
+		return exec.Command("false")
+	})
+
+	cwd, _ := os.Getwd()
+	got, err := ResolveTmpPath()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	want := filepath.Join(cwd, ".vox-actor", "tmp")
+	if got != want {
+		t.Errorf("ResolveTmpPath() = %q, want %q", got, want)
+	}
+}
+
+func TestResolveTmpPath_ReturnsVoxActorWorkspaceTmp_WhenEnvIsSet(t *testing.T) {
+	workspace := t.TempDir()
+	t.Setenv("VOX_ACTOR_WORKSPACE", workspace)
+
+	withGitRunner(t, func(name string, args ...string) *exec.Cmd {
+		return exec.Command("false")
+	})
+
+	got, err := ResolveTmpPath()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	want := filepath.Join(workspace, "tmp")
+	if got != want {
+		t.Errorf("ResolveTmpPath() = %q, want %q", got, want)
+	}
+}
+
 func TestResolveWorkspacePath_ReturnsVoxActorWorkspace_WhenEnvIsSet(t *testing.T) {
 	workspace := t.TempDir()
 	t.Setenv("VOX_ACTOR_WORKSPACE", workspace)
