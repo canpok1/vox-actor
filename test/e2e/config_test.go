@@ -231,3 +231,30 @@ func TestConfigE2E_GitNotFound_ExitCode1(t *testing.T) {
 		t.Error("expected non-empty stderr for git-not-found")
 	}
 }
+
+func TestConfigE2E_NoArgs_ExitCode2(t *testing.T) {
+	_, stderr, exitCode := runCLI(t, nil, "config")
+	if exitCode != 2 {
+		t.Fatalf("expected exit code 2, got %d\nstderr:\n%s", exitCode, stderr)
+	}
+}
+
+func TestConfigE2E_TooManyArgs_ExitCode2(t *testing.T) {
+	_, stderr, exitCode := runCLI(t, nil, "config", "path.queue", "extra")
+	if exitCode != 2 {
+		t.Fatalf("expected exit code 2, got %d\nstderr:\n%s", exitCode, stderr)
+	}
+}
+
+func TestConfigE2E_Help_ExitZeroWithUsage(t *testing.T) {
+	stdout, _, exitCode := runCLI(t, nil, "config", "--help")
+
+	if exitCode != 0 {
+		t.Fatalf("expected exit 0 for config --help, got %d", exitCode)
+	}
+	for _, want := range []string{"config", "key", "Usage:"} {
+		if !strings.Contains(stdout, want) {
+			t.Errorf("expected config --help to contain %q\nstdout:\n%s", want, stdout)
+		}
+	}
+}
