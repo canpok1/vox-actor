@@ -1,0 +1,183 @@
+package infra_test
+
+// テストリスト: viewer 検出 / ViewerAPIClient
+//
+// 受け入れ条件 vs テスト関数のマッピング:
+// - lock ファイルなし → DetectViewer が false を返す               → TestDetectViewer_NoLockFile
+// - lock に addr なし → DetectViewer が false を返す               → TestDetectViewer_NoAddr
+// - lock に addr あり HTTP 疎通 OK → DetectViewer が addr と true  → TestDetectViewer_Running
+// - lock に addr あり HTTP 疎通失敗 → DetectViewer が false を返す → TestDetectViewer_HTTPFails
+// - POST /api/play 成功 → ViewerAPIClient.Play が PlayResponse を返す      → TestViewerAPIClient_Play_Success
+// - POST /api/play 無音モード応答 → ViewerAPIClient.Play が silent=true    → TestViewerAPIClient_Play_Silent
+// - POST /api/play で非 200 応答 → ViewerAPIClient.Play がエラーを返す     → TestViewerAPIClient_Play_Error
+
+import (
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"path/filepath"
+	"testing"
+
+	"github.com/canpok1/vox-actor/internal/infra"
+)
+
+func TestDetectViewer_NoLockFile(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	lockPath := filepath.Join(dir, "viewer.lock")
+
+	_, ok := infra.DetectViewer(lockPath)
+	if ok {
+		t.Error("expected DetectViewer to return false when lock file is missing")
+	}
+}
+
+func TestDetectViewer_NoAddr(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	lockPath := filepath.Join(dir, "viewer.lock")
+
+	vl, err := infra.AcquireViewerLock(lockPath)
+	if err != nil {
+		t.Fatalf("AcquireViewerLock: %v", err)
+	}
+	defer vl.Release() //nolint:errcheck
+
+	_, ok := infra.DetectViewer(lockPath)
+	if ok {
+		t.Error("expected DetectViewer to return false when addr is empty")
+	}
+}
+
+func TestDetectViewer_Running(t *testing.T) {
+	t.Parallel()
+	// Start a real HTTP test server that responds to /api/status
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/status" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer srv.Close()
+
+	dir := t.TempDir()
+	lockPath := filepath.Join(dir, "viewer.lock")
+
+	vl, err := infra.AcquireViewerLock(lockPath)
+	if err != nil {
+		t.Fatalf("AcquireViewerLock: %v", err)
+	}
+	defer vl.Release() //nolint:errcheck
+
+	// srv.Listener.Addr().String() returns e.g. "127.0.0.1:XXXXX"
+	addr := srv.Listener.Addr().String()
+	if err := vl.WriteAddr(addr); err != nil {
+		t.Fatalf("WriteAddr: %v", err)
+	}
+
+	got, ok := infra.DetectViewer(lockPath)
+	if !ok {
+		t.Fatal("expected DetectViewer to return true when viewer is running")
+	}
+	if got != addr {
+		t.Errorf("expected addr=%s, got %s", addr, got)
+	}
+}
+
+func TestDetectViewer_HTTPFails(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	lockPath := filepath.Join(dir, "viewer.lock")
+
+	vl, err := infra.AcquireViewerLock(lockPath)
+	if err != nil {
+		t.Fatalf("AcquireViewerLock: %v", err)
+	}
+	defer vl.Release() //nolint:errcheck
+
+	// Use an addr that is not listening
+	if err := vl.WriteAddr("127.0.0.1:1"); err != nil {
+		t.Fatalf("WriteAddr: %v", err)
+	}
+
+	_, ok := infra.DetectViewer(lockPath)
+	if ok {
+		t.Error("expected DetectViewer to return false when HTTP fails")
+	}
+}
+
+func TestViewerAPIClient_Play_Success(t *testing.T) {
+	t.Parallel()
+	var capturedReq infra.ViewerPlayRequest
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewDecoder(r.Body).Decode(&capturedReq)
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"silent": false})
+	}))
+	defer srv.Close()
+
+	speed := 1.2
+	pitch := 0.05
+	intonation := 1.3
+	client := infra.NewViewerAPIClient(srv.Listener.Addr().String())
+	req := infra.ViewerPlayRequest{Text: "こんにちは", SpeakerID: 2, Speed: &speed, Pitch: &pitch, Intonation: &intonation}
+	resp, err := client.Play(t.Context(), req)
+	if err != nil {
+		t.Fatalf("Play: %v", err)
+	}
+	if resp.Silent {
+		t.Errorf("expected silent=false, got true")
+	}
+	if capturedReq.Text != "こんにちは" {
+		t.Errorf("expected text=%q, got %q", "こんにちは", capturedReq.Text)
+	}
+	if capturedReq.SpeakerID != 2 {
+		t.Errorf("expected speaker_id=2, got %d", capturedReq.SpeakerID)
+	}
+	if capturedReq.Speed == nil || *capturedReq.Speed != speed {
+		t.Errorf("expected speed=%v, got %v", speed, capturedReq.Speed)
+	}
+	if capturedReq.Pitch == nil || *capturedReq.Pitch != pitch {
+		t.Errorf("expected pitch=%v, got %v", pitch, capturedReq.Pitch)
+	}
+	if capturedReq.Intonation == nil || *capturedReq.Intonation != intonation {
+		t.Errorf("expected intonation=%v, got %v", intonation, capturedReq.Intonation)
+	}
+}
+
+func TestViewerAPIClient_Play_Silent(t *testing.T) {
+	t.Parallel()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"silent":        true,
+			"silent_reason": "VOICEVOX接続失敗",
+		})
+	}))
+	defer srv.Close()
+
+	client := infra.NewViewerAPIClient(srv.Listener.Addr().String())
+	resp, err := client.Play(t.Context(), infra.ViewerPlayRequest{Text: "test", SpeakerID: 2})
+	if err != nil {
+		t.Fatalf("Play: %v", err)
+	}
+	if !resp.Silent {
+		t.Errorf("expected silent=true")
+	}
+	if resp.SilentReason == "" {
+		t.Errorf("expected non-empty SilentReason")
+	}
+}
+
+func TestViewerAPIClient_Play_Error(t *testing.T) {
+	t.Parallel()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "synthesis failed", http.StatusBadGateway)
+	}))
+	defer srv.Close()
+
+	client := infra.NewViewerAPIClient(srv.Listener.Addr().String())
+	_, err := client.Play(t.Context(), infra.ViewerPlayRequest{Text: "test", SpeakerID: 2})
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+}
