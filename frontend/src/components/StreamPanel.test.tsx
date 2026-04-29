@@ -6,7 +6,6 @@ import { StreamPanel } from "./StreamPanel";
 const mockEntries: TimelineEntry[] = [
   {
     kind: "clip",
-    id: 1,
     url: "http://example.com/audio.mp3",
     text: "クリップテキスト",
     speakerName: "話者A",
@@ -26,7 +25,7 @@ const mockCharacters: CharacterEntry[] = [
 
 const defaultProps = {
   entries: [],
-  playingClipId: null,
+  playingClipTimestamp: null,
   historySize: 50,
   historySizeOptions: [10, 50, 100] as const,
   onHistorySizeChange: vi.fn(),
@@ -84,13 +83,13 @@ describe("StreamPanel", () => {
     expect(screen.getByText("クリップテキスト")).toBeInTheDocument();
   });
 
-  it("Timeline に playingClipId が渡され再生中エントリが強調される", () => {
+  it("Timeline に playingClipTimestamp が渡され再生中エントリが強調される", () => {
     render(
       <StreamPanel
         {...defaultProps}
         hidden={false}
         entries={mockEntries}
-        playingClipId={1}
+        playingClipTimestamp={1700000000000}
       />,
     );
     expect(screen.getByText("▶")).toBeInTheDocument();
@@ -125,7 +124,6 @@ describe("StreamPanel", () => {
     const entries: TimelineEntry[] = [
       {
         kind: "clip",
-        id: 1,
         url: "http://example.com/1.mp3",
         text: "古いテキスト",
         speakerName: "話者A",
@@ -134,7 +132,6 @@ describe("StreamPanel", () => {
       },
       {
         kind: "clip",
-        id: 2,
         url: "http://example.com/2.mp3",
         text: "新しいテキスト",
         speakerName: "話者A",
@@ -158,7 +155,6 @@ describe("StreamPanel", () => {
     const entries: TimelineEntry[] = [
       {
         kind: "clip",
-        id: 1,
         url: "http://example.com/1.mp3",
         text: "古いテキスト",
         speakerName: "話者A",
@@ -167,7 +163,6 @@ describe("StreamPanel", () => {
       },
       {
         kind: "clip",
-        id: 2,
         url: "http://example.com/2.mp3",
         text: "新しいテキスト",
         speakerName: "話者A",
@@ -175,7 +170,7 @@ describe("StreamPanel", () => {
         timestamp: 1700000001000,
       },
     ];
-    // showCharacters=true かつ characters が存在し playingClipId が設定されていると
+    // showCharacters=true かつ characters が存在し playingClipTimestamp が設定されていると
     // useCharacterStage がスロットを返し、キャラモードになる
     render(
       <StreamPanel
@@ -185,18 +180,17 @@ describe("StreamPanel", () => {
         characters={mockCharacters}
         charactersEnabled={true}
         showCharacters={true}
-        playingClipId={2}
+        playingClipTimestamp={1700000001000}
       />,
     );
     expect(screen.queryByText("古いテキスト")).not.toBeInTheDocument();
     expect(screen.getByText("新しいテキスト")).toBeInTheDocument();
   });
 
-  it("キャラモード時は再生中でない最新エントリではなく playingClipId のエントリが表示される", () => {
+  it("キャラモード時は再生中でない最新エントリではなく playingClipTimestamp のエントリが表示される", () => {
     const entries: TimelineEntry[] = [
       {
         kind: "clip",
-        id: 1,
         url: "http://example.com/1.mp3",
         text: "古いテキスト",
         speakerName: "話者A",
@@ -205,7 +199,6 @@ describe("StreamPanel", () => {
       },
       {
         kind: "clip",
-        id: 2,
         url: "http://example.com/2.mp3",
         text: "新しいテキスト",
         speakerName: "話者A",
@@ -221,7 +214,7 @@ describe("StreamPanel", () => {
         characters={mockCharacters}
         charactersEnabled={true}
         showCharacters={true}
-        playingClipId={1}
+        playingClipTimestamp={1700000000000}
       />,
     );
     expect(screen.getByText("古いテキスト")).toBeInTheDocument();
@@ -237,13 +230,13 @@ describe("StreamPanel", () => {
         characters={mockCharacters}
         charactersEnabled={true}
         showCharacters={true}
-        playingClipId={1}
+        playingClipTimestamp={1700000000000}
       />,
     );
     expect(screen.queryByText("▶")).not.toBeInTheDocument();
   });
 
-  it("キャラモード時、再生終了後（playingClipId=null）もセリフが表示される", async () => {
+  it("キャラモード時、再生終了後（playingClipTimestamp=null）もセリフが表示される", async () => {
     const { rerender } = render(
       <StreamPanel
         {...defaultProps}
@@ -252,7 +245,7 @@ describe("StreamPanel", () => {
         characters={mockCharacters}
         charactersEnabled={true}
         showCharacters={true}
-        playingClipId={1}
+        playingClipTimestamp={1700000000000}
       />,
     );
     expect(screen.getByText("クリップテキスト")).toBeInTheDocument();
@@ -266,7 +259,7 @@ describe("StreamPanel", () => {
         characters={mockCharacters}
         charactersEnabled={true}
         showCharacters={true}
-        playingClipId={null}
+        playingClipTimestamp={null}
       />,
     );
 

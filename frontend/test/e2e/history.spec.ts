@@ -10,33 +10,33 @@ test.describe("配信タブ: 再生履歴", () => {
     page,
     request,
   }) => {
+    const ts1 = 1700000001001;
+    const ts2 = 1700000001002;
     await setApiHistory(request, [
       {
-        id: 1001,
         text: "履歴テキスト1",
         speakerName: "ずんだもん",
         styleName: "ノーマル",
-        timestamp: Date.now(),
+        timestamp: ts1,
       },
       {
-        id: 1002,
         text: "履歴テキスト2",
         speakerName: "四国めたん",
         styleName: "ノーマル",
-        timestamp: Date.now(),
+        timestamp: ts2,
       },
     ]);
 
     await page.goto("/");
     await expect(page.getByText("● 接続中")).toBeVisible();
 
-    await expect(page.locator('[data-clip-id="1001"]')).toBeVisible();
+    await expect(page.locator(`[data-clip-timestamp="${ts1}"]`)).toBeVisible();
     await expect(
-      page.locator('[data-clip-id="1001"]'),
+      page.locator(`[data-clip-timestamp="${ts1}"]`),
     ).toContainText("履歴テキスト1");
-    await expect(page.locator('[data-clip-id="1002"]')).toBeVisible();
+    await expect(page.locator(`[data-clip-timestamp="${ts2}"]`)).toBeVisible();
     await expect(
-      page.locator('[data-clip-id="1002"]'),
+      page.locator(`[data-clip-timestamp="${ts2}"]`),
     ).toContainText("履歴テキスト2");
   });
 
@@ -44,19 +44,19 @@ test.describe("配信タブ: 再生履歴", () => {
     page,
     request,
   }) => {
+    const ts = 1700000002001;
     await setApiHistory(request, [
       {
-        id: 2001,
         text: "音声なし履歴",
         speakerName: "ずんだもん",
         styleName: "ノーマル",
-        timestamp: Date.now(),
+        timestamp: ts,
       },
     ]);
 
     await page.goto("/");
     await expect(page.getByText("● 接続中")).toBeVisible();
-    await expect(page.locator('[data-clip-id="2001"]')).toBeVisible();
+    await expect(page.locator(`[data-clip-timestamp="${ts}"]`)).toBeVisible();
 
     // 履歴ロード後も audio.src が空 = 再生キューに積まれていない。
     const audioSrc = await page.evaluate(
@@ -69,23 +69,25 @@ test.describe("配信タブ: 再生履歴", () => {
     page,
     request,
   }) => {
+    const baseTs = 1700000006000;
     const entries = Array.from({ length: 20 }, (_, i) => ({
-      id: 6000 + i,
       text: `スクロールテスト履歴${i + 1}`,
       speakerName: "ずんだもん",
       styleName: "ノーマル",
-      timestamp: Date.now() + i * 1000,
+      timestamp: baseTs + i * 1000,
     }));
     await setApiHistory(request, entries);
 
     await page.goto("/");
     await expect(page.getByText("● 接続中")).toBeVisible();
 
-    const lastEntry = page.locator(`[data-clip-id="${entries[entries.length - 1].id}"]`);
+    const lastTs = entries[entries.length - 1].timestamp;
+    const firstTs = entries[0].timestamp;
+    const lastEntry = page.locator(`[data-clip-timestamp="${lastTs}"]`);
     await expect(lastEntry).toBeVisible();
     await expect(lastEntry).toBeInViewport();
 
-    const firstEntry = page.locator(`[data-clip-id="${entries[0].id}"]`);
+    const firstEntry = page.locator(`[data-clip-timestamp="${firstTs}"]`);
     await expect(firstEntry).not.toBeInViewport();
   });
 
@@ -101,43 +103,42 @@ test.describe("配信タブ: 再生履歴", () => {
     page,
     request,
   }) => {
+    const ts1 = 1700000003001;
+    const ts2 = 1700000003002;
     await setApiHistory(request, [
       {
-        id: 3001,
         text: "リロード前テキスト",
         speakerName: "ずんだもん",
         styleName: "ノーマル",
-        timestamp: Date.now(),
+        timestamp: ts1,
       },
     ]);
 
     await page.goto("/");
-    await expect(page.locator('[data-clip-id="3001"]')).toBeVisible();
+    await expect(page.locator(`[data-clip-timestamp="${ts1}"]`)).toBeVisible();
 
     // リロード前後で新しいエントリを追加する。
     await setApiHistory(request, [
       {
-        id: 3001,
         text: "リロード前テキスト",
         speakerName: "ずんだもん",
         styleName: "ノーマル",
-        timestamp: Date.now(),
+        timestamp: ts1,
       },
       {
-        id: 3002,
         text: "リロード後追加テキスト",
         speakerName: "ずんだもん",
         styleName: "ノーマル",
-        timestamp: Date.now(),
+        timestamp: ts2,
       },
     ]);
 
     await page.reload();
     await expect(page.getByText("● 接続中")).toBeVisible();
 
-    await expect(page.locator('[data-clip-id="3002"]')).toBeVisible();
+    await expect(page.locator(`[data-clip-timestamp="${ts2}"]`)).toBeVisible();
     await expect(
-      page.locator('[data-clip-id="3002"]'),
+      page.locator(`[data-clip-timestamp="${ts2}"]`),
     ).toContainText("リロード後追加テキスト");
   });
 });

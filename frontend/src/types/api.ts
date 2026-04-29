@@ -3,12 +3,11 @@
 // どちらか一方を変更した場合は両方を同時に修正する。
 
 export interface ClipEvent {
-  id: number;
   url: string;
   text: string;
   speakerName: string;
   styleName: string;
-  // Unix ms (UTC)
+  // Unix ms (UTC)。セッション跨ぎでも単調増加するため再起動後の衝突が発生しない。
   timestamp: number;
 }
 
@@ -17,7 +16,7 @@ export interface ClipEvent {
 export type ErrorCategory = "synthesis" | "file" | "connection";
 
 export interface ErrorEventPayload {
-  // clipEvent.id とは独立した連番。
+  // clip イベントの timestamp とは独立した連番。
   id: number;
   category: ErrorCategory;
   message: string;
@@ -52,7 +51,6 @@ export function isClipEvent(value: unknown): value is ClipEvent {
   }
   const v = value as Record<string, unknown>;
   return (
-    typeof v.id === "number" &&
     typeof v.url === "string" &&
     typeof v.text === "string" &&
     typeof v.speakerName === "string" &&
@@ -171,7 +169,6 @@ export function isApiCharacters(value: unknown): value is ApiCharacters {
 
 // HistoryEntry は /api/history の 1 エントリ（WAV URL なし）。
 export interface HistoryEntry {
-  id: number;
   text: string;
   speakerName: string;
   styleName: string;
@@ -188,7 +185,6 @@ export function isHistoryEntry(value: unknown): value is HistoryEntry {
   }
   const v = value as Record<string, unknown>;
   return (
-    typeof v.id === "number" &&
     typeof v.text === "string" &&
     typeof v.speakerName === "string" &&
     typeof v.styleName === "string" &&

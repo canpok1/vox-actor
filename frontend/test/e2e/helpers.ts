@@ -8,7 +8,6 @@ const STUB_BASE_URL =
   process.env.VOX_STUB_BASE_URL ?? `http://127.0.0.1:${STUB_PORT}`;
 
 export interface ClipPayload {
-  id?: number;
   url?: string;
   text: string;
   speakerName?: string;
@@ -69,7 +68,6 @@ export async function setApiCharacters(
 }
 
 export interface HistoryEntryPayload {
-  id: number;
   text: string;
   speakerName: string;
   styleName: string;

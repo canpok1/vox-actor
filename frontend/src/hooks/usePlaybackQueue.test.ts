@@ -3,14 +3,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ClipEvent } from "../types/api";
 import { usePlaybackQueue } from "./usePlaybackQueue";
 
-function makeClip(id: number): ClipEvent {
+function makeClip(n: number): ClipEvent {
   return {
-    id,
-    url: `http://example.com/clip/${id}.wav`,
-    text: `clip ${id}`,
+    url: `http://example.com/clip/${n}.wav`,
+    text: `clip ${n}`,
     speakerName: "speaker",
     styleName: "normal",
-    timestamp: id * 1000,
+    timestamp: n * 1000,
   };
 }
 
@@ -36,14 +35,14 @@ describe("usePlaybackQueue", () => {
     vi.restoreAllMocks();
   });
 
-  it("enqueue で audio.play が呼ばれ playingClipId が更新される", async () => {
+  it("enqueue で audio.play が呼ばれ playingClipTimestamp が更新される", async () => {
     const { result } = renderHook(() => usePlaybackQueue(audioRef, true));
-    expect(result.current.playingClipId).toBeNull();
+    expect(result.current.playingClipTimestamp).toBeNull();
     await act(async () => {
       result.current.enqueue(makeClip(1));
     });
     expect(mockPlay).toHaveBeenCalled();
-    expect(result.current.playingClipId).toBe(1);
+    expect(result.current.playingClipTimestamp).toBe(1000);
   });
 
   it("ended イベント発火で次クリップが再生されキューが空なら null", async () => {
@@ -52,18 +51,18 @@ describe("usePlaybackQueue", () => {
       result.current.enqueue(makeClip(1));
       result.current.enqueue(makeClip(2));
     });
-    expect(result.current.playingClipId).toBe(1);
+    expect(result.current.playingClipTimestamp).toBe(1000);
     await act(async () => {
       audio.dispatchEvent(new Event("ended"));
     });
-    expect(result.current.playingClipId).toBe(2);
+    expect(result.current.playingClipTimestamp).toBe(2000);
     await act(async () => {
       audio.dispatchEvent(new Event("ended"));
     });
-    expect(result.current.playingClipId).toBeNull();
+    expect(result.current.playingClipTimestamp).toBeNull();
   });
 
-  it("active=false への遷移で pause とキュー破棄と playingClipId=null になる", async () => {
+  it("active=false への遷移で pause とキュー破棄と playingClipTimestamp=null になる", async () => {
     const { result, rerender } = renderHook(
       ({ active }: { active: boolean }) => usePlaybackQueue(audioRef, active),
       { initialProps: { active: true } },
@@ -71,12 +70,12 @@ describe("usePlaybackQueue", () => {
     await act(async () => {
       result.current.enqueue(makeClip(1));
     });
-    expect(result.current.playingClipId).toBe(1);
+    expect(result.current.playingClipTimestamp).toBe(1000);
     await act(async () => {
       rerender({ active: false });
     });
     expect(mockPause).toHaveBeenCalled();
-    expect(result.current.playingClipId).toBeNull();
+    expect(result.current.playingClipTimestamp).toBeNull();
   });
 
   it("active=false の間に enqueue してもキューに積まれない", async () => {
@@ -85,10 +84,10 @@ describe("usePlaybackQueue", () => {
       result.current.enqueue(makeClip(1));
     });
     expect(mockPlay).not.toHaveBeenCalled();
-    expect(result.current.playingClipId).toBeNull();
+    expect(result.current.playingClipTimestamp).toBeNull();
   });
 
-  it("audio.play reject 時に playingClipId が null に戻り次の再生試行が走る", async () => {
+  it("audio.play reject 時に playingClipTimestamp が null に戻り次の再生試行が走る", async () => {
     mockPlay
       .mockRejectedValueOnce(new Error("play failed"))
       .mockResolvedValue(undefined);
@@ -98,7 +97,7 @@ describe("usePlaybackQueue", () => {
       result.current.enqueue(makeClip(1));
       result.current.enqueue(makeClip(2));
     });
-    expect(result.current.playingClipId).toBe(2);
+    expect(result.current.playingClipTimestamp).toBe(2000);
   });
 
   it("アンマウントで ended リスナーが解除される", () => {

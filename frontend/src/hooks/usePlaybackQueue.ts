@@ -8,7 +8,7 @@ import {
 import type { ClipEvent } from "../types/api";
 
 interface PlaybackQueue {
-  playingClipId: number | null;
+  playingClipTimestamp: number | null;
   enqueue: (clip: ClipEvent) => void;
 }
 
@@ -18,26 +18,26 @@ export function usePlaybackQueue(
   active: boolean,
 ): PlaybackQueue {
   const queueRef = useRef<ClipEvent[]>([]);
-  const [playingClipId, setPlayingClipId] = useState<number | null>(null);
-  const playingClipIdRef = useRef<number | null>(null);
-  playingClipIdRef.current = playingClipId;
+  const [playingClipTimestamp, setPlayingClipTimestamp] = useState<number | null>(null);
+  const playingClipTimestampRef = useRef<number | null>(null);
+  playingClipTimestampRef.current = playingClipTimestamp;
   const activeRef = useRef(active);
   activeRef.current = active;
 
   const playNext = useCallback((): void => {
     if (!activeRef.current) return;
-    if (playingClipIdRef.current !== null) return;
+    if (playingClipTimestampRef.current !== null) return;
     const audio = audioRef.current;
     if (!audio) return;
     const next = queueRef.current.shift();
     if (!next) return;
-    playingClipIdRef.current = next.id;
-    setPlayingClipId(next.id);
+    playingClipTimestampRef.current = next.timestamp;
+    setPlayingClipTimestamp(next.timestamp);
     audio.src = next.url;
     audio.play().catch((err: unknown) => {
       console.error("play failed", err);
-      playingClipIdRef.current = null;
-      setPlayingClipId(null);
+      playingClipTimestampRef.current = null;
+      setPlayingClipTimestamp(null);
       playNext();
     });
   }, [audioRef]);
@@ -59,8 +59,8 @@ export function usePlaybackQueue(
       audio.load();
     }
     queueRef.current = [];
-    playingClipIdRef.current = null;
-    setPlayingClipId(null);
+    playingClipTimestampRef.current = null;
+    setPlayingClipTimestamp(null);
   }, [audioRef]);
 
   useEffect(() => {
@@ -73,8 +73,8 @@ export function usePlaybackQueue(
     const audio = audioRef.current;
     if (!audio) return;
     const onEnded = (): void => {
-      playingClipIdRef.current = null;
-      setPlayingClipId(null);
+      playingClipTimestampRef.current = null;
+      setPlayingClipTimestamp(null);
       playNext();
     };
     audio.addEventListener("ended", onEnded);
@@ -83,5 +83,5 @@ export function usePlaybackQueue(
     };
   }, [audioRef, playNext]);
 
-  return { playingClipId, enqueue };
+  return { playingClipTimestamp, enqueue };
 }

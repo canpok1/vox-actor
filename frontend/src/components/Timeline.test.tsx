@@ -4,20 +4,19 @@ import type { TimelineEntry } from "../types/api";
 import { Timeline } from "./Timeline";
 
 const defaultProps = {
-  playingClipId: null,
+  playingClipTimestamp: null,
   showSpeakerName: false,
   showStyleName: false,
   showTimestamp: false,
 };
 
-const clipEntry = (id: number, text: string): TimelineEntry => ({
+const clipEntry = (timestamp: number, text: string): TimelineEntry => ({
   kind: "clip",
-  id,
-  url: `http://example.com/${id}.mp3`,
+  url: `http://example.com/${timestamp}.mp3`,
   text,
   speakerName: "話者A",
   styleName: "ノーマル",
-  timestamp: 1700000000000,
+  timestamp,
 });
 
 describe("Timeline", () => {
@@ -29,9 +28,9 @@ describe("Timeline", () => {
 
   it("entries の数だけリストアイテムが描画される", () => {
     const entries: TimelineEntry[] = [
-      clipEntry(1, "テキスト1"),
-      clipEntry(2, "テキスト2"),
-      clipEntry(3, "テキスト3"),
+      clipEntry(1000, "テキスト1"),
+      clipEntry(2000, "テキスト2"),
+      clipEntry(3000, "テキスト3"),
     ];
     render(<Timeline {...defaultProps} entries={entries} />);
     const items = screen.getAllByRole("listitem");
@@ -40,31 +39,37 @@ describe("Timeline", () => {
 
   it("entries のテキストが描画される", () => {
     const entries: TimelineEntry[] = [
-      clipEntry(1, "最初のテキスト"),
-      clipEntry(2, "次のテキスト"),
+      clipEntry(1000, "最初のテキスト"),
+      clipEntry(2000, "次のテキスト"),
     ];
     render(<Timeline {...defaultProps} entries={entries} />);
     expect(screen.getByText("最初のテキスト")).toBeInTheDocument();
     expect(screen.getByText("次のテキスト")).toBeInTheDocument();
   });
 
-  it("playingClipId が一致するエントリにのみ再生中アイコンが表示される", () => {
+  it("playingClipTimestamp が一致するエントリにのみ再生中アイコンが表示される", () => {
     const entries: TimelineEntry[] = [
-      clipEntry(1, "テキスト1"),
-      clipEntry(2, "テキスト2"),
+      clipEntry(1000, "テキスト1"),
+      clipEntry(2000, "テキスト2"),
     ];
-    render(<Timeline {...defaultProps} entries={entries} playingClipId={1} />);
+    render(
+      <Timeline {...defaultProps} entries={entries} playingClipTimestamp={1000} />,
+    );
     const playIcons = screen.getAllByText("▶");
     expect(playIcons).toHaveLength(1);
   });
 
-  it("playingClipId が null のとき再生中アイコンが表示されない", () => {
+  it("playingClipTimestamp が null のとき再生中アイコンが表示されない", () => {
     const entries: TimelineEntry[] = [
-      clipEntry(1, "テキスト1"),
-      clipEntry(2, "テキスト2"),
+      clipEntry(1000, "テキスト1"),
+      clipEntry(2000, "テキスト2"),
     ];
     render(
-      <Timeline {...defaultProps} entries={entries} playingClipId={null} />,
+      <Timeline
+        {...defaultProps}
+        entries={entries}
+        playingClipTimestamp={null}
+      />,
     );
     expect(screen.queryByText("▶")).not.toBeInTheDocument();
   });
@@ -85,8 +90,8 @@ describe("Timeline", () => {
 
   describe("isCharacterMode", () => {
     const entries: TimelineEntry[] = [
-      clipEntry(1, "古いテキスト"),
-      clipEntry(2, "新しいテキスト"),
+      clipEntry(1000, "古いテキスト"),
+      clipEntry(2000, "新しいテキスト"),
     ];
 
     it("isCharacterMode=true のとき再生中クリップのみ描画される", () => {
@@ -94,7 +99,7 @@ describe("Timeline", () => {
         <Timeline
           {...defaultProps}
           entries={entries}
-          playingClipId={2}
+          playingClipTimestamp={2000}
           isCharacterMode={true}
         />,
       );
@@ -103,12 +108,12 @@ describe("Timeline", () => {
       expect(screen.getAllByRole("listitem")).toHaveLength(1);
     });
 
-    it("isCharacterMode=true かつ playingClipId が最新でないエントリでも、そのエントリが描画される", () => {
+    it("isCharacterMode=true かつ playingClipTimestamp が最新でないエントリでも、そのエントリが描画される", () => {
       render(
         <Timeline
           {...defaultProps}
           entries={entries}
-          playingClipId={1}
+          playingClipTimestamp={1000}
           isCharacterMode={true}
         />,
       );
@@ -116,25 +121,25 @@ describe("Timeline", () => {
       expect(screen.queryByText("新しいテキスト")).not.toBeInTheDocument();
     });
 
-    it("isCharacterMode=true かつ playingClipId=null のとき何も描画されない", () => {
+    it("isCharacterMode=true かつ playingClipTimestamp=null のとき何も描画されない", () => {
       render(
         <Timeline
           {...defaultProps}
           entries={entries}
-          playingClipId={null}
+          playingClipTimestamp={null}
           isCharacterMode={true}
         />,
       );
       expect(screen.getByRole("list")).toBeEmptyDOMElement();
     });
 
-    it("isCharacterMode=true かつ playingClipId=null でも lastPlayingClipId が設定されていれば最後のクリップが表示される", () => {
+    it("isCharacterMode=true かつ playingClipTimestamp=null でも lastPlayingClipTimestamp が設定されていれば最後のクリップが表示される", () => {
       render(
         <Timeline
           {...defaultProps}
           entries={entries}
-          playingClipId={null}
-          lastPlayingClipId={2}
+          playingClipTimestamp={null}
+          lastPlayingClipTimestamp={2000}
           isCharacterMode={true}
         />,
       );
@@ -142,13 +147,13 @@ describe("Timeline", () => {
       expect(screen.getByText("新しいテキスト")).toBeInTheDocument();
     });
 
-    it("isCharacterMode=true かつ playingClipId が設定されている場合は lastPlayingClipId より優先される", () => {
+    it("isCharacterMode=true かつ playingClipTimestamp が設定されている場合は lastPlayingClipTimestamp より優先される", () => {
       render(
         <Timeline
           {...defaultProps}
           entries={entries}
-          playingClipId={1}
-          lastPlayingClipId={2}
+          playingClipTimestamp={1000}
+          lastPlayingClipTimestamp={2000}
           isCharacterMode={true}
         />,
       );
@@ -179,7 +184,7 @@ describe("Timeline", () => {
         <Timeline
           {...defaultProps}
           entries={entries}
-          playingClipId={2}
+          playingClipTimestamp={2000}
           isCharacterMode={true}
         />,
       );
@@ -191,7 +196,7 @@ describe("Timeline", () => {
         <Timeline
           {...defaultProps}
           entries={entries}
-          playingClipId={1}
+          playingClipTimestamp={1000}
           showSpeakerName={false}
           isCharacterMode={true}
         />,

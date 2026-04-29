@@ -17,11 +17,11 @@ package infra
 // DONE: GET / が index.html を返す
 // DONE: GET /app.js が JS を返す
 // DONE: GET /app.css が CSS を返す
-// DONE: 未登録の /clips/{id}.wav は 404
+// DONE: 未登録の /clips/{timestamp}.wav は 404
 //
 // Play / キュー / SSE:
-// DONE: Play() で WAV がキューに登録され GET /clips/{id}.wav で配信される
-// DONE: クリップID は 1 から単調増加
+// DONE: Play() で WAV がキューに登録され GET /clips/{timestamp}.wav で配信される
+// DONE: clipEvent の timestamp は一意かつ非ゼロ
 // DONE: 容量を超えて Play() すると古いクリップが破棄されて 404 になる
 // DONE: SSE 購読者に clip イベントがブロードキャストされる
 // DONE: 複数 SSE 購読者に同じイベントが届く
@@ -456,24 +456,30 @@ func TestHTTPStreamPlayer_Play_DeliversSSEAndWAV(t *testing.T) {
 		t.Fatalf("Play: %v", err)
 	}
 
+	var clipURL string
 	select {
 	case data, ok := <-events:
 		if !ok {
 			t.Fatal("events channel closed before clip delivered")
 		}
-		if !strings.Contains(data, "\"id\":1") {
-			t.Errorf("expected clip id=1, got: %s", data)
+		var ev clipEvent
+		if err := json.Unmarshal([]byte(data), &ev); err != nil {
+			t.Fatalf("unmarshal clipEvent: %v, data=%s", err, data)
 		}
-		if !strings.Contains(data, "\"url\":\"/clips/1.wav\"") {
-			t.Errorf("expected url=/clips/1.wav, got: %s", data)
+		if ev.Timestamp == 0 {
+			t.Errorf("expected non-zero timestamp, got: %s", data)
 		}
+		if !strings.HasPrefix(ev.URL, clipPathPrefix) || !strings.HasSuffix(ev.URL, clipPathSuffix) {
+			t.Errorf("expected url like /clips/<timestamp>.wav, got: %s", ev.URL)
+		}
+		clipURL = ev.URL
 	case <-time.After(2 * time.Second):
 		t.Fatal("timeout waiting for clip event")
 	}
 
-	resp, err := http.Get(baseURL + "/clips/1.wav")
+	resp, err := http.Get(baseURL + clipURL)
 	if err != nil {
-		t.Fatalf("GET /clips/1.wav: %v", err)
+		t.Fatalf("GET %s: %v", clipURL, err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
@@ -484,9 +490,27 @@ func TestHTTPStreamPlayer_Play_DeliversSSEAndWAV(t *testing.T) {
 	}
 }
 
-func TestHTTPStreamPlayer_ClipIDMonotonicallyIncreasing(t *testing.T) {
+func TestHTTPStreamPlayer_ClipTimestampIsNonZeroAndNoIDField(t *testing.T) {
 	t.Parallel()
-	p := newStartedPlayer(t)
+	fixedBase := time.Date(2026, 4, 28, 10, 0, 0, 0, time.Local)
+	callCount := 0
+	p, err := NewHTTPStreamPlayer("127.0.0.1:0", newTestStreamAssets(),
+		withNowFunc(func() time.Time {
+			callCount++
+			return fixedBase.Add(time.Duration(callCount) * time.Millisecond)
+		}),
+	)
+	if err != nil {
+		t.Fatalf("NewHTTPStreamPlayer: %v", err)
+	}
+	if err := p.Start(context.Background()); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		_ = p.Shutdown(ctx)
+	})
 	baseURL := "http://" + p.Addr()
 
 	events := subscribeSSE(t, baseURL)
@@ -498,15 +522,27 @@ func TestHTTPStreamPlayer_ClipIDMonotonicallyIncreasing(t *testing.T) {
 		}
 	}
 
-	for expected := 1; expected <= 3; expected++ {
+	seen := make(map[int64]bool)
+	for i := range 3 {
 		select {
 		case data := <-events:
-			needle := fmt.Sprintf("\"id\":%d", expected)
-			if !strings.Contains(data, needle) {
-				t.Errorf("expected %s in %s", needle, data)
+			var ev clipEvent
+			if err := json.Unmarshal([]byte(data), &ev); err != nil {
+				t.Fatalf("event #%d unmarshal: %v, data=%s", i+1, err, data)
+			}
+			if ev.Timestamp == 0 {
+				t.Errorf("event #%d: expected non-zero timestamp, got %s", i+1, data)
+			}
+			if seen[ev.Timestamp] {
+				t.Errorf("event #%d: duplicate timestamp %d", i+1, ev.Timestamp)
+			}
+			seen[ev.Timestamp] = true
+			// id フィールドが JSON に含まれないことを確認する
+			if strings.Contains(data, `"id":`) {
+				t.Errorf("event #%d: unexpected id field in clip payload: %s", i+1, data)
 			}
 		case <-time.After(2 * time.Second):
-			t.Fatalf("timeout waiting for event #%d", expected)
+			t.Fatalf("timeout waiting for event #%d", i+1)
 		}
 	}
 }
@@ -530,8 +566,8 @@ func TestHTTPStreamPlayer_MultipleSubscribers(t *testing.T) {
 	for i, ch := range channels {
 		select {
 		case data := <-ch:
-			if !strings.Contains(data, "\"id\":1") {
-				t.Errorf("subscriber %d got %s", i, data)
+			if !strings.Contains(data, `"timestamp":`) {
+				t.Errorf("subscriber %d: expected timestamp field, got %s", i, data)
 			}
 		case <-time.After(2 * time.Second):
 			t.Errorf("subscriber %d timeout", i)
@@ -848,18 +884,42 @@ func findLogLine(logs, needle string) string {
 
 func TestHTTPStreamPlayer_RingBuffer_FixedSize(t *testing.T) {
 	t.Parallel()
-	p := newStartedPlayer(t)
+	fixedBase := time.Date(2026, 4, 28, 10, 0, 0, 0, time.Local)
+	callCount := 0
+	p, err := NewHTTPStreamPlayer("127.0.0.1:0", newTestStreamAssets(),
+		withNowFunc(func() time.Time {
+			callCount++
+			return fixedBase.Add(time.Duration(callCount) * time.Millisecond)
+		}),
+	)
+	if err != nil {
+		t.Fatalf("NewHTTPStreamPlayer: %v", err)
+	}
+	if err := p.Start(context.Background()); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		_ = p.Shutdown(ctx)
+	})
 	baseURL := "http://" + p.Addr()
 
-	// 21件積むと1件目だけが押し出される（容量20）
+	// 21件積むと1件目だけが押し出される（容量20）。
+	// nowFunc は Play 毎に 1ms 増加するため、URL は /clips/<base+N>.wav で予測可能。
 	const total = 21
 	for range total {
 		if err := p.Play(context.Background(), []byte("RIFFx"), app.PlayMeta{}); err != nil {
 			t.Fatalf("Play: %v", err)
 		}
 	}
+	baseMs := fixedBase.UnixMilli()
+	clipURL := func(n int) string {
+		return fmt.Sprintf("/clips/%d.wav", baseMs+int64(n))
+	}
 
-	resp1, err := http.Get(baseURL + "/clips/1.wav")
+	// 1件目は押し出されて 404
+	resp1, err := http.Get(baseURL + clipURL(1))
 	if err != nil {
 		t.Fatalf("GET clip1: %v", err)
 	}
@@ -869,7 +929,7 @@ func TestHTTPStreamPlayer_RingBuffer_FixedSize(t *testing.T) {
 	}
 
 	// 2件目（最古の生存クリップ）と21件目（最新）は取得できる
-	resp2, err := http.Get(baseURL + "/clips/2.wav")
+	resp2, err := http.Get(baseURL + clipURL(2))
 	if err != nil {
 		t.Fatalf("GET clip2: %v", err)
 	}
@@ -878,7 +938,7 @@ func TestHTTPStreamPlayer_RingBuffer_FixedSize(t *testing.T) {
 		t.Errorf("expected 200 for clip 2 (oldest surviving), got %d", resp2.StatusCode)
 	}
 
-	resp21, err := http.Get(baseURL + "/clips/21.wav")
+	resp21, err := http.Get(baseURL + clipURL(total))
 	if err != nil {
 		t.Fatalf("GET clip21: %v", err)
 	}
@@ -1566,7 +1626,7 @@ func TestHTTPStreamPlayer_BroadcastError_IDMonotonicAndIndependentFromClip(t *te
 	errorEvents := subscribeSSEByEvent(t, baseURL, "error")
 	time.Sleep(80 * time.Millisecond)
 
-	// clip を 2 回、error を 3 回交互に配信して、それぞれが独立に 1 始まりで連番になること
+	// clip を 2 回、error を 3 回交互に配信して、error は独立に 1 始まりで連番になること
 	if err := p.Play(context.Background(), []byte("RIFFa"), app.PlayMeta{}); err != nil {
 		t.Fatalf("Play: %v", err)
 	}
@@ -1577,15 +1637,14 @@ func TestHTTPStreamPlayer_BroadcastError_IDMonotonicAndIndependentFromClip(t *te
 	}
 	p.BroadcastError(app.StreamError{Category: app.StreamErrorCategoryFile, Message: "e3"})
 
-	for i := 1; i <= 2; i++ {
+	for i := range 2 {
 		select {
 		case data := <-clipEvents:
-			needle := fmt.Sprintf(`"id":%d`, i)
-			if !strings.Contains(data, needle) {
-				t.Errorf("clip event #%d: expected %s, got %s", i, needle, data)
+			if !strings.Contains(data, `"timestamp":`) {
+				t.Errorf("clip event #%d: expected timestamp field, got %s", i+1, data)
 			}
 		case <-time.After(2 * time.Second):
-			t.Fatalf("timeout waiting for clip #%d", i)
+			t.Fatalf("timeout waiting for clip #%d", i+1)
 		}
 	}
 	for i := 1; i <= 3; i++ {
@@ -2295,9 +2354,6 @@ func TestHTTPStreamPlayer_History_WritesClipOnPlay(t *testing.T) {
 	if err := json.Unmarshal([]byte(lines[0]), &rec); err != nil {
 		t.Fatalf("failed to parse history line: %v", err)
 	}
-	if rec.ID != 1 {
-		t.Errorf("expected ID=1, got %d", rec.ID)
-	}
 	if rec.Text != "テストセリフ" {
 		t.Errorf("expected Text=%q, got %q", "テストセリフ", rec.Text)
 	}
@@ -2475,11 +2531,10 @@ func TestHTTPStreamPlayer_APIHistory_ReturnsTodaysEntries(t *testing.T) {
 	var sb strings.Builder
 	for i := 1; i <= 60; i++ {
 		rec := historyRecord{
-			ID:          uint64(i),
 			Text:        fmt.Sprintf("text%d", i),
 			SpeakerName: "ずんだもん",
 			StyleName:   "ノーマル",
-			Timestamp:   fixedNow.UnixMilli(),
+			Timestamp:   fixedNow.UnixMilli() + int64(i),
 		}
 		data, _ := json.Marshal(rec)
 		sb.Write(data)
@@ -2521,11 +2576,11 @@ func TestHTTPStreamPlayer_APIHistory_ReturnsTodaysEntries(t *testing.T) {
 	if len(result.Entries) != 50 {
 		t.Errorf("expected 50 entries, got %d", len(result.Entries))
 	}
-	if len(result.Entries) > 0 && result.Entries[0].ID != 11 {
-		t.Errorf("expected first entry ID=11, got %d", result.Entries[0].ID)
+	if len(result.Entries) > 0 && result.Entries[0].Text != "text11" {
+		t.Errorf("expected first entry text=text11, got %q", result.Entries[0].Text)
 	}
-	if len(result.Entries) > 0 && result.Entries[len(result.Entries)-1].ID != 60 {
-		t.Errorf("expected last entry ID=60, got %d", result.Entries[len(result.Entries)-1].ID)
+	if len(result.Entries) > 0 && result.Entries[len(result.Entries)-1].Text != "text60" {
+		t.Errorf("expected last entry text=text60, got %q", result.Entries[len(result.Entries)-1].Text)
 	}
 }
 
@@ -2590,7 +2645,6 @@ func TestHTTPStreamPlayer_APIHistory_ReturnsUpdatedHistory(t *testing.T) {
 	// Start() 後に履歴ファイルへエントリを追記する。
 	filePath := filepath.Join(historyDir, "2026-04-28.jsonl")
 	rec := historyRecord{
-		ID:          1,
 		Text:        "Start後に追記されたテキスト",
 		SpeakerName: "ずんだもん",
 		StyleName:   "ノーマル",
@@ -2649,7 +2703,7 @@ func TestHTTPStreamPlayer_APIHistory_CrossDayReturnsNewFile(t *testing.T) {
 
 	// Day1 のファイルを作成。
 	file1 := filepath.Join(historyDir, "2026-04-28.jsonl")
-	rec1 := historyRecord{ID: 1, Text: "day1エントリ", SpeakerName: "ずんだもん", StyleName: "ノーマル", Timestamp: day1.UnixMilli()}
+	rec1 := historyRecord{Text: "day1エントリ", SpeakerName: "ずんだもん", StyleName: "ノーマル", Timestamp: day1.UnixMilli()}
 	data1, _ := json.Marshal(rec1)
 	data1 = append(data1, '\n')
 	if err := os.WriteFile(file1, data1, 0o644); err != nil {
@@ -2659,7 +2713,7 @@ func TestHTTPStreamPlayer_APIHistory_CrossDayReturnsNewFile(t *testing.T) {
 	// Day2 へ日付変更し、Day2 のファイルを作成。
 	*nowPtr = day2
 	file2 := filepath.Join(historyDir, "2026-04-29.jsonl")
-	rec2 := historyRecord{ID: 2, Text: "day2エントリ", SpeakerName: "ずんだもん", StyleName: "ノーマル", Timestamp: day2.UnixMilli()}
+	rec2 := historyRecord{Text: "day2エントリ", SpeakerName: "ずんだもん", StyleName: "ノーマル", Timestamp: day2.UnixMilli()}
 	data2, _ := json.Marshal(rec2)
 	data2 = append(data2, '\n')
 	if err := os.WriteFile(file2, data2, 0o644); err != nil {

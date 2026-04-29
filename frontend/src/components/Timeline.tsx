@@ -4,8 +4,8 @@ import { TimelineItem } from "./TimelineItem";
 
 interface TimelineProps {
   entries: TimelineEntry[];
-  playingClipId: number | null;
-  lastPlayingClipId?: number | null;
+  playingClipTimestamp: number | null;
+  lastPlayingClipTimestamp?: number | null;
   showSpeakerName: boolean;
   showStyleName: boolean;
   showTimestamp: boolean;
@@ -14,8 +14,8 @@ interface TimelineProps {
 
 export function Timeline({
   entries,
-  playingClipId,
-  lastPlayingClipId = null,
+  playingClipTimestamp,
+  lastPlayingClipTimestamp = null,
   showSpeakerName,
   showStyleName,
   showTimestamp,
@@ -46,10 +46,13 @@ export function Timeline({
     }
   }, [entries, scrollToBottom]);
 
-  const characterModeClipId = playingClipId ?? lastPlayingClipId;
+  const characterModeClipTimestamp =
+    playingClipTimestamp ?? lastPlayingClipTimestamp;
   const displayEntries = isCharacterMode
-    ? characterModeClipId !== null
-      ? entries.filter((e) => e.kind === "clip" && e.id === characterModeClipId)
+    ? characterModeClipTimestamp !== null
+      ? entries.filter(
+          (e) => e.kind === "clip" && e.timestamp === characterModeClipTimestamp,
+        )
       : []
     : entries;
 
@@ -62,9 +65,12 @@ export function Timeline({
       <ol ref={listRef} aria-live="polite" className={listCls}>
         {displayEntries.map((entry) => (
           <TimelineItem
-            key={`${entry.kind}-${entry.id}`}
+            key={`${entry.kind}-${entry.timestamp}`}
             entry={entry}
-            playing={entry.kind === "clip" && entry.id === playingClipId}
+            playing={
+              entry.kind === "clip" &&
+              entry.timestamp === playingClipTimestamp
+            }
             showSpeakerName={isCharacterMode ? true : showSpeakerName}
             showStyleName={isCharacterMode ? false : showStyleName}
             showTimestamp={isCharacterMode ? false : showTimestamp}

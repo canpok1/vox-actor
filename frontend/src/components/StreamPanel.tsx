@@ -8,7 +8,7 @@ import { TimelineControls } from "./TimelineControls";
 interface StreamPanelProps {
   hidden: boolean;
   entries: TimelineEntry[];
-  playingClipId: number | null;
+  playingClipTimestamp: number | null;
   historySize: number;
   historySizeOptions: readonly number[];
   onHistorySizeChange: (value: number) => void;
@@ -53,7 +53,7 @@ export function StreamPanel(props: StreamPanelProps) {
   const {
     hidden,
     entries,
-    playingClipId,
+    playingClipTimestamp,
     historySize,
     historySizeOptions,
     onHistorySizeChange,
@@ -70,8 +70,8 @@ export function StreamPanel(props: StreamPanelProps) {
     volume,
   } = props;
 
-  const { slots, isMultiSlot, lastClipId } = useCharacterStage(
-    playingClipId,
+  const { slots, isMultiSlot, lastClipTimestamp } = useCharacterStage(
+    playingClipTimestamp,
     entries,
     characters,
   );
@@ -79,8 +79,10 @@ export function StreamPanel(props: StreamPanelProps) {
   const hasCharactersOnStage = slots.some((s) => s !== null);
   const isCharacterMode = showCharacters && hasCharactersOnStage;
 
-  const playingClipData = playingClipId
-    ? (entries.find((e) => e.kind === "clip" && e.id === playingClipId) ?? null)
+  const playingClipData = playingClipTimestamp
+    ? (entries.find(
+        (e) => e.kind === "clip" && e.timestamp === playingClipTimestamp,
+      ) ?? null)
     : null;
 
   function isPlayingCharacter(character: CharacterEntry): boolean {
@@ -208,8 +210,8 @@ export function StreamPanel(props: StreamPanelProps) {
       )}
       <Timeline
         entries={entries}
-        playingClipId={playingClipId}
-        lastPlayingClipId={lastClipId}
+        playingClipTimestamp={playingClipTimestamp}
+        lastPlayingClipTimestamp={lastClipTimestamp}
         showSpeakerName={showSpeakerName}
         showStyleName={showStyleName}
         showTimestamp={showTimestamp}

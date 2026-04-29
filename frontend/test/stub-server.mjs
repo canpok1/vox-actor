@@ -56,7 +56,6 @@ const DEFAULT_API_HISTORY = { entries: [] };
 let apiStatus = structuredClone(DEFAULT_API_STATUS);
 let apiCharacters = structuredClone(DEFAULT_API_CHARACTERS);
 let apiHistory = structuredClone(DEFAULT_API_HISTORY);
-let nextClipId = 0;
 let nextErrorId = 0;
 const subscribers = new Set();
 
@@ -155,15 +154,14 @@ function handleClipFile(_req, res) {
 
 async function handleStubClip(req, res) {
   const body = await readJSON(req);
-  nextClipId += 1;
+  const timestamp = typeof body.timestamp === "number" ? body.timestamp : Date.now();
   const payload = {
-    id: typeof body.id === "number" ? body.id : nextClipId,
-    url: typeof body.url === "string" ? body.url : `/clips/${nextClipId}.wav`,
+    url: typeof body.url === "string" ? body.url : `/clips/${timestamp}.wav`,
     text: typeof body.text === "string" ? body.text : "",
     speakerName:
       typeof body.speakerName === "string" ? body.speakerName : "ずんだもん",
     styleName: typeof body.styleName === "string" ? body.styleName : "ノーマル",
-    timestamp: typeof body.timestamp === "number" ? body.timestamp : Date.now(),
+    timestamp,
   };
   broadcast("clip", payload);
   writeJSON(res, 200, { ok: true, payload });
@@ -239,7 +237,6 @@ function handleStubReset(_req, res) {
   apiStatus = structuredClone(DEFAULT_API_STATUS);
   apiCharacters = structuredClone(DEFAULT_API_CHARACTERS);
   apiHistory = structuredClone(DEFAULT_API_HISTORY);
-  nextClipId = 0;
   nextErrorId = 0;
   for (const sub of subscribers) {
     sub.end();
