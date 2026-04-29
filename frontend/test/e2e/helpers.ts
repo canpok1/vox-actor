@@ -68,6 +68,24 @@ export async function setApiCharacters(
   expect(resp.ok()).toBeTruthy();
 }
 
+export interface HistoryEntryPayload {
+  id: number;
+  text: string;
+  speakerName: string;
+  styleName: string;
+  timestamp: number;
+}
+
+export async function setApiHistory(
+  request: APIRequestContext,
+  entries: HistoryEntryPayload[],
+): Promise<void> {
+  const resp = await request.post(`${STUB_BASE_URL}/__stub/api-history`, {
+    data: { entries },
+  });
+  expect(resp.ok()).toBeTruthy();
+}
+
 export async function pushClip(
   request: APIRequestContext,
   payload: ClipPayload,

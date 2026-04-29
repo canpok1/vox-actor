@@ -275,3 +275,93 @@ func TestViewerE2E_WatchNonDirectory_ReturnsUsageError(t *testing.T) {
 		t.Fatalf("expected exit code 2 for non-directory --watch, got %d\nstderr:\n%s", exitCode, stderr)
 	}
 }
+
+// apiHistoryEntry は /api/history レスポンスの1エントリ。
+type apiHistoryEntry struct {
+	ID          uint64 `json:"id"`
+	Text        string `json:"text"`
+	SpeakerName string `json:"speakerName"`
+	StyleName   string `json:"styleName"`
+	Timestamp   int64  `json:"timestamp"`
+}
+
+// apiHistoryResp は /api/history のレスポンス。
+type apiHistoryResp struct {
+	Entries []apiHistoryEntry `json:"entries"`
+}
+
+func TestViewerE2E_APIHistory_ReturnsUpdatedHistory(t *testing.T) {
+	t.Parallel()
+
+	workspace := t.TempDir()
+	port := freePort(t)
+	historyDir := workspace + "/viewer/history"
+	if err := os.MkdirAll(historyDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll historyDir: %v", err)
+	}
+
+	vp := startViewer(t, map[string]string{"VOX_ACTOR_WORKSPACE": workspace}, "--port", fmt.Sprintf("%d", port))
+
+	line := vp.waitForStderr("stream server listening", 10*time.Second)
+	addr := extractAddrFromLog(line)
+	if addr == "" {
+		t.Fatalf("failed to extract addr from log line: %q", line)
+	}
+
+	// viewer 起動後に履歴ファイルへエントリを追記する。
+	today := time.Now().Format("2006-01-02")
+	filePath := historyDir + "/" + today + ".jsonl"
+	entry := apiHistoryEntry{
+		ID:          1,
+		Text:        "起動後追記テキスト",
+		SpeakerName: "ずんだもん",
+		StyleName:   "ノーマル",
+		Timestamp:   time.Now().UnixMilli(),
+	}
+	data, err := json.Marshal(entry)
+	if err != nil {
+		t.Fatalf("json.Marshal entry: %v", err)
+	}
+	data = append(data, '\n')
+	if err := os.WriteFile(filePath, data, 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	url := fmt.Sprintf("http://%s/api/history", addr)
+	var (
+		resp   *http.Response
+		getErr error
+	)
+	for i := 0; i < 20; i++ {
+		resp, getErr = http.Get(url) //nolint:noctx
+		if getErr == nil {
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	if getErr != nil {
+		t.Fatalf("GET /api/history: %v", getErr)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("failed to read response body: %v", err)
+	}
+	var result apiHistoryResp
+	if err := json.Unmarshal(body, &result); err != nil {
+		t.Fatalf("failed to decode /api/history: %v\nbody: %s", err, body)
+	}
+	if len(result.Entries) != 1 {
+		t.Fatalf("expected 1 entry, got %d\nbody: %s", len(result.Entries), body)
+	}
+	if result.Entries[0].Text != "起動後追記テキスト" {
+		t.Errorf("expected text %q, got %q", "起動後追記テキスト", result.Entries[0].Text)
+	}
+
+	vp.assertCleanExit(3 * time.Second)
+}

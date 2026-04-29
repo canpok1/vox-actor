@@ -63,8 +63,6 @@ type HTTPStreamPlayer struct {
 
 	// historyDir は再生履歴 JSONL ファイルの保存ディレクトリ。空文字の場合は履歴機能無効。
 	historyDir string
-	// apiHistoryJSON は Start 時に今日の履歴末尾 historyLoadSize 件からマーシャルしたレスポンス。
-	apiHistoryJSON []byte
 
 	// silentInterval は PlayText で使う固定待機時間（backpressure の暫定値）。
 	silentInterval time.Duration
@@ -297,9 +295,6 @@ func (p *HTTPStreamPlayer) Start(_ context.Context) error {
 		return err
 	}
 	p.pruneOldHistory()
-	if err := p.buildAPIHistoryJSON(); err != nil {
-		return err
-	}
 
 	lis, err := net.Listen("tcp", p.addr)
 	if err != nil {
@@ -862,23 +857,18 @@ func (p *HTTPStreamPlayer) handleAPICharacters(w http.ResponseWriter, _ *http.Re
 }
 
 func (p *HTTPStreamPlayer) handleAPIHistory(w http.ResponseWriter, _ *http.Request) {
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	_, _ = w.Write(p.apiHistoryJSON)
-}
-
-// buildAPIHistoryJSON は今日の履歴ファイル末尾 historyLoadSize 件を読み込み、
-// /api/history のレスポンスとしてキャッシュする。historyDir が空なら空配列を返す。
-func (p *HTTPStreamPlayer) buildAPIHistoryJSON() error {
 	entries := p.loadHistory(historyLoadSize)
 	if entries == nil {
 		entries = []historyRecord{}
 	}
 	payload, err := json.Marshal(apiHistoryResponse{Entries: entries})
 	if err != nil {
-		return fmt.Errorf("failed to marshal api history: %w", err)
+		p.logger.Warn("failed to marshal api history", "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
 	}
-	p.apiHistoryJSON = payload
-	return nil
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	_, _ = w.Write(payload)
 }
 
 // loadHistory は今日の履歴ファイルから末尾 n 件を読み込む。
