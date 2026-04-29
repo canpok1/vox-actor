@@ -35,13 +35,7 @@ func startViewer(t *testing.T, env map[string]string, args ...string) *viewerPro
 	ctx, cancel := context.WithCancel(context.Background())
 	fullArgs := append([]string{"viewer"}, args...)
 	cmd := exec.CommandContext(ctx, binaryPath, fullArgs...)
-	if len(env) > 0 {
-		base := os.Environ()
-		for k, v := range env {
-			base = append(base, k+"="+v)
-		}
-		cmd.Env = base
-	}
+	cmd.Env = mergeEnv(os.Environ(), env)
 
 	stderrPipe, err := cmd.StderrPipe()
 	if err != nil {
@@ -152,8 +146,9 @@ func TestViewerE2E_StatusEndpoint(t *testing.T) {
 	t.Parallel()
 
 	port := freePort(t)
+	homeDir := t.TempDir()
 	workspace := t.TempDir()
-	vp := startViewer(t, map[string]string{"VOX_ACTOR_WORKSPACE": workspace}, "--port", fmt.Sprintf("%d", port))
+	vp := startViewer(t, map[string]string{"HOME": homeDir, "VOX_ACTOR_WORKSPACE": workspace}, "--port", fmt.Sprintf("%d", port))
 
 	line := vp.waitForStderr("stream server listening", 10*time.Second)
 	addr := extractAddrFromLog(line)
@@ -200,9 +195,10 @@ func TestViewerE2E_WithWatchDir_WatchesDirectory(t *testing.T) {
 
 	dir := t.TempDir()
 	port := freePort(t)
+	homeDir := t.TempDir()
 	workspace := t.TempDir()
 
-	vp := startViewer(t, map[string]string{"VOX_ACTOR_WORKSPACE": workspace},
+	vp := startViewer(t, map[string]string{"HOME": homeDir, "VOX_ACTOR_WORKSPACE": workspace},
 		"--port", fmt.Sprintf("%d", port),
 		"--watch", dir,
 	)
@@ -214,11 +210,12 @@ func TestViewerE2E_WithWatchDir_WatchesDirectory(t *testing.T) {
 func TestViewerE2E_WatchQueue_StartsWatching(t *testing.T) {
 	t.Parallel()
 
+	homeDir := t.TempDir()
 	workspace := t.TempDir()
 	port := freePort(t)
 
 	vp := startViewer(t,
-		map[string]string{"VOX_ACTOR_WORKSPACE": workspace},
+		map[string]string{"HOME": homeDir, "VOX_ACTOR_WORKSPACE": workspace},
 		"--port", fmt.Sprintf("%d", port),
 		"--watch-queue",
 	)
@@ -250,8 +247,9 @@ func TestViewerE2E_InvalidPort_ReturnsUsageError(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
+			homeDir := t.TempDir()
 			workspace := t.TempDir()
-			_, stderr, exitCode := runCLI(t, map[string]string{"VOX_ACTOR_WORKSPACE": workspace}, "viewer", "--port", tc.port)
+			_, stderr, exitCode := runCLI(t, map[string]string{"HOME": homeDir, "VOX_ACTOR_WORKSPACE": workspace}, "viewer", "--port", tc.port)
 			if exitCode != 2 {
 				t.Fatalf("expected exit code 2 (usage error) for port %s, got %d\nstderr:\n%s",
 					tc.port, exitCode, stderr)
@@ -268,9 +266,10 @@ func TestViewerE2E_WatchNonDirectory_ReturnsUsageError(t *testing.T) {
 
 	dir := t.TempDir()
 	file := writeTempFile(t, dir, "notadir.txt", "hello")
+	homeDir := t.TempDir()
 	workspace := t.TempDir()
 
-	_, stderr, exitCode := runCLI(t, map[string]string{"VOX_ACTOR_WORKSPACE": workspace}, "viewer", "--watch", file)
+	_, stderr, exitCode := runCLI(t, map[string]string{"HOME": homeDir, "VOX_ACTOR_WORKSPACE": workspace}, "viewer", "--watch", file)
 	if exitCode != 2 {
 		t.Fatalf("expected exit code 2 for non-directory --watch, got %d\nstderr:\n%s", exitCode, stderr)
 	}
@@ -293,14 +292,15 @@ type apiHistoryResp struct {
 func TestViewerE2E_APIHistory_ReturnsUpdatedHistory(t *testing.T) {
 	t.Parallel()
 
+	homeDir := t.TempDir()
 	workspace := t.TempDir()
 	port := freePort(t)
-	historyDir := workspace + "/viewer/history"
+	historyDir := homeDir + "/.vox-actor/viewer/history"
 	if err := os.MkdirAll(historyDir, 0o755); err != nil {
 		t.Fatalf("MkdirAll historyDir: %v", err)
 	}
 
-	vp := startViewer(t, map[string]string{"VOX_ACTOR_WORKSPACE": workspace}, "--port", fmt.Sprintf("%d", port))
+	vp := startViewer(t, map[string]string{"HOME": homeDir, "VOX_ACTOR_WORKSPACE": workspace}, "--port", fmt.Sprintf("%d", port))
 
 	line := vp.waitForStderr("stream server listening", 10*time.Second)
 	addr := extractAddrFromLog(line)

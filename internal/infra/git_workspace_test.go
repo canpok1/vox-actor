@@ -259,16 +259,62 @@ func TestResolveProjectAssetsPath_RespectsVoxActorWorkspaceEnv(t *testing.T) {
 	}
 }
 
-func TestResolveViewerHistoryPath_ReturnsViewerHistoryDir_WhenEnvIsSet(t *testing.T) {
-	dir := t.TempDir()
-	t.Setenv("VOX_ACTOR_WORKSPACE", dir)
-
-	got, err := ResolveViewerHistoryPath()
+func TestResolveHomeViewerHistoryPath_ReturnsDotVoxActorViewerHistoryUnderHome(t *testing.T) {
+	got, err := ResolveHomeViewerHistoryPath()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	want := filepath.Join(dir, "viewer", "history")
+	home, _ := os.UserHomeDir()
+	want := filepath.Join(home, ".vox-actor", "viewer", "history")
 	if got != want {
-		t.Errorf("ResolveViewerHistoryPath() = %q, want %q", got, want)
+		t.Errorf("ResolveHomeViewerHistoryPath() = %q, want %q", got, want)
+	}
+}
+
+func TestResolveHomeViewerHistoryPath_IgnoresVoxActorWorkspaceEnv(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("VOX_ACTOR_WORKSPACE", dir)
+
+	got, err := ResolveHomeViewerHistoryPath()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	home, _ := os.UserHomeDir()
+	want := filepath.Join(home, ".vox-actor", "viewer", "history")
+	if got != want {
+		t.Errorf("ResolveHomeViewerHistoryPath() = %q, want %q (VOX_ACTOR_WORKSPACE should not affect home-scoped path)", got, want)
+	}
+	if strings.Contains(got, dir) {
+		t.Errorf("ResolveHomeViewerHistoryPath() = %q, should not contain workspace dir %q", got, dir)
+	}
+}
+
+func TestResolveHomeViewerLockPath_ReturnsDotVoxActorViewerLockUnderHome(t *testing.T) {
+	got, err := ResolveHomeViewerLockPath()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	home, _ := os.UserHomeDir()
+	want := filepath.Join(home, ".vox-actor", "viewer", "viewer.lock")
+	if got != want {
+		t.Errorf("ResolveHomeViewerLockPath() = %q, want %q", got, want)
+	}
+}
+
+func TestResolveHomeViewerLockPath_IgnoresVoxActorWorkspaceEnv(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("VOX_ACTOR_WORKSPACE", dir)
+
+	got, err := ResolveHomeViewerLockPath()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	home, _ := os.UserHomeDir()
+	want := filepath.Join(home, ".vox-actor", "viewer", "viewer.lock")
+	if got != want {
+		t.Errorf("ResolveHomeViewerLockPath() = %q, want %q (VOX_ACTOR_WORKSPACE should not affect home-scoped path)", got, want)
+	}
+	if strings.Contains(got, dir) {
+		t.Errorf("ResolveHomeViewerLockPath() = %q, should not contain workspace dir %q", got, dir)
 	}
 }

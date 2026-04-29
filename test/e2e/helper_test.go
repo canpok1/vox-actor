@@ -38,11 +38,7 @@ func runCLIInDir(t *testing.T, dir string, env map[string]string, args ...string
 		cmd.Dir = dir
 	}
 	if len(env) > 0 {
-		base := os.Environ()
-		for k, v := range env {
-			base = append(base, k+"="+v)
-		}
-		cmd.Env = base
+		cmd.Env = mergeEnv(os.Environ(), env)
 	}
 
 	var stdoutBuf, stderrBuf bytes.Buffer
@@ -83,6 +79,26 @@ func writeTempFile(t *testing.T, dir, name, content string) string {
 		t.Fatalf("failed to write %s: %v", path, err)
 	}
 	return path
+}
+
+// mergeEnv は base の env スライスに overrides を上書きマージして返す。
+// overrides に含まれるキーは base から除去してから末尾に追加するため、確実に上書きされる。
+func mergeEnv(base []string, overrides map[string]string) []string {
+	keys := make(map[string]bool, len(overrides))
+	for k := range overrides {
+		keys[k] = true
+	}
+	filtered := make([]string, 0, len(base))
+	for _, e := range base {
+		key, _, _ := strings.Cut(e, "=")
+		if !keys[key] {
+			filtered = append(filtered, e)
+		}
+	}
+	for k, v := range overrides {
+		filtered = append(filtered, k+"="+v)
+	}
+	return filtered
 }
 
 // countNonEmptyLines は s の空行を除いた行数を返す。

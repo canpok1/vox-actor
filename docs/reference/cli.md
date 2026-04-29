@@ -230,6 +230,18 @@ vox-actor viewer --watch /extra/dir --watch-queue
 vox-actor viewer --host 0.0.0.0 --port 8080
 ```
 
+### ロックファイルと再生履歴
+
+viewer は端末内で `127.0.0.1:8080` にバインドする前提のため、排他粒度は**ユーザー（端末）スコープ**です。
+
+| 項目 | パス | 説明 |
+|---|---|---|
+| ロックファイル | `~/.vox-actor/viewer/viewer.lock` | 起動中に保持。同一ユーザーで 2 つ目の viewer 起動はエラーになる |
+| 再生履歴 | `~/.vox-actor/viewer/history/YYYY-MM-DD.jsonl` | `GET /api/history` で返す履歴の読み書き先 |
+
+- `VOX_ACTOR_WORKSPACE` はロック / 履歴の出力先に影響しません。
+- **破壊的変更**: `v0.x` 以前の `<repoRoot>/.vox-actor/viewer/history/` 配下のファイルは読み込まれません。必要な場合は `~/.vox-actor/viewer/history/` へ手動でコピーしてください。
+
 ### エラー条件
 
 | 状況 | 終了コード | エラー出力 |
@@ -238,6 +250,7 @@ vox-actor viewer --host 0.0.0.0 --port 8080
 | `--watch-queue` 指定時に git管理外かつ `VOX_ACTOR_WORKSPACE` 未設定 | 2 (`ErrUsage`) | `Error: gitコマンドが見つかりません` 等 |
 | `--port` が 1〜65535 範囲外 | 2 (`ErrUsage`) | `Error: invalid port: <n>` |
 | HTTPサーバー起動失敗（ポート占有等） | 1 | `Error: failed to start stream server: ...` |
+| 同一ユーザーで viewer が既に起動中 | 1 | `Error: viewer は既に起動中です...` |
 
 ブラウザUI・SSE・`/api/status`・無音モードの挙動は[ストリーム配信モード](#ストリーム配信モード)と同一です。
 
