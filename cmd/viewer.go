@@ -6,7 +6,6 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"syscall"
 	"time"
 
@@ -115,11 +114,7 @@ func resolveViewerLockPathWith(resolver func() (string, error)) (string, error) 
 	if resolver != nil {
 		return resolver()
 	}
-	ws, err := resolveWorkspaceWithFallback()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(ws, "viewer", "viewer.lock"), nil
+	return infra.ResolveHomeViewerLockPath()
 }
 
 func resolveViewerLockPath(deps *ViewerDeps) (string, error) {

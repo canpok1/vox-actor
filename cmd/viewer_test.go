@@ -444,7 +444,20 @@ func TestViewerCmd_EnvVarVOXSpeaker(t *testing.T) {
 	}
 }
 
-func TestResolveViewerLockPath_UsesViewerSubdir(t *testing.T) {
+func TestResolveViewerLockPath_UsesHomeDir(t *testing.T) {
+	path, err := resolveViewerLockPath(nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	home, _ := os.UserHomeDir()
+	expected := filepath.Join(home, ".vox-actor", "viewer", "viewer.lock")
+	if path != expected {
+		t.Errorf("expected path %q, got %q", expected, path)
+	}
+}
+
+func TestResolveViewerLockPath_IgnoresVoxActorWorkspaceEnv(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("VOX_ACTOR_WORKSPACE", dir)
 
@@ -453,9 +466,8 @@ func TestResolveViewerLockPath_UsesViewerSubdir(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	expected := filepath.Join(dir, "viewer", "viewer.lock")
-	if path != expected {
-		t.Errorf("expected path %q, got %q", expected, path)
+	if strings.Contains(path, dir) {
+		t.Errorf("resolveViewerLockPath() = %q, should not contain VOX_ACTOR_WORKSPACE dir %q", path, dir)
 	}
 }
 
