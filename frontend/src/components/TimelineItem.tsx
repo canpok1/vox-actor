@@ -91,7 +91,7 @@ export function TimelineItem({
   return (
     <li
       ref={ref}
-      data-clip-id={entry.id}
+      data-clip-timestamp={entry.timestamp}
       className={`${base} ${playingCls} text-ctp-text`}
     >
       {showMeta && (

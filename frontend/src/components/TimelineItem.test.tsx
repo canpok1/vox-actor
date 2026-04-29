@@ -5,7 +5,6 @@ import { TimelineItem } from "./TimelineItem";
 
 const clipEntry: TimelineEntry = {
   kind: "clip",
-  id: 1,
   url: "http://example.com/audio.mp3",
   text: "クリップテキスト",
   speakerName: "話者A",

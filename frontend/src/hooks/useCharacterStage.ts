@@ -14,7 +14,7 @@ interface StageState {
   chars: StageChar[];
   isMultiSlot: boolean;
   lastClipText: string | null;
-  lastClipId: number | null;
+  lastClipTimestamp: number | null;
 }
 
 type StageAction =
@@ -25,7 +25,7 @@ type StageAction =
       startedCharacter: CharacterEntry | null;
       startedEntryOrder: number;
       startedClipText: string | null;
-      startedClipId: number | null;
+      startedClipTimestamp: number | null;
     }
   | { type: "ALL_EXIT" };
 
@@ -99,13 +99,19 @@ function stageReducer(state: StageState, action: StageAction): StageState {
         chars.length === 0 ? false : state.isMultiSlot || chars.length >= 2;
 
       const lastClipText = action.startedClipText ?? state.lastClipText;
-      const lastClipId = action.startedClipId ?? state.lastClipId;
+      const lastClipTimestamp =
+        action.startedClipTimestamp ?? state.lastClipTimestamp;
 
-      return { chars, isMultiSlot, lastClipText, lastClipId };
+      return { chars, isMultiSlot, lastClipText, lastClipTimestamp };
     }
 
     case "ALL_EXIT":
-      return { chars: [], isMultiSlot: false, lastClipText: null, lastClipId: null };
+      return {
+        chars: [],
+        isMultiSlot: false,
+        lastClipText: null,
+        lastClipTimestamp: null,
+      };
 
     default:
       return state;
@@ -120,11 +126,11 @@ export interface CharacterStageResult {
   slots: (CharacterStageSlot | null)[];
   isMultiSlot: boolean;
   lastClipText: string | null;
-  lastClipId: number | null;
+  lastClipTimestamp: number | null;
 }
 
 export function useCharacterStage(
-  playingClipId: number | null,
+  playingClipTimestamp: number | null,
   entries: TimelineEntry[],
   characters: CharacterEntry[],
 ): CharacterStageResult {
@@ -132,17 +138,17 @@ export function useCharacterStage(
     chars: [],
     isMultiSlot: false,
     lastClipText: null,
-    lastClipId: null,
+    lastClipTimestamp: null,
   });
 
-  const prevPlayingClipIdRef = useRef<number | null>(null);
+  const prevPlayingClipTimestampRef = useRef<number | null>(null);
   const entryCounterRef = useRef(0);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    const prev = prevPlayingClipIdRef.current;
-    const curr = playingClipId;
-    prevPlayingClipIdRef.current = curr;
+    const prev = prevPlayingClipTimestampRef.current;
+    const curr = playingClipTimestamp;
+    prevPlayingClipTimestampRef.current = curr;
 
     if (prev === curr) return;
 
@@ -153,7 +159,9 @@ export function useCharacterStage(
 
     let completedCharKey: string | null = null;
     if (prev !== null) {
-      const e = entries.find((e) => e.kind === "clip" && e.id === prev);
+      const e = entries.find(
+        (e) => e.kind === "clip" && e.timestamp === prev,
+      );
       if (e?.kind === "clip") {
         completedCharKey = charKey(e.speakerName);
       }
@@ -165,7 +173,9 @@ export function useCharacterStage(
     const startedEntryOrder = entryCounterRef.current;
 
     if (curr !== null) {
-      const e = entries.find((e) => e.kind === "clip" && e.id === curr);
+      const e = entries.find(
+        (e) => e.kind === "clip" && e.timestamp === curr,
+      );
       if (e?.kind === "clip") {
         startedCharKey = charKey(e.speakerName);
         startedClipText = e.text;
@@ -187,7 +197,7 @@ export function useCharacterStage(
       startedCharacter,
       startedEntryOrder,
       startedClipText,
-      startedClipId: curr,
+      startedClipTimestamp: curr,
     });
 
     if (curr === null && prev !== null) {
@@ -196,7 +206,7 @@ export function useCharacterStage(
         timerRef.current = null;
       }, QUEUE_EMPTY_MS);
     }
-  }, [playingClipId, entries, characters]);
+  }, [playingClipTimestamp, entries, characters]);
 
   useEffect(() => {
     return () => {
@@ -215,6 +225,6 @@ export function useCharacterStage(
     slots,
     isMultiSlot: state.isMultiSlot,
     lastClipText: state.lastClipText,
-    lastClipId: state.lastClipId,
+    lastClipTimestamp: state.lastClipTimestamp,
   };
 }

@@ -54,16 +54,16 @@ const parseBool = (raw: string): boolean | null =>
 
 const passthrough = (v: string): string => v;
 
-// 再生中のクリップ項目は削除しない（playingId と一致する clip に出会ったら停止）。
+// 再生中のクリップ項目は削除しない（playingTimestamp と一致する clip に出会ったら停止）。
 function trimTimeline(
   entries: TimelineEntry[],
   size: number,
-  playingId: number | null,
+  playingTimestamp: number | null,
 ): TimelineEntry[] {
   let next = entries;
   while (next.length > size) {
     const head = next[0];
-    if (head.kind === "clip" && head.id === playingId) break;
+    if (head.kind === "clip" && head.timestamp === playingTimestamp) break;
     next = next.slice(1);
   }
   return next;
@@ -131,7 +131,7 @@ export function App() {
   const [characters, setCharacters] = useState<CharacterEntry[]>([]);
   const testErrorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const { playingClipId, enqueue } = usePlaybackQueue(
+  const { playingClipTimestamp, enqueue } = usePlaybackQueue(
     audioRef,
     activeTab === "stream",
   );
@@ -139,8 +139,8 @@ export function App() {
     audioRef,
     charactersEnabled && (showCharacters || activeTab === "test"),
   );
-  const playingClipIdRef = useRef<number | null>(null);
-  playingClipIdRef.current = playingClipId;
+  const playingClipTimestampRef = useRef<number | null>(null);
+  playingClipTimestampRef.current = playingClipTimestamp;
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -153,10 +153,10 @@ export function App() {
   }, [muted]);
 
   // 履歴上限の変更時のみトリム。再生状態の変化ではトリムしない
-  // （再生終了直後の playingClipId=null 経由で過去のハイライト対象が消えるのを防ぐ）。
+  // （再生終了直後の playingClipTimestamp=null 経由で過去のハイライト対象が消えるのを防ぐ）。
   useEffect(() => {
     setEntries((prev) =>
-      trimTimeline(prev, historySize, playingClipIdRef.current),
+      trimTimeline(prev, historySize, playingClipTimestampRef.current),
     );
   }, [historySize]);
 
@@ -218,7 +218,6 @@ export function App() {
         if (cancelled) return;
         const historyEntries: TimelineEntry[] = data.entries.map((e) => ({
           kind: "clip" as const,
-          id: e.id,
           url: "",
           text: e.text,
           speakerName: e.speakerName,
@@ -292,7 +291,7 @@ export function App() {
         trimTimeline(
           [...prev, { kind: "clip", ...clip }],
           historySize,
-          playingClipIdRef.current,
+          playingClipTimestampRef.current,
         ),
       );
       // clip.url が空の場合は無音モード配信なのでタイムラインには載せつつ再生キューには積まない。
@@ -320,7 +319,7 @@ export function App() {
         trimTimeline(
           [...prev, { kind: "error", ...parsed }],
           historySize,
-          playingClipIdRef.current,
+          playingClipTimestampRef.current,
         ),
       );
     },
@@ -367,7 +366,7 @@ export function App() {
         <StreamPanel
           hidden={activeTab !== "stream"}
           entries={entries}
-          playingClipId={playingClipId}
+          playingClipTimestamp={playingClipTimestamp}
           historySize={historySize}
           historySizeOptions={HISTORY_SIZE_OPTIONS}
           onHistorySizeChange={setHistorySize}
