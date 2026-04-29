@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -112,6 +113,26 @@ func countNonEmptyLines(s string) int {
 		}
 	}
 	return n
+}
+
+// getURLWithRetry は url に GET して成功するまで最大 20 回リトライする。
+func getURLWithRetry(t *testing.T, url string) *http.Response {
+	t.Helper()
+	var (
+		resp   *http.Response
+		getErr error
+	)
+	for i := 0; i < 20; i++ {
+		resp, getErr = http.Get(url) //nolint:noctx
+		if getErr == nil {
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	if getErr != nil {
+		t.Fatalf("GET %s: %v", url, getErr)
+	}
+	return resp
 }
 
 // writeViewerLockFile は homeDir 配下に viewer ロックファイルを書き込む。
