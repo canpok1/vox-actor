@@ -224,7 +224,7 @@ func TestViewerE2E_Clip_RestartCollisionAvoidance(t *testing.T) {
 	}, port1)
 
 	url1 := getClipURLFromSSE(t, addr1)
-	vp1.stop(3 * time.Second) //nolint:errcheck
+	_, _ = vp1.stop(3 * time.Second)
 
 	// 2回目の起動（別インスタンス）
 	port2 := freePort(t)
