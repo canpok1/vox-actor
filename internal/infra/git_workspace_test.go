@@ -149,6 +149,24 @@ func TestResolveTmpPath_ReturnsGitCommonDirParentJoinedWithVoxActorTmp(t *testin
 	}
 }
 
+func TestResolveTmpPath_ReturnsCwdVoxActorTmp_WhenGitCommonDirEmpty(t *testing.T) {
+	t.Setenv("VOX_ACTOR_WORKSPACE", "")
+	withGitRunner(t, func(name string, args ...string) *exec.Cmd {
+		// 空文字列を標準出力に出すだけのコマンド（=gitリポジトリ外の想定）
+		return exec.Command("true")
+	})
+
+	cwd, _ := os.Getwd()
+	got, err := ResolveTmpPath()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	want := filepath.Join(cwd, ".vox-actor", "tmp")
+	if got != want {
+		t.Errorf("ResolveTmpPath() = %q, want %q", got, want)
+	}
+}
+
 func TestResolveTmpPath_ReturnsCwdVoxActorTmp_WhenGitRunnerFailsWithNonZeroExit(t *testing.T) {
 	t.Setenv("VOX_ACTOR_WORKSPACE", "")
 	withGitRunner(t, func(name string, args ...string) *exec.Cmd {
