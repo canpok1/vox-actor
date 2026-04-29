@@ -65,6 +65,38 @@ test.describe("配信タブ: 再生履歴", () => {
     expect(audioSrc).toBe("");
   });
 
+  test("viewer 起動直後に履歴リストが末尾（最新エントリ）にスクロールされる", async ({
+    page,
+    request,
+  }) => {
+    const entries = Array.from({ length: 20 }, (_, i) => ({
+      id: 6000 + i,
+      text: `スクロールテスト履歴${i + 1}`,
+      speakerName: "ずんだもん",
+      styleName: "ノーマル",
+      timestamp: Date.now() + i * 1000,
+    }));
+    await setApiHistory(request, entries);
+
+    await page.goto("/");
+    await expect(page.getByText("● 接続中")).toBeVisible();
+
+    const lastEntry = page.locator(`[data-clip-id="${entries[entries.length - 1].id}"]`);
+    await expect(lastEntry).toBeVisible();
+    await expect(lastEntry).toBeInViewport();
+
+    const firstEntry = page.locator(`[data-clip-id="${entries[0].id}"]`);
+    await expect(firstEntry).not.toBeInViewport();
+  });
+
+  test("履歴が空のとき従来どおりリストは空のまま", async ({ page }) => {
+    await page.goto("/");
+    await expect(page.getByText("● 接続中")).toBeVisible();
+
+    const list = page.getByRole("list");
+    await expect(list).toBeEmpty();
+  });
+
   test("リロード後も最新の /api/history が表示される", async ({
     page,
     request,
