@@ -39,29 +39,39 @@ func TestResolveQueuePath_ReturnsGitCommonDirParentJoinedWithVoxActorQueue(t *te
 	}
 }
 
-func TestResolveQueuePath_ReturnsErrNotInGitRepo_WhenGitCommonDirEmpty(t *testing.T) {
+func TestResolveQueuePath_ReturnsCwdVoxActorQueue_WhenGitCommonDirEmpty(t *testing.T) {
 	t.Setenv("VOX_ACTOR_WORKSPACE", "")
 	withGitRunner(t, func(name string, args ...string) *exec.Cmd {
 		// 空文字列を標準出力に出すだけのコマンド（=gitリポジトリ外の想定）
 		return exec.Command("true")
 	})
 
-	_, err := ResolveQueuePath()
-	if !errors.Is(err, ErrNotInGitRepo) {
-		t.Errorf("expected ErrNotInGitRepo, got: %v", err)
+	cwd, _ := os.Getwd()
+	got, err := ResolveQueuePath()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	want := filepath.Join(cwd, ".vox-actor", "queue")
+	if got != want {
+		t.Errorf("ResolveQueuePath() = %q, want %q", got, want)
 	}
 }
 
-func TestResolveQueuePath_ReturnsErrNotInGitRepo_WhenGitRunnerFailsWithNonZeroExit(t *testing.T) {
+func TestResolveQueuePath_ReturnsCwdVoxActorQueue_WhenGitRunnerFailsWithNonZeroExit(t *testing.T) {
 	t.Setenv("VOX_ACTOR_WORKSPACE", "")
 	withGitRunner(t, func(name string, args ...string) *exec.Cmd {
 		// 非0終了（gitリポジトリ外で git rev-parse した時の挙動を模倣）
 		return exec.Command("false")
 	})
 
-	_, err := ResolveQueuePath()
-	if !errors.Is(err, ErrNotInGitRepo) {
-		t.Errorf("expected ErrNotInGitRepo, got: %v", err)
+	cwd, _ := os.Getwd()
+	got, err := ResolveQueuePath()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	want := filepath.Join(cwd, ".vox-actor", "queue")
+	if got != want {
+		t.Errorf("ResolveQueuePath() = %q, want %q", got, want)
 	}
 }
 
@@ -157,27 +167,37 @@ func TestResolveWorkspacePath_ReturnsGitCommonDirParentJoinedWithVoxActor(t *tes
 	}
 }
 
-func TestResolveWorkspacePath_ReturnsErrNotInGitRepo_WhenGitCommonDirEmpty(t *testing.T) {
+func TestResolveWorkspacePath_ReturnsCwdVoxActor_WhenGitCommonDirEmpty(t *testing.T) {
 	t.Setenv("VOX_ACTOR_WORKSPACE", "")
 	withGitRunner(t, func(name string, args ...string) *exec.Cmd {
 		return exec.Command("true")
 	})
 
-	_, err := ResolveWorkspacePath()
-	if !errors.Is(err, ErrNotInGitRepo) {
-		t.Errorf("expected ErrNotInGitRepo, got: %v", err)
+	cwd, _ := os.Getwd()
+	got, err := ResolveWorkspacePath()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	want := filepath.Join(cwd, ".vox-actor")
+	if got != want {
+		t.Errorf("ResolveWorkspacePath() = %q, want %q", got, want)
 	}
 }
 
-func TestResolveWorkspacePath_ReturnsErrNotInGitRepo_WhenGitRunnerFailsWithNonZeroExit(t *testing.T) {
+func TestResolveWorkspacePath_ReturnsCwdVoxActor_WhenGitRunnerFailsWithNonZeroExit(t *testing.T) {
 	t.Setenv("VOX_ACTOR_WORKSPACE", "")
 	withGitRunner(t, func(name string, args ...string) *exec.Cmd {
 		return exec.Command("false")
 	})
 
-	_, err := ResolveWorkspacePath()
-	if !errors.Is(err, ErrNotInGitRepo) {
-		t.Errorf("expected ErrNotInGitRepo, got: %v", err)
+	cwd, _ := os.Getwd()
+	got, err := ResolveWorkspacePath()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	want := filepath.Join(cwd, ".vox-actor")
+	if got != want {
+		t.Errorf("ResolveWorkspacePath() = %q, want %q", got, want)
 	}
 }
 

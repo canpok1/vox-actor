@@ -10,7 +10,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var resolveWorkspaceFunc = resolveWorkspaceWithFallback
+var resolveWorkspaceFunc = infra.ResolveWorkspacePath
 var resolveHomeAssetsFunc = infra.ResolveHomeAssetsPath
 
 const (
