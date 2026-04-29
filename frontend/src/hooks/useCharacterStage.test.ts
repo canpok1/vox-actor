@@ -1,4 +1,4 @@
-// @ts-nocheck - renderHook type inference limitation with rerender and playingClipId
+// @ts-nocheck - renderHook type inference limitation with rerender and playingClipTimestamp
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { CharacterEntry, TimelineEntry } from "../types/api";
@@ -14,18 +14,17 @@ function makeChar(speakerName: string, styleName = "ノーマル"): CharacterEnt
 }
 
 function makeClipEntry(
-  id: number,
+  n: number,
   speakerName: string,
   styleName = "ノーマル",
 ): TimelineEntry {
   return {
     kind: "clip",
-    id,
-    url: `http://example.com/${id}.wav`,
-    text: `text ${id}`,
+    url: `http://example.com/${n}.wav`,
+    text: `text ${n}`,
     speakerName,
     styleName,
-    timestamp: id * 1000,
+    timestamp: n * 1000,
   };
 }
 
@@ -51,17 +50,17 @@ describe("useCharacterStage", () => {
 
     const { result, rerender } = renderHook(
       ({
-        playingClipId,
+        playingClipTimestamp,
         entries,
         characters,
       }: {
-        playingClipId: number | null;
+        playingClipTimestamp: number | null;
         entries: TimelineEntry[];
         characters: CharacterEntry[];
-      }) => useCharacterStage(playingClipId, entries, characters),
+      }) => useCharacterStage(playingClipTimestamp, entries, characters),
       {
         initialProps: {
-          playingClipId: null,
+          playingClipTimestamp: null,
           entries: [entry1],
           characters: [charA],
         },
@@ -70,7 +69,7 @@ describe("useCharacterStage", () => {
 
     await act(async () => {
       rerender({
-        playingClipId: 1,
+        playingClipTimestamp: 1000,
         entries: [entry1],
         characters: [charA],
       });
@@ -91,17 +90,17 @@ describe("useCharacterStage", () => {
 
     const { result, rerender } = renderHook(
       ({
-        playingClipId,
+        playingClipTimestamp,
         entries,
         characters,
       }: {
-        playingClipId: number | null;
+        playingClipTimestamp: number | null;
         entries: TimelineEntry[];
         characters: CharacterEntry[];
-      }) => useCharacterStage(playingClipId, entries, characters),
+      }) => useCharacterStage(playingClipTimestamp, entries, characters),
       {
         initialProps: {
-          playingClipId: null,
+          playingClipTimestamp: null,
           entries: [entry1, entry2],
           characters: [charA, charB],
         },
@@ -111,7 +110,7 @@ describe("useCharacterStage", () => {
     // charA speaks
     await act(async () => {
       rerender({
-        playingClipId: 1,
+        playingClipTimestamp: 1000,
         entries: [entry1, entry2],
         characters: [charA, charB],
       });
@@ -121,7 +120,7 @@ describe("useCharacterStage", () => {
     // charB speaks
     await act(async () => {
       rerender({
-        playingClipId: 2,
+        playingClipTimestamp: 2000,
         entries: [entry1, entry2],
         characters: [charA, charB],
       });
@@ -138,20 +137,20 @@ describe("useCharacterStage", () => {
 
     const { result, rerender } = renderHook(
       ({
-        playingClipId,
+        playingClipTimestamp,
         entries,
         characters,
       }: {
-        playingClipId: number | null;
+        playingClipTimestamp: number | null;
         entries: TimelineEntry[];
         characters: CharacterEntry[];
-      }) => useCharacterStage(playingClipId, entries, characters),
-      { initialProps: { playingClipId: null, entries, characters: chars } },
+      }) => useCharacterStage(playingClipTimestamp, entries, characters),
+      { initialProps: { playingClipTimestamp: null, entries, characters: chars } },
     );
 
     for (let id = 1; id <= 4; id++) {
       await act(async () => {
-        rerender({ playingClipId: id, entries, characters: chars });
+        rerender({ playingClipTimestamp: id * 1000, entries, characters: chars });
       });
     }
 
@@ -173,25 +172,25 @@ describe("useCharacterStage", () => {
 
     const { result, rerender } = renderHook(
       ({
-        playingClipId,
+        playingClipTimestamp,
         entries,
         characters,
       }: {
-        playingClipId: number | null;
+        playingClipTimestamp: number | null;
         entries: TimelineEntry[];
         characters: CharacterEntry[];
-      }) => useCharacterStage(playingClipId, entries, characters),
-      { initialProps: { playingClipId: null, entries, characters: chars } },
+      }) => useCharacterStage(playingClipTimestamp, entries, characters),
+      { initialProps: { playingClipTimestamp: null, entries, characters: chars } },
     );
 
     await act(async () => {
-      rerender({ playingClipId: 1, entries, characters: chars });
+      rerender({ playingClipTimestamp: 1000, entries, characters: chars });
     });
     await act(async () => {
-      rerender({ playingClipId: 2, entries, characters: chars });
+      rerender({ playingClipTimestamp: 2000, entries, characters: chars });
     });
     await act(async () => {
-      rerender({ playingClipId: 3, entries, characters: chars });
+      rerender({ playingClipTimestamp: 3000, entries, characters: chars });
     }); // charA再発話
 
     // charA はinner-rightのまま
@@ -210,33 +209,33 @@ describe("useCharacterStage", () => {
 
     const { result, rerender } = renderHook(
       ({
-        playingClipId,
+        playingClipTimestamp,
         entries,
         characters,
       }: {
-        playingClipId: number | null;
+        playingClipTimestamp: number | null;
         entries: TimelineEntry[];
         characters: CharacterEntry[];
-      }) => useCharacterStage(playingClipId, entries, characters),
-      { initialProps: { playingClipId: null, entries, characters: chars } },
+      }) => useCharacterStage(playingClipTimestamp, entries, characters),
+      { initialProps: { playingClipTimestamp: null, entries, characters: chars } },
     );
 
     // charA speaks clip 1
     await act(async () => {
-      rerender({ playingClipId: 1, entries, characters: chars });
+      rerender({ playingClipTimestamp: 1000, entries, characters: chars });
     });
     // charB speaks clips 2-6
     // count: 2→3(完了=B, A.count=1), 3→4(A.count=2), 4→5(A.count=3), 5→6(A.count=4)
     for (let id = 2; id <= 6; id++) {
       await act(async () => {
-        rerender({ playingClipId: id, entries, characters: chars });
+        rerender({ playingClipTimestamp: id * 1000, entries, characters: chars });
       });
     }
     expect(result.current.slots[0]?.character.speakerName).toBe("キャラA"); // count=4 still there
 
     // charB speaks clip 7 (clip 6完了 = 5本目 → charA evicted)
     await act(async () => {
-      rerender({ playingClipId: 7, entries, characters: chars });
+      rerender({ playingClipTimestamp: 7000, entries, characters: chars });
     });
 
     expect(result.current.slots[0]).toBeNull(); // charA evicted
@@ -250,25 +249,25 @@ describe("useCharacterStage", () => {
 
     const { result, rerender } = renderHook(
       ({
-        playingClipId,
+        playingClipTimestamp,
         entries,
         characters,
       }: {
-        playingClipId: number | null;
+        playingClipTimestamp: number | null;
         entries: TimelineEntry[];
         characters: CharacterEntry[];
-      }) => useCharacterStage(playingClipId, entries, characters),
-      { initialProps: { playingClipId: null, entries, characters: chars } },
+      }) => useCharacterStage(playingClipTimestamp, entries, characters),
+      { initialProps: { playingClipTimestamp: null, entries, characters: chars } },
     );
 
     await act(async () => {
-      rerender({ playingClipId: 1, entries, characters: chars });
+      rerender({ playingClipTimestamp: 1000, entries, characters: chars });
     });
     expect(result.current.slots[0]?.character.speakerName).toBe("キャラA");
 
     // Queue becomes empty
     await act(async () => {
-      rerender({ playingClipId: null, entries, characters: chars });
+      rerender({ playingClipTimestamp: null, entries, characters: chars });
     });
     expect(result.current.slots[0]?.character.speakerName).toBe("キャラA"); // still there
 
@@ -291,22 +290,22 @@ describe("useCharacterStage", () => {
 
     const { result, rerender } = renderHook(
       ({
-        playingClipId,
+        playingClipTimestamp,
         entries,
         characters,
       }: {
-        playingClipId: number | null;
+        playingClipTimestamp: number | null;
         entries: TimelineEntry[];
         characters: CharacterEntry[];
-      }) => useCharacterStage(playingClipId, entries, characters),
-      { initialProps: { playingClipId: null, entries, characters: chars } },
+      }) => useCharacterStage(playingClipTimestamp, entries, characters),
+      { initialProps: { playingClipTimestamp: null, entries, characters: chars } },
     );
 
     await act(async () => {
-      rerender({ playingClipId: 1, entries, characters: chars });
+      rerender({ playingClipTimestamp: 1000, entries, characters: chars });
     });
     await act(async () => {
-      rerender({ playingClipId: null, entries, characters: chars });
+      rerender({ playingClipTimestamp: null, entries, characters: chars });
     }); // queue empty
 
     // 10 seconds pass (under 15s)
@@ -317,7 +316,7 @@ describe("useCharacterStage", () => {
 
     // New clip starts - timer should be cancelled
     await act(async () => {
-      rerender({ playingClipId: 2, entries, characters: chars });
+      rerender({ playingClipTimestamp: 2000, entries, characters: chars });
     });
 
     // 15 more seconds pass (total >15 from first pause, but timer was cancelled)
@@ -333,28 +332,28 @@ describe("useCharacterStage", () => {
 
     const { result, rerender } = renderHook(
       ({
-        playingClipId,
+        playingClipTimestamp,
         entries,
         characters,
       }: {
-        playingClipId: number | null;
+        playingClipTimestamp: number | null;
         entries: TimelineEntry[];
         characters: CharacterEntry[];
-      }) => useCharacterStage(playingClipId, entries, characters),
-      { initialProps: { playingClipId: null, entries, characters: chars } },
+      }) => useCharacterStage(playingClipTimestamp, entries, characters),
+      { initialProps: { playingClipTimestamp: null, entries, characters: chars } },
     );
 
     // A, B, C, D enter in order
     for (let id = 1; id <= 4; id++) {
       await act(async () => {
-        rerender({ playingClipId: id, entries, characters: chars });
+        rerender({ playingClipTimestamp: id * 1000, entries, characters: chars });
       });
     }
     expect(result.current.slots[0]?.character.speakerName).toBe("キャラA");
 
     // E enters - should evict A (oldest)
     await act(async () => {
-      rerender({ playingClipId: 5, entries, characters: chars });
+      rerender({ playingClipTimestamp: 5000, entries, characters: chars });
     });
 
     expect(result.current.slots[0]?.character.speakerName).toBe("キャラE"); // E took A's slot (innermost available = 0)
@@ -373,23 +372,23 @@ describe("useCharacterStage", () => {
     ];
 
     const { result, rerender } = renderHook(
-      ({ playingClipId }: { playingClipId: number | null }) =>
-        useCharacterStage(playingClipId, entries, [charA, charB]),
-      { initialProps: { playingClipId: null } },
+      ({ playingClipTimestamp }: { playingClipTimestamp: number | null }) =>
+        useCharacterStage(playingClipTimestamp, entries, [charA, charB]),
+      { initialProps: { playingClipTimestamp: null } },
     );
 
     await act(async () => {
-      rerender({ playingClipId: 1 });
+      rerender({ playingClipTimestamp: 1000 });
     }); // A enters
     await act(async () => {
-      rerender({ playingClipId: 2 });
+      rerender({ playingClipTimestamp: 2000 });
     }); // B enters → isMultiSlot=true
     expect(result.current.isMultiSlot).toBe(true);
 
     // A speaks 6 clips (clips 3-8 start → clips 3-7 complete = 5 completions → B exits)
     for (let id = 3; id <= 8; id++) {
       await act(async () => {
-        rerender({ playingClipId: id });
+        rerender({ playingClipTimestamp: id * 1000 });
       });
     }
 
@@ -409,25 +408,25 @@ describe("useCharacterStage", () => {
 
     const { result, rerender } = renderHook(
       ({
-        playingClipId,
+        playingClipTimestamp,
         entries,
         characters,
       }: {
-        playingClipId: number | null;
+        playingClipTimestamp: number | null;
         entries: TimelineEntry[];
         characters: CharacterEntry[];
-      }) => useCharacterStage(playingClipId, entries, characters),
-      { initialProps: { playingClipId: null, entries, characters: chars } },
+      }) => useCharacterStage(playingClipTimestamp, entries, characters),
+      { initialProps: { playingClipTimestamp: null, entries, characters: chars } },
     );
 
     await act(async () => {
-      rerender({ playingClipId: 1, entries, characters: chars });
+      rerender({ playingClipTimestamp: 1000, entries, characters: chars });
     });
     await act(async () => {
-      rerender({ playingClipId: 2, entries, characters: chars });
+      rerender({ playingClipTimestamp: 2000, entries, characters: chars });
     }); // isMultiSlot=true
     await act(async () => {
-      rerender({ playingClipId: null, entries, characters: chars });
+      rerender({ playingClipTimestamp: null, entries, characters: chars });
     }); // queue empty
 
     // 15s timer fires → all exit, isMultiSlot=false
@@ -438,7 +437,7 @@ describe("useCharacterStage", () => {
 
     // A enters again
     await act(async () => {
-      rerender({ playingClipId: 3, entries, characters: chars });
+      rerender({ playingClipTimestamp: 3000, entries, characters: chars });
     });
     expect(result.current.isMultiSlot).toBe(false); // center layout
     expect(result.current.slots[0]?.character.speakerName).toBe("キャラA");
@@ -459,25 +458,25 @@ describe("useCharacterStage", () => {
 
     const { result, rerender } = renderHook(
       ({
-        playingClipId,
+        playingClipTimestamp,
         entries,
         characters,
       }: {
-        playingClipId: number | null;
+        playingClipTimestamp: number | null;
         entries: TimelineEntry[];
         characters: CharacterEntry[];
-      }) => useCharacterStage(playingClipId, entries, characters),
-      { initialProps: { playingClipId: null, entries, characters: chars } },
+      }) => useCharacterStage(playingClipTimestamp, entries, characters),
+      { initialProps: { playingClipTimestamp: null, entries, characters: chars } },
     );
 
     await act(async () => {
-      rerender({ playingClipId: 1, entries, characters: chars });
+      rerender({ playingClipTimestamp: 1000, entries, characters: chars });
     });
     expect(result.current.slots[0]?.character).toEqual(charANormal);
     expect(result.current.isMultiSlot).toBe(false);
 
     await act(async () => {
-      rerender({ playingClipId: 2, entries, characters: chars });
+      rerender({ playingClipTimestamp: 2000, entries, characters: chars });
     });
 
     expect(result.current.slots[0]?.character).toEqual(charASweet);
@@ -495,19 +494,19 @@ describe("useCharacterStage", () => {
 
     const { result, rerender } = renderHook(
       ({
-        playingClipId,
+        playingClipTimestamp,
         entries,
         characters,
       }: {
-        playingClipId: number | null;
+        playingClipTimestamp: number | null;
         entries: TimelineEntry[];
         characters: CharacterEntry[];
-      }) => useCharacterStage(playingClipId, entries, characters),
-      { initialProps: { playingClipId: null, entries, characters: chars } },
+      }) => useCharacterStage(playingClipTimestamp, entries, characters),
+      { initialProps: { playingClipTimestamp: null, entries, characters: chars } },
     );
 
     await act(async () => {
-      rerender({ playingClipId: 1, entries, characters: chars });
+      rerender({ playingClipTimestamp: 1000, entries, characters: chars });
     });
 
     expect(result.current.slots).toEqual([null, null, null, null]);
@@ -525,17 +524,17 @@ describe("useCharacterStage", () => {
 
       const { result, rerender } = renderHook(
         ({
-          playingClipId,
+          playingClipTimestamp,
           entries,
           characters,
         }: {
-          playingClipId: number | null;
+          playingClipTimestamp: number | null;
           entries: TimelineEntry[];
           characters: CharacterEntry[];
-        }) => useCharacterStage(playingClipId, entries, characters),
+        }) => useCharacterStage(playingClipTimestamp, entries, characters),
         {
           initialProps: {
-            playingClipId: null,
+            playingClipTimestamp: null,
             entries: [entry1],
             characters: [charA],
           },
@@ -543,7 +542,7 @@ describe("useCharacterStage", () => {
       );
 
       await act(async () => {
-        rerender({ playingClipId: 1, entries: [entry1], characters: [charA] });
+        rerender({ playingClipTimestamp: 1000, entries: [entry1], characters: [charA] });
       });
 
       expect(result.current.lastClipText).toBe("text 1");
@@ -555,17 +554,17 @@ describe("useCharacterStage", () => {
 
       const { result, rerender } = renderHook(
         ({
-          playingClipId,
+          playingClipTimestamp,
           entries,
           characters,
         }: {
-          playingClipId: number | null;
+          playingClipTimestamp: number | null;
           entries: TimelineEntry[];
           characters: CharacterEntry[];
-        }) => useCharacterStage(playingClipId, entries, characters),
+        }) => useCharacterStage(playingClipTimestamp, entries, characters),
         {
           initialProps: {
-            playingClipId: null,
+            playingClipTimestamp: null,
             entries: [entry1],
             characters: [charA],
           },
@@ -573,11 +572,11 @@ describe("useCharacterStage", () => {
       );
 
       await act(async () => {
-        rerender({ playingClipId: 1, entries: [entry1], characters: [charA] });
+        rerender({ playingClipTimestamp: 1000, entries: [entry1], characters: [charA] });
       });
       await act(async () => {
         rerender({
-          playingClipId: null,
+          playingClipTimestamp: null,
           entries: [entry1],
           characters: [charA],
         });
@@ -594,24 +593,24 @@ describe("useCharacterStage", () => {
 
       const { result, rerender } = renderHook(
         ({
-          playingClipId,
+          playingClipTimestamp,
           entries,
           characters,
         }: {
-          playingClipId: number | null;
+          playingClipTimestamp: number | null;
           entries: TimelineEntry[];
           characters: CharacterEntry[];
-        }) => useCharacterStage(playingClipId, entries, characters),
-        { initialProps: { playingClipId: null, entries, characters: chars } },
+        }) => useCharacterStage(playingClipTimestamp, entries, characters),
+        { initialProps: { playingClipTimestamp: null, entries, characters: chars } },
       );
 
       await act(async () => {
-        rerender({ playingClipId: 1, entries, characters: chars });
+        rerender({ playingClipTimestamp: 1000, entries, characters: chars });
       });
       expect(result.current.lastClipText).toBe("text 1");
 
       await act(async () => {
-        rerender({ playingClipId: 2, entries, characters: chars });
+        rerender({ playingClipTimestamp: 2000, entries, characters: chars });
       });
       expect(result.current.lastClipText).toBe("text 2");
     });
@@ -623,17 +622,17 @@ describe("useCharacterStage", () => {
 
       const { result, rerender } = renderHook(
         ({
-          playingClipId,
+          playingClipTimestamp,
           entries,
           characters,
         }: {
-          playingClipId: number | null;
+          playingClipTimestamp: number | null;
           entries: TimelineEntry[];
           characters: CharacterEntry[];
-        }) => useCharacterStage(playingClipId, entries, characters),
+        }) => useCharacterStage(playingClipTimestamp, entries, characters),
         {
           initialProps: {
-            playingClipId: null,
+            playingClipTimestamp: null,
             entries: [entry1],
             characters: chars,
           },
@@ -641,10 +640,10 @@ describe("useCharacterStage", () => {
       );
 
       await act(async () => {
-        rerender({ playingClipId: 1, entries: [entry1], characters: chars });
+        rerender({ playingClipTimestamp: 1000, entries: [entry1], characters: chars });
       });
       await act(async () => {
-        rerender({ playingClipId: null, entries: [entry1], characters: chars });
+        rerender({ playingClipTimestamp: null, entries: [entry1], characters: chars });
       });
       expect(result.current.lastClipText).toBe("text 1");
 
@@ -666,24 +665,24 @@ describe("useCharacterStage", () => {
 
       const { result, rerender } = renderHook(
         ({
-          playingClipId,
+          playingClipTimestamp,
           entries,
           characters,
         }: {
-          playingClipId: number | null;
+          playingClipTimestamp: number | null;
           entries: TimelineEntry[];
           characters: CharacterEntry[];
-        }) => useCharacterStage(playingClipId, entries, characters),
-        { initialProps: { playingClipId: null, entries, characters: chars } },
+        }) => useCharacterStage(playingClipTimestamp, entries, characters),
+        { initialProps: { playingClipTimestamp: null, entries, characters: chars } },
       );
 
       await act(async () => {
-        rerender({ playingClipId: 1, entries, characters: chars });
+        rerender({ playingClipTimestamp: 1000, entries, characters: chars });
       });
       // charB speaks clips 2-7 (charA gets evicted after 5 charB clips)
       for (let id = 2; id <= 7; id++) {
         await act(async () => {
-          rerender({ playingClipId: id, entries, characters: chars });
+          rerender({ playingClipTimestamp: id * 1000, entries, characters: chars });
         });
       }
 
@@ -693,29 +692,29 @@ describe("useCharacterStage", () => {
     });
   });
 
-  describe("lastClipId", () => {
-    it("初期状態ではlastClipIdがnull", () => {
+  describe("lastClipTimestamp", () => {
+    it("初期状態ではlastClipTimestampがnull", () => {
       const { result } = renderHook(() => useCharacterStage(null, [], []));
-      expect(result.current.lastClipId).toBeNull();
+      expect(result.current.lastClipTimestamp).toBeNull();
     });
 
-    it("クリップ再生開始でlastClipIdが更新される", async () => {
+    it("クリップ再生開始でlastClipTimestampが更新される", async () => {
       const charA = makeChar("キャラA");
       const entry1 = makeClipEntry(1, "キャラA");
 
       const { result, rerender } = renderHook(
         ({
-          playingClipId,
+          playingClipTimestamp,
           entries,
           characters,
         }: {
-          playingClipId: number | null;
+          playingClipTimestamp: number | null;
           entries: TimelineEntry[];
           characters: CharacterEntry[];
-        }) => useCharacterStage(playingClipId, entries, characters),
+        }) => useCharacterStage(playingClipTimestamp, entries, characters),
         {
           initialProps: {
-            playingClipId: null,
+            playingClipTimestamp: null,
             entries: [entry1],
             characters: [charA],
           },
@@ -723,29 +722,29 @@ describe("useCharacterStage", () => {
       );
 
       await act(async () => {
-        rerender({ playingClipId: 1, entries: [entry1], characters: [charA] });
+        rerender({ playingClipTimestamp: 1000, entries: [entry1], characters: [charA] });
       });
 
-      expect(result.current.lastClipId).toBe(1);
+      expect(result.current.lastClipTimestamp).toBe(1000);
     });
 
-    it("クリップ再生終了後もlastClipIdが保持される", async () => {
+    it("クリップ再生終了後もlastClipTimestampが保持される", async () => {
       const charA = makeChar("キャラA");
       const entry1 = makeClipEntry(1, "キャラA");
 
       const { result, rerender } = renderHook(
         ({
-          playingClipId,
+          playingClipTimestamp,
           entries,
           characters,
         }: {
-          playingClipId: number | null;
+          playingClipTimestamp: number | null;
           entries: TimelineEntry[];
           characters: CharacterEntry[];
-        }) => useCharacterStage(playingClipId, entries, characters),
+        }) => useCharacterStage(playingClipTimestamp, entries, characters),
         {
           initialProps: {
-            playingClipId: null,
+            playingClipTimestamp: null,
             entries: [entry1],
             characters: [charA],
           },
@@ -753,20 +752,20 @@ describe("useCharacterStage", () => {
       );
 
       await act(async () => {
-        rerender({ playingClipId: 1, entries: [entry1], characters: [charA] });
+        rerender({ playingClipTimestamp: 1000, entries: [entry1], characters: [charA] });
       });
       await act(async () => {
         rerender({
-          playingClipId: null,
+          playingClipTimestamp: null,
           entries: [entry1],
           characters: [charA],
         });
       });
 
-      expect(result.current.lastClipId).toBe(1);
+      expect(result.current.lastClipTimestamp).toBe(1000);
     });
 
-    it("次のクリップ再生開始でlastClipIdが切り替わる", async () => {
+    it("次のクリップ再生開始でlastClipTimestampが切り替わる", async () => {
       const charA = makeChar("キャラA");
       const charB = makeChar("キャラB");
       const entries = [makeClipEntry(1, "キャラA"), makeClipEntry(2, "キャラB")];
@@ -774,46 +773,46 @@ describe("useCharacterStage", () => {
 
       const { result, rerender } = renderHook(
         ({
-          playingClipId,
+          playingClipTimestamp,
           entries,
           characters,
         }: {
-          playingClipId: number | null;
+          playingClipTimestamp: number | null;
           entries: TimelineEntry[];
           characters: CharacterEntry[];
-        }) => useCharacterStage(playingClipId, entries, characters),
-        { initialProps: { playingClipId: null, entries, characters: chars } },
+        }) => useCharacterStage(playingClipTimestamp, entries, characters),
+        { initialProps: { playingClipTimestamp: null, entries, characters: chars } },
       );
 
       await act(async () => {
-        rerender({ playingClipId: 1, entries, characters: chars });
+        rerender({ playingClipTimestamp: 1000, entries, characters: chars });
       });
-      expect(result.current.lastClipId).toBe(1);
+      expect(result.current.lastClipTimestamp).toBe(1000);
 
       await act(async () => {
-        rerender({ playingClipId: 2, entries, characters: chars });
+        rerender({ playingClipTimestamp: 2000, entries, characters: chars });
       });
-      expect(result.current.lastClipId).toBe(2);
+      expect(result.current.lastClipTimestamp).toBe(2000);
     });
 
-    it("ALL_EXIT後にlastClipIdがnullになる", async () => {
+    it("ALL_EXIT後にlastClipTimestampがnullになる", async () => {
       const charA = makeChar("キャラA");
       const entry1 = makeClipEntry(1, "キャラA");
       const chars = [charA];
 
       const { result, rerender } = renderHook(
         ({
-          playingClipId,
+          playingClipTimestamp,
           entries,
           characters,
         }: {
-          playingClipId: number | null;
+          playingClipTimestamp: number | null;
           entries: TimelineEntry[];
           characters: CharacterEntry[];
-        }) => useCharacterStage(playingClipId, entries, characters),
+        }) => useCharacterStage(playingClipTimestamp, entries, characters),
         {
           initialProps: {
-            playingClipId: null,
+            playingClipTimestamp: null,
             entries: [entry1],
             characters: chars,
           },
@@ -821,17 +820,17 @@ describe("useCharacterStage", () => {
       );
 
       await act(async () => {
-        rerender({ playingClipId: 1, entries: [entry1], characters: chars });
+        rerender({ playingClipTimestamp: 1000, entries: [entry1], characters: chars });
       });
       await act(async () => {
-        rerender({ playingClipId: null, entries: [entry1], characters: chars });
+        rerender({ playingClipTimestamp: null, entries: [entry1], characters: chars });
       });
-      expect(result.current.lastClipId).toBe(1);
+      expect(result.current.lastClipTimestamp).toBe(1000);
 
       await act(async () => {
         vi.advanceTimersByTime(QUEUE_EMPTY_MS);
       });
-      expect(result.current.lastClipId).toBeNull();
+      expect(result.current.lastClipTimestamp).toBeNull();
     });
   });
 });
