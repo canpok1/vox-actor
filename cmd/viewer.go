@@ -119,7 +119,7 @@ func resolveViewerLockPath(deps *ViewerDeps) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(ws, "run", "viewer.lock"), nil
+	return filepath.Join(ws, "viewer", "viewer.lock"), nil
 }
 
 func runViewer(cmd *cobra.Command, deps *ViewerDeps) error {

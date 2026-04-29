@@ -72,6 +72,15 @@ package infra
 // TODO: connection カテゴリは message のみを含む
 // TODO: errorEvent.id はクリップIDと独立に 1 から単調増加する
 // TODO: BroadcastError は複数購読者にブロードキャストされる
+//
+// #408 再生履歴ファイル保存・起動時復元:
+// TODO: Play() で clip が YYYY-MM-DD.jsonl に追記される          → TestHTTPStreamPlayer_History_WritesClipOnPlay
+// TODO: PlayText() で clip が YYYY-MM-DD.jsonl に追記される      → TestHTTPStreamPlayer_History_WritesClipOnPlayText
+// TODO: 日付変更時に新ファイルへ切り替わる                       → TestHTTPStreamPlayer_History_RotatesOnDateChange
+// TODO: viewer 起動時に 30日より古い *.jsonl が削除される        → TestHTTPStreamPlayer_History_PrunesOldFiles
+// TODO: 当日ファイルなし時も正常起動                             → TestHTTPStreamPlayer_Start_NoHistoryFile
+// TODO: /api/history が当日末尾 50 件を返す                      → TestHTTPStreamPlayer_APIHistory_ReturnsTodaysEntries
+// TODO: /api/history がファイルなし時に空配列を返す              → TestHTTPStreamPlayer_APIHistory_EmptyWhenNoFile
 
 import (
 	"bufio"
@@ -2241,5 +2250,317 @@ func TestHTTPStreamPlayer_HandleCharacterImage_SearchesAcrossAssetsDirs(t *testi
 	body, _ := io.ReadAll(resp.Body)
 	if string(body) != string(imageBContent) {
 		t.Errorf("expected home image content %q, got %q", imageBContent, body)
+	}
+}
+
+func TestHTTPStreamPlayer_History_WritesClipOnPlay(t *testing.T) {
+	historyDir := t.TempDir()
+	fixedNow := time.Date(2026, 4, 28, 10, 0, 0, 0, time.Local)
+	lookup := map[int]entity.SpeakerStyleInfo{
+		3: {SpeakerName: "ずんだもん", StyleName: "ノーマル"},
+	}
+	p, err := NewHTTPStreamPlayer("127.0.0.1:0", newTestStreamAssets(),
+		WithHistoryDir(historyDir),
+		withNowFunc(func() time.Time { return fixedNow }),
+		WithSpeakerLookup(lookup),
+	)
+	if err != nil {
+		t.Fatalf("NewHTTPStreamPlayer: %v", err)
+	}
+	if err := p.Start(context.Background()); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		_ = p.Shutdown(ctx)
+	})
+
+	if err := p.Play(context.Background(), []byte("RIFFwavdata"), app.PlayMeta{
+		Text: "テストセリフ", SpeakerID: 3,
+	}); err != nil {
+		t.Fatalf("Play: %v", err)
+	}
+
+	filePath := filepath.Join(historyDir, "2026-04-28.jsonl")
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		t.Fatalf("expected history file at %s: %v", filePath, err)
+	}
+	lines := strings.Split(strings.TrimRight(string(data), "\n"), "\n")
+	if len(lines) != 1 {
+		t.Fatalf("expected 1 line in history, got %d: %q", len(lines), data)
+	}
+	var rec historyRecord
+	if err := json.Unmarshal([]byte(lines[0]), &rec); err != nil {
+		t.Fatalf("failed to parse history line: %v", err)
+	}
+	if rec.ID != 1 {
+		t.Errorf("expected ID=1, got %d", rec.ID)
+	}
+	if rec.Text != "テストセリフ" {
+		t.Errorf("expected Text=%q, got %q", "テストセリフ", rec.Text)
+	}
+	if rec.SpeakerName != "ずんだもん" {
+		t.Errorf("expected SpeakerName=%q, got %q", "ずんだもん", rec.SpeakerName)
+	}
+	if rec.StyleName != "ノーマル" {
+		t.Errorf("expected StyleName=%q, got %q", "ノーマル", rec.StyleName)
+	}
+	if rec.Timestamp != fixedNow.UnixMilli() {
+		t.Errorf("expected Timestamp=%d, got %d", fixedNow.UnixMilli(), rec.Timestamp)
+	}
+}
+
+func TestHTTPStreamPlayer_History_WritesClipOnPlayText(t *testing.T) {
+	historyDir := t.TempDir()
+	fixedNow := time.Date(2026, 4, 28, 10, 0, 0, 0, time.Local)
+	lookup := map[int]entity.SpeakerStyleInfo{
+		3: {SpeakerName: "ずんだもん", StyleName: "ノーマル"},
+	}
+	p, err := NewHTTPStreamPlayer("127.0.0.1:0", newTestStreamAssets(),
+		WithHistoryDir(historyDir),
+		withNowFunc(func() time.Time { return fixedNow }),
+		WithSpeakerLookup(lookup),
+	)
+	if err != nil {
+		t.Fatalf("NewHTTPStreamPlayer: %v", err)
+	}
+	if err := p.Start(context.Background()); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		_ = p.Shutdown(ctx)
+	})
+	p.silentInterval = 1 * time.Millisecond
+
+	if err := p.PlayText(context.Background(), app.PlayMeta{
+		Text: "サイレントセリフ", SpeakerID: 3,
+	}); err != nil {
+		t.Fatalf("PlayText: %v", err)
+	}
+
+	filePath := filepath.Join(historyDir, "2026-04-28.jsonl")
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		t.Fatalf("expected history file at %s: %v", filePath, err)
+	}
+	lines := strings.Split(strings.TrimRight(string(data), "\n"), "\n")
+	if len(lines) != 1 {
+		t.Fatalf("expected 1 line, got %d", len(lines))
+	}
+	var rec historyRecord
+	if err := json.Unmarshal([]byte(lines[0]), &rec); err != nil {
+		t.Fatalf("failed to parse history line: %v", err)
+	}
+	if rec.Text != "サイレントセリフ" {
+		t.Errorf("expected Text=%q, got %q", "サイレントセリフ", rec.Text)
+	}
+}
+
+func TestHTTPStreamPlayer_History_RotatesOnDateChange(t *testing.T) {
+	historyDir := t.TempDir()
+	day1 := time.Date(2026, 4, 28, 23, 59, 0, 0, time.Local)
+	day2 := time.Date(2026, 4, 29, 0, 1, 0, 0, time.Local)
+	currentTime := day1
+
+	p, err := NewHTTPStreamPlayer("127.0.0.1:0", newTestStreamAssets(),
+		WithHistoryDir(historyDir),
+		withNowFunc(func() time.Time { return currentTime }),
+	)
+	if err != nil {
+		t.Fatalf("NewHTTPStreamPlayer: %v", err)
+	}
+	if err := p.Start(context.Background()); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		_ = p.Shutdown(ctx)
+	})
+
+	if err := p.Play(context.Background(), []byte("RIFFwavdata"), app.PlayMeta{Text: "day1"}); err != nil {
+		t.Fatalf("Play day1: %v", err)
+	}
+	currentTime = day2
+	if err := p.Play(context.Background(), []byte("RIFFwavdata"), app.PlayMeta{Text: "day2"}); err != nil {
+		t.Fatalf("Play day2: %v", err)
+	}
+
+	file1 := filepath.Join(historyDir, "2026-04-28.jsonl")
+	data1, err := os.ReadFile(file1)
+	if err != nil {
+		t.Fatalf("expected history file at %s: %v", file1, err)
+	}
+	if lines := strings.Split(strings.TrimRight(string(data1), "\n"), "\n"); len(lines) != 1 {
+		t.Errorf("expected 1 line in day1 file, got %d", len(lines))
+	}
+
+	file2 := filepath.Join(historyDir, "2026-04-29.jsonl")
+	data2, err := os.ReadFile(file2)
+	if err != nil {
+		t.Fatalf("expected history file at %s: %v", file2, err)
+	}
+	if lines := strings.Split(strings.TrimRight(string(data2), "\n"), "\n"); len(lines) != 1 {
+		t.Errorf("expected 1 line in day2 file, got %d", len(lines))
+	}
+}
+
+func TestHTTPStreamPlayer_History_PrunesOldFiles(t *testing.T) {
+	historyDir := t.TempDir()
+	fixedNow := time.Date(2026, 4, 28, 10, 0, 0, 0, time.Local)
+
+	oldDate := fixedNow.AddDate(0, 0, -31)
+	oldFile := filepath.Join(historyDir, oldDate.Format("2006-01-02")+".jsonl")
+	if err := os.WriteFile(oldFile, []byte("{}\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	recentDate := fixedNow.AddDate(0, 0, -29)
+	recentFile := filepath.Join(historyDir, recentDate.Format("2006-01-02")+".jsonl")
+	if err := os.WriteFile(recentFile, []byte("{}\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	p, err := NewHTTPStreamPlayer("127.0.0.1:0", newTestStreamAssets(),
+		WithHistoryDir(historyDir),
+		withNowFunc(func() time.Time { return fixedNow }),
+	)
+	if err != nil {
+		t.Fatalf("NewHTTPStreamPlayer: %v", err)
+	}
+	if err := p.Start(context.Background()); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		_ = p.Shutdown(ctx)
+	})
+
+	if _, err := os.Stat(oldFile); !os.IsNotExist(err) {
+		t.Errorf("expected old file to be deleted: %s", oldFile)
+	}
+	if _, err := os.Stat(recentFile); err != nil {
+		t.Errorf("expected recent file to still exist: %s", recentFile)
+	}
+}
+
+func TestHTTPStreamPlayer_Start_NoHistoryFile(t *testing.T) {
+	historyDir := t.TempDir()
+
+	p, err := NewHTTPStreamPlayer("127.0.0.1:0", newTestStreamAssets(),
+		WithHistoryDir(historyDir),
+	)
+	if err != nil {
+		t.Fatalf("NewHTTPStreamPlayer: %v", err)
+	}
+	if err := p.Start(context.Background()); err != nil {
+		t.Fatalf("Start with no history file: %v", err)
+	}
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		_ = p.Shutdown(ctx)
+	})
+}
+
+func TestHTTPStreamPlayer_APIHistory_ReturnsTodaysEntries(t *testing.T) {
+	historyDir := t.TempDir()
+	fixedNow := time.Date(2026, 4, 28, 10, 0, 0, 0, time.Local)
+
+	filePath := filepath.Join(historyDir, "2026-04-28.jsonl")
+	var sb strings.Builder
+	for i := 1; i <= 60; i++ {
+		rec := historyRecord{
+			ID:          uint64(i),
+			Text:        fmt.Sprintf("text%d", i),
+			SpeakerName: "ずんだもん",
+			StyleName:   "ノーマル",
+			Timestamp:   fixedNow.UnixMilli(),
+		}
+		data, _ := json.Marshal(rec)
+		sb.Write(data)
+		sb.WriteByte('\n')
+	}
+	if err := os.WriteFile(filePath, []byte(sb.String()), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	p, err := NewHTTPStreamPlayer("127.0.0.1:0", newTestStreamAssets(),
+		WithHistoryDir(historyDir),
+		withNowFunc(func() time.Time { return fixedNow }),
+	)
+	if err != nil {
+		t.Fatalf("NewHTTPStreamPlayer: %v", err)
+	}
+	if err := p.Start(context.Background()); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		_ = p.Shutdown(ctx)
+	})
+
+	resp, err := http.Get("http://" + p.Addr() + "/api/history")
+	if err != nil {
+		t.Fatalf("GET /api/history: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var result apiHistoryResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+	if len(result.Entries) != 50 {
+		t.Errorf("expected 50 entries, got %d", len(result.Entries))
+	}
+	if len(result.Entries) > 0 && result.Entries[0].ID != 11 {
+		t.Errorf("expected first entry ID=11, got %d", result.Entries[0].ID)
+	}
+	if len(result.Entries) > 0 && result.Entries[len(result.Entries)-1].ID != 60 {
+		t.Errorf("expected last entry ID=60, got %d", result.Entries[len(result.Entries)-1].ID)
+	}
+}
+
+func TestHTTPStreamPlayer_APIHistory_EmptyWhenNoFile(t *testing.T) {
+	historyDir := t.TempDir()
+
+	p, err := NewHTTPStreamPlayer("127.0.0.1:0", newTestStreamAssets(),
+		WithHistoryDir(historyDir),
+	)
+	if err != nil {
+		t.Fatalf("NewHTTPStreamPlayer: %v", err)
+	}
+	if err := p.Start(context.Background()); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		_ = p.Shutdown(ctx)
+	})
+
+	resp, err := http.Get("http://" + p.Addr() + "/api/history")
+	if err != nil {
+		t.Fatalf("GET /api/history: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var result apiHistoryResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+	if len(result.Entries) != 0 {
+		t.Errorf("expected 0 entries, got %d", len(result.Entries))
 	}
 }

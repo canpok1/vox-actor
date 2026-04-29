@@ -54,6 +54,9 @@ func main() {
 		if len(assetsDirs) > 0 {
 			opts = append(opts, infra.WithAssetsDirs(assetsDirs))
 		}
+		if historyDir, err := infra.ResolveViewerHistoryPath(); err == nil {
+			opts = append(opts, infra.WithHistoryDir(historyDir))
+		}
 		return infra.NewHTTPStreamPlayer(addr, staticFS, opts...)
 	}
 

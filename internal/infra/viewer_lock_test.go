@@ -3,11 +3,11 @@ package infra_test
 // テストリスト: ViewerLock
 //
 // 受け入れ条件 vs テスト関数のマッピング:
-// - ロック取得成功時にPIDと起動時刻をファイルに書き込む      → TestAcquireViewerLock_WritesLockFile
-// - 2つ目のロック取得は ViewerAlreadyRunningError を返す     → TestAcquireViewerLock_AlreadyLocked
-// - ViewerAlreadyRunningError に先行PIDと起動時刻が含まれる  → TestAcquireViewerLock_AlreadyLocked_HasPIDAndTime
-// - ロック解放後に再取得できる（stale lock なし）             → TestAcquireViewerLock_ReacquireAfterRelease
-// - run/ ディレクトリが存在しなければ自動作成する             → TestAcquireViewerLock_CreatesRunDir
+// - ロック取得成功時にPIDと起動時刻をファイルに書き込む        → TestAcquireViewerLock_WritesLockFile
+// - 2つ目のロック取得は ViewerAlreadyRunningError を返す       → TestAcquireViewerLock_AlreadyLocked
+// - ViewerAlreadyRunningError に先行PIDと起動時刻が含まれる    → TestAcquireViewerLock_AlreadyLocked_HasPIDAndTime
+// - ロック解放後に再取得できる（stale lock なし）               → TestAcquireViewerLock_ReacquireAfterRelease
+// - viewer/ ディレクトリが存在しなければ自動作成する            → TestAcquireViewerLock_CreatesViewerDir
 
 import (
 	"errors"
@@ -51,7 +51,7 @@ func parseLockFile(t *testing.T, path string) (pid int, startedAt time.Time) {
 
 func TestAcquireViewerLock_WritesLockFile(t *testing.T) {
 	dir := t.TempDir()
-	lockPath := filepath.Join(dir, "run", "viewer.lock")
+	lockPath := filepath.Join(dir, "viewer", "viewer.lock")
 
 	vl, err := infra.AcquireViewerLock(lockPath)
 	if err != nil {
@@ -78,7 +78,7 @@ func TestAcquireViewerLock_WritesLockFile(t *testing.T) {
 
 func TestAcquireViewerLock_AlreadyLocked(t *testing.T) {
 	dir := t.TempDir()
-	lockPath := filepath.Join(dir, "run", "viewer.lock")
+	lockPath := filepath.Join(dir, "viewer", "viewer.lock")
 
 	first, err := infra.AcquireViewerLock(lockPath)
 	if err != nil {
@@ -99,7 +99,7 @@ func TestAcquireViewerLock_AlreadyLocked(t *testing.T) {
 
 func TestAcquireViewerLock_AlreadyLocked_HasPIDAndTime(t *testing.T) {
 	dir := t.TempDir()
-	lockPath := filepath.Join(dir, "run", "viewer.lock")
+	lockPath := filepath.Join(dir, "viewer", "viewer.lock")
 
 	before := time.Now().Truncate(time.Second)
 
@@ -129,7 +129,7 @@ func TestAcquireViewerLock_AlreadyLocked_HasPIDAndTime(t *testing.T) {
 
 func TestAcquireViewerLock_ReacquireAfterRelease(t *testing.T) {
 	dir := t.TempDir()
-	lockPath := filepath.Join(dir, "run", "viewer.lock")
+	lockPath := filepath.Join(dir, "viewer", "viewer.lock")
 
 	first, err := infra.AcquireViewerLock(lockPath)
 	if err != nil {
@@ -146,13 +146,13 @@ func TestAcquireViewerLock_ReacquireAfterRelease(t *testing.T) {
 	defer second.Release() //nolint:errcheck
 }
 
-func TestAcquireViewerLock_CreatesRunDir(t *testing.T) {
+func TestAcquireViewerLock_CreatesViewerDir(t *testing.T) {
 	dir := t.TempDir()
-	runDir := filepath.Join(dir, "run")
-	lockPath := filepath.Join(runDir, "viewer.lock")
+	viewerDir := filepath.Join(dir, "viewer")
+	lockPath := filepath.Join(viewerDir, "viewer.lock")
 
-	if _, err := os.Stat(runDir); !os.IsNotExist(err) {
-		t.Fatalf("expected run dir to not exist before test")
+	if _, err := os.Stat(viewerDir); !os.IsNotExist(err) {
+		t.Fatalf("expected viewer dir to not exist before test")
 	}
 
 	vl, err := infra.AcquireViewerLock(lockPath)
@@ -161,11 +161,11 @@ func TestAcquireViewerLock_CreatesRunDir(t *testing.T) {
 	}
 	defer vl.Release() //nolint:errcheck
 
-	info, err := os.Stat(runDir)
+	info, err := os.Stat(viewerDir)
 	if err != nil {
-		t.Fatalf("expected run dir to be created at %s: %v", runDir, err)
+		t.Fatalf("expected viewer dir to be created at %s: %v", viewerDir, err)
 	}
 	if !info.IsDir() {
-		t.Errorf("expected %s to be a directory", runDir)
+		t.Errorf("expected %s to be a directory", viewerDir)
 	}
 }
