@@ -11,8 +11,14 @@ builds:
       - linux
     goarch:
       - amd64
+      - arm64
     ldflags:
       - -s -w -X github.com/canpok1/vox-actor/cmd.version={{.Version}}
+    overrides:
+      - goos: linux
+        goarch: arm64
+        env:
+          - CC=aarch64-linux-gnu-gcc
 
   - id: darwin
     env:
