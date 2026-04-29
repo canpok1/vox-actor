@@ -5,11 +5,13 @@ package e2e
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // runCLI はビルド済みの vox-actor バイナリを指定の引数・環境変数で実行し、
@@ -110,4 +112,21 @@ func countNonEmptyLines(s string) int {
 		}
 	}
 	return n
+}
+
+// writeViewerLockFile は homeDir 配下に viewer ロックファイルを書き込む。
+// addr は "host:port" 形式で指定する。
+// ロックファイルパスは $HOME/.vox-actor/viewer/viewer.lock。
+func writeViewerLockFile(t *testing.T, homeDir, addr string) {
+	t.Helper()
+	lockDir := filepath.Join(homeDir, ".vox-actor", "viewer")
+	if err := os.MkdirAll(lockDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll lock dir: %v", err)
+	}
+	lockPath := filepath.Join(lockDir, "viewer.lock")
+	content := fmt.Sprintf("pid=%d\nstarted_at=%s\naddr=%s\n",
+		os.Getpid(), time.Now().Format(time.RFC3339), addr)
+	if err := os.WriteFile(lockPath, []byte(content), 0o644); err != nil {
+		t.Fatalf("write lock file: %v", err)
+	}
 }
