@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import type { TimelineEntry } from "../types/api";
 import { TimelineItem } from "./TimelineItem";
 
@@ -25,25 +25,26 @@ export function Timeline({
   const prevIsCharacterMode = useRef(isCharacterMode);
   const hasInitialScrolled = useRef(false);
 
+  const scrollToBottom = useCallback(() => {
+    const list = listRef.current;
+    if (list) {
+      list.scrollTop = list.scrollHeight;
+    }
+  }, []);
+
   useEffect(() => {
     if (!isCharacterMode && prevIsCharacterMode.current) {
-      const list = listRef.current;
-      if (list) {
-        list.scrollTop = list.scrollHeight;
-      }
+      scrollToBottom();
     }
     prevIsCharacterMode.current = isCharacterMode;
-  }, [isCharacterMode]);
+  }, [isCharacterMode, scrollToBottom]);
 
   useEffect(() => {
     if (!hasInitialScrolled.current && entries.length > 0) {
-      const list = listRef.current;
-      if (list) {
-        list.scrollTop = list.scrollHeight;
-      }
+      scrollToBottom();
       hasInitialScrolled.current = true;
     }
-  }, [entries]);
+  }, [entries, scrollToBottom]);
 
   const characterModeClipId = playingClipId ?? lastPlayingClipId;
   const displayEntries = isCharacterMode
