@@ -23,6 +23,7 @@ export function Timeline({
 }: TimelineProps) {
   const listRef = useRef<HTMLOListElement>(null);
   const prevIsCharacterMode = useRef(isCharacterMode);
+  const hasInitialScrolled = useRef(false);
 
   useEffect(() => {
     if (!isCharacterMode && prevIsCharacterMode.current) {
@@ -33,6 +34,16 @@ export function Timeline({
     }
     prevIsCharacterMode.current = isCharacterMode;
   }, [isCharacterMode]);
+
+  useEffect(() => {
+    if (!hasInitialScrolled.current && entries.length > 0) {
+      const list = listRef.current;
+      if (list) {
+        list.scrollTop = list.scrollHeight;
+      }
+      hasInitialScrolled.current = true;
+    }
+  }, [entries]);
 
   const characterModeClipId = playingClipId ?? lastPlayingClipId;
   const displayEntries = isCharacterMode
