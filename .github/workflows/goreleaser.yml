@@ -25,6 +25,9 @@ jobs:
       - name: Install ALSA development libraries (amd64 + arm64) and cross compiler
         run: |
           sudo dpkg --add-architecture arm64
+          sudo sed -i 's/^Types: deb$/Types: deb\nArchitectures: amd64/' /etc/apt/sources.list.d/ubuntu.sources
+          printf 'Types: deb\nURIs: http://ports.ubuntu.com/ubuntu-ports\nSuites: noble noble-updates noble-backports noble-security\nComponents: main restricted universe multiverse\nArchitectures: arm64\nSigned-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg\n' \
+            | sudo tee /etc/apt/sources.list.d/ubuntu-ports-arm64.sources
           sudo apt-get update
           sudo apt-get install -y \
             libasound2-dev \
