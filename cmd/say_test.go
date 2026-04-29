@@ -3,7 +3,11 @@ package cmd
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
+	"log/slog"
+	"net/http"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -14,6 +18,11 @@ import (
 
 // say コマンド テストリスト
 // DONE: sayサブコマンドがrootに登録されている
+// #418 viewer 連携:
+// DONE: viewer 起動中は /api/play に POST してローカル再生をしない → TestRunSay_ViewerRunning_POSTsToViewer
+// DONE: viewer 無音モード応答で WARN ログを出す                   → TestRunSay_ViewerRunning_SilentMode_Warns
+// DONE: viewer 未起動はローカル再生にフォールバック               → TestRunSay_ViewerNotRunning_UsesLocalPlayer
+// DONE: --dry-run 時は viewer へ POST しない                      → TestRunSay_DryRun_NoViewerPost
 // DONE: 引数なしでErrUsageを返す
 // DONE: ヘルプ出力に全フラグが含まれる（--engine-url, --speaker, --speed, --pitch, --intonation, --verbose）
 // DONE: ヘルプ出力に--output/--watchフラグが含まれない
@@ -203,3 +212,166 @@ type noopPlayer struct{}
 func (n *noopPlayer) Play(_ context.Context, _ []byte, _ app.PlayMeta) error {
 	return errors.New("must not be called")
 }
+
+// --- viewer 連携テスト (#418) ---
+
+// newCmdWithContext は context.Background() を設定した cobra.Command を返すテストヘルパー。
+func newCmdWithContext(t *testing.T) *cobra.Command {
+	t.Helper()
+	cmd := &cobra.Command{}
+	cmd.SetContext(context.Background())
+	return cmd
+}
+
+func TestRunSay_ViewerRunning_POSTsToViewer(t *testing.T) {
+	var postCount int
+	var capturedReq map[string]interface{}
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/status", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	mux.HandleFunc("/api/play", func(w http.ResponseWriter, r *http.Request) {
+		postCount++
+		_ = json.NewDecoder(r.Body).Decode(&capturedReq)
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"silent": false})
+	})
+	lockPath, _ := setupFakeViewer(t, mux)
+
+	cmd := newCmdWithContext(t)
+	registerCommonFlags(cmd)
+	_ = cmd.ParseFlags([]string{})
+
+	deps := &SayDeps{
+		ClientFactory:    func(_ string) app.VoicevoxClient { return &noopClient{} },
+		Player:           &noopPlayer{},
+		LockPathResolver: func() (string, error) { return lockPath, nil },
+	}
+
+	if err := runSay(cmd, []string{"こんにちは"}, deps); err != nil {
+		t.Fatalf("runSay: %v", err)
+	}
+	if postCount != 1 {
+		t.Errorf("expected 1 POST to /api/play, got %d", postCount)
+	}
+	if capturedReq["text"] != "こんにちは" {
+		t.Errorf("expected text=%q, got %v", "こんにちは", capturedReq["text"])
+	}
+}
+
+func TestRunSay_ViewerRunning_SilentMode_Warns(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/status", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	mux.HandleFunc("/api/play", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"silent":        true,
+			"silent_reason": "VOICEVOX接続失敗",
+		})
+	})
+	lockPath, _ := setupFakeViewer(t, mux)
+
+	cmd := newCmdWithContext(t)
+	registerCommonFlags(cmd)
+	_ = cmd.ParseFlags([]string{})
+
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
+
+	deps := &SayDeps{
+		ClientFactory:    func(_ string) app.VoicevoxClient { return &noopClient{} },
+		Player:           &noopPlayer{},
+		LockPathResolver: func() (string, error) { return lockPath, nil },
+		Logger:           logger,
+	}
+
+	if err := runSay(cmd, []string{"テスト"}, deps); err != nil {
+		t.Fatalf("runSay: %v", err)
+	}
+	output := buf.String()
+	if !strings.Contains(output, "WARN") {
+		t.Errorf("expected WARN log for silent mode, got: %s", output)
+	}
+}
+
+func TestRunSay_ViewerNotRunning_UsesLocalPlayer(t *testing.T) {
+	playCalled := false
+
+	player := &trackingPlayer{playFn: func() { playCalled = true }}
+	client := &mockSayClient{}
+
+	dir := t.TempDir()
+	lockPath := filepath.Join(dir, "viewer.lock")
+
+	cmd := newCmdWithContext(t)
+	registerCommonFlags(cmd)
+	_ = cmd.ParseFlags([]string{})
+
+	deps := &SayDeps{
+		ClientFactory:    func(_ string) app.VoicevoxClient { return client },
+		Player:           player,
+		LockPathResolver: func() (string, error) { return lockPath, nil },
+	}
+
+	if err := runSay(cmd, []string{"ローカル再生テスト"}, deps); err != nil {
+		t.Fatalf("runSay: %v", err)
+	}
+	if !playCalled {
+		t.Error("expected local player to be called")
+	}
+}
+
+func TestRunSay_DryRun_NoViewerPost(t *testing.T) {
+	var postCount int
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/status", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	mux.HandleFunc("/api/play", func(w http.ResponseWriter, r *http.Request) {
+		postCount++
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"silent": false})
+	})
+	lockPath, _ := setupFakeViewer(t, mux)
+
+	cmd := newCmdWithContext(t)
+	registerCommonFlags(cmd)
+	_ = cmd.ParseFlags([]string{"--dry-run"})
+
+	deps := &SayDeps{
+		ClientFactory:    func(_ string) app.VoicevoxClient { return &noopClient{} },
+		Player:           &noopPlayer{},
+		LockPathResolver: func() (string, error) { return lockPath, nil },
+	}
+
+	if err := runSay(cmd, []string{"ドライラン"}, deps); err != nil {
+		t.Fatalf("runSay: %v", err)
+	}
+	if postCount != 0 {
+		t.Errorf("expected no POST in dry-run, got %d", postCount)
+	}
+}
+
+// trackingPlayer は Play が呼ばれたかを追跡するスタブ。
+type trackingPlayer struct {
+	playFn func()
+}
+
+func (p *trackingPlayer) Play(_ context.Context, _ []byte, _ app.PlayMeta) error {
+	if p.playFn != nil {
+		p.playFn()
+	}
+	return nil
+}
+
+// mockSayClient は say テスト用の最小限 VoicevoxClient スタブ。
+type mockSayClient struct{}
+
+func (c *mockSayClient) HealthCheck(_ context.Context) error { return nil }
+func (c *mockSayClient) CreateQuery(_ context.Context, _ string, _ int) (*entity.AudioQuery, error) {
+	return &entity.AudioQuery{}, nil
+}
+func (c *mockSayClient) Synthesize(_ context.Context, _ *entity.AudioQuery, _ int) ([]byte, error) {
+	return []byte("RIFFx"), nil
+}
+func (c *mockSayClient) GetSpeakers(_ context.Context) ([]entity.Speaker, error) { return nil, nil }

@@ -63,6 +63,15 @@ func findViewerCmd(t *testing.T, rootCmd *cobra.Command) *cobra.Command {
 	return nil
 }
 
+// tempLockResolver はテスト用に一時ディレクトリのロックパスを返す LockPathResolver を作る。
+// viewer が実際に起動中でも干渉しない隔離された lock path を使うため各テストで利用する。
+func tempLockResolver(t *testing.T) func() (string, error) {
+	t.Helper()
+	dir := t.TempDir()
+	lockPath := filepath.Join(dir, "viewer.lock")
+	return func() (string, error) { return lockPath, nil }
+}
+
 func TestViewerCmd_RegisteredAsSubcommand(t *testing.T) {
 	rootCmd := makeRootCmd()
 
@@ -171,6 +180,7 @@ func TestViewerCmd_PortOutOfRange_ReturnsUsageError(t *testing.T) {
 					StreamPlayerFactory: func(_ string, _ *slog.Logger, _ map[int]entity.SpeakerStyleInfo, _ []int, _ app.VoicevoxClient) (app.StreamPlayer, error) {
 						return &stubStreamPlayer{}, nil
 					},
+					LockPathResolver: tempLockResolver(t),
 				},
 			}
 			rootCmd := makeRootCmd(deps)
@@ -203,6 +213,7 @@ func TestViewerCmd_WatchWithFile_ReturnsUsageError(t *testing.T) {
 			StreamPlayerFactory: func(_ string, _ *slog.Logger, _ map[int]entity.SpeakerStyleInfo, _ []int, _ app.VoicevoxClient) (app.StreamPlayer, error) {
 				return &stubStreamPlayer{}, nil
 			},
+			LockPathResolver: tempLockResolver(t),
 		},
 	}
 	rootCmd := makeRootCmd(deps)
@@ -227,6 +238,7 @@ func TestViewerCmd_WatchWithNonExistentPath_ReturnsUsageError(t *testing.T) {
 			StreamPlayerFactory: func(_ string, _ *slog.Logger, _ map[int]entity.SpeakerStyleInfo, _ []int, _ app.VoicevoxClient) (app.StreamPlayer, error) {
 				return &stubStreamPlayer{}, nil
 			},
+			LockPathResolver: tempLockResolver(t),
 		},
 	}
 	rootCmd := makeRootCmd(deps)
@@ -268,6 +280,7 @@ func TestViewerCmd_HealthCheckFailure_FallsBackToSilent(t *testing.T) {
 			StreamPlayerFactory: func(_ string, _ *slog.Logger, _ map[int]entity.SpeakerStyleInfo, _ []int, _ app.VoicevoxClient) (app.StreamPlayer, error) {
 				return sp, nil
 			},
+			LockPathResolver: tempLockResolver(t),
 		},
 	}
 
@@ -296,6 +309,7 @@ func TestViewerCmd_GetSpeakersFailure_FallsBackToSilent(t *testing.T) {
 			StreamPlayerFactory: func(_ string, _ *slog.Logger, _ map[int]entity.SpeakerStyleInfo, _ []int, _ app.VoicevoxClient) (app.StreamPlayer, error) {
 				return sp, nil
 			},
+			LockPathResolver: tempLockResolver(t),
 		},
 	}
 
@@ -328,6 +342,7 @@ func TestViewerCmd_EngineHealthy_DoesNotEnterSilent(t *testing.T) {
 			StreamPlayerFactory: func(_ string, _ *slog.Logger, _ map[int]entity.SpeakerStyleInfo, _ []int, _ app.VoicevoxClient) (app.StreamPlayer, error) {
 				return sp, nil
 			},
+			LockPathResolver: tempLockResolver(t),
 		},
 	}
 
@@ -362,6 +377,7 @@ func TestViewerCmd_WatchQueue_ResolvesAndCreatesQueueDir(t *testing.T) {
 				resolverCalled++
 				return queueDir, nil
 			},
+			LockPathResolver: tempLockResolver(t),
 		},
 	}
 
@@ -389,6 +405,7 @@ func TestViewerCmd_WatchQueue_ResolverReturnsNotInRepo_ReturnsError(t *testing.T
 			QueuePathResolver: func() (string, error) {
 				return "", infra.ErrNotInGitRepo
 			},
+			LockPathResolver: tempLockResolver(t),
 		},
 	}
 

@@ -73,6 +73,14 @@ package infra
 // TODO: errorEvent.id はクリップIDと独立に 1 から単調増加する
 // TODO: BroadcastError は複数購読者にブロードキャストされる
 //
+// #418 /api/play エンドポイント:
+// DONE: GET /api/play は 405 を返す                               → TestHTTPStreamPlayer_APIPlay_MethodNotAllowed
+// DONE: voicevoxClient 未設定時は 503 を返す                      → TestHTTPStreamPlayer_APIPlay_NoClient
+// DONE: 不正 JSON ボディで 400 を返す                             → TestHTTPStreamPlayer_APIPlay_InvalidJSON
+// DONE: 正常リクエストで合成→Play して 200 {silent:false} を返す → TestHTTPStreamPlayer_APIPlay_Success
+// DONE: 無音モード時は合成せず 200 {silent:true,silent_reason} を返す → TestHTTPStreamPlayer_APIPlay_SilentMode
+// DONE: 合成失敗時に 502 を返す                                   → TestHTTPStreamPlayer_APIPlay_SynthesisFails
+//
 // #408 再生履歴ファイル保存・起動時復元:
 // TODO: Play() で clip が YYYY-MM-DD.jsonl に追記される          → TestHTTPStreamPlayer_History_WritesClipOnPlay
 // TODO: PlayText() で clip が YYYY-MM-DD.jsonl に追記される      → TestHTTPStreamPlayer_History_WritesClipOnPlayText
@@ -2738,5 +2746,121 @@ func TestHTTPStreamPlayer_APIHistory_CrossDayReturnsNewFile(t *testing.T) {
 	}
 	if result.Entries[0].Text != "day2エントリ" {
 		t.Errorf("expected day2 entry, got %q", result.Entries[0].Text)
+	}
+}
+
+// --- /api/play tests (#418) ---
+
+func TestHTTPStreamPlayer_APIPlay_MethodNotAllowed(t *testing.T) {
+	t.Parallel()
+	p := newStartedPlayer(t)
+	resp, err := http.Get("http://" + p.Addr() + "/api/play")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusMethodNotAllowed {
+		t.Errorf("expected 405, got %d", resp.StatusCode)
+	}
+}
+
+func TestHTTPStreamPlayer_APIPlay_NoClient(t *testing.T) {
+	t.Parallel()
+	p := newStartedPlayer(t)
+	body := bytes.NewBufferString(`{"text":"hello","speaker_id":2}`)
+	resp, err := http.Post("http://"+p.Addr()+"/api/play", "application/json", body)
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusServiceUnavailable {
+		t.Errorf("expected 503, got %d", resp.StatusCode)
+	}
+}
+
+func TestHTTPStreamPlayer_APIPlay_InvalidJSON(t *testing.T) {
+	t.Parallel()
+	stub := &testVoicevoxClient{wav: []byte("RIFFx")}
+	p := newStartedPlayerWithOpts(t, WithVoicevoxClient(stub))
+	body := bytes.NewBufferString(`not-json`)
+	resp, err := http.Post("http://"+p.Addr()+"/api/play", "application/json", body)
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", resp.StatusCode)
+	}
+}
+
+func TestHTTPStreamPlayer_APIPlay_Success(t *testing.T) {
+	t.Parallel()
+	stub := &testVoicevoxClient{wav: []byte("RIFFx")}
+	p := newStartedPlayerWithOpts(t, WithVoicevoxClient(stub))
+	body := bytes.NewBufferString(`{"text":"こんにちは","speaker_id":2}`)
+	resp, err := http.Post("http://"+p.Addr()+"/api/play", "application/json", body)
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected 200, got %d", resp.StatusCode)
+	}
+	var result ViewerPlayResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if result.Silent {
+		t.Errorf("expected silent=false, got true")
+	}
+	if stub.capturedText != "こんにちは" {
+		t.Errorf("expected capturedText=%q, got %q", "こんにちは", stub.capturedText)
+	}
+	if stub.capturedSpeaker != 2 {
+		t.Errorf("expected capturedSpeaker=2, got %d", stub.capturedSpeaker)
+	}
+}
+
+func TestHTTPStreamPlayer_APIPlay_SilentMode(t *testing.T) {
+	t.Parallel()
+	stub := &testVoicevoxClient{wav: []byte("RIFFx")}
+	p := newStartedPlayerWithOpts(t, WithVoicevoxClient(stub))
+	p.SetSilent("VOICEVOX接続失敗")
+	body := bytes.NewBufferString(`{"text":"こんにちは","speaker_id":2}`)
+	resp, err := http.Post("http://"+p.Addr()+"/api/play", "application/json", body)
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected 200, got %d", resp.StatusCode)
+	}
+	var result ViewerPlayResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if !result.Silent {
+		t.Errorf("expected silent=true")
+	}
+	if result.SilentReason == "" {
+		t.Errorf("expected non-empty silent_reason")
+	}
+	if stub.createQueryCall != 0 {
+		t.Errorf("expected no synthesis in silent mode, got createQueryCall=%d", stub.createQueryCall)
+	}
+}
+
+func TestHTTPStreamPlayer_APIPlay_SynthesisFails(t *testing.T) {
+	t.Parallel()
+	stub := &testVoicevoxClient{createQueryErr: errors.New("synthesis error")}
+	p := newStartedPlayerWithOpts(t, WithVoicevoxClient(stub))
+	body := bytes.NewBufferString(`{"text":"hello","speaker_id":2}`)
+	resp, err := http.Post("http://"+p.Addr()+"/api/play", "application/json", body)
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusBadGateway {
+		t.Errorf("expected 502, got %d", resp.StatusCode)
 	}
 }

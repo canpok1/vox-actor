@@ -307,6 +307,7 @@ func (p *HTTPStreamPlayer) Start(_ context.Context) error {
 	mux.HandleFunc("/events", p.handleEvents)
 	mux.HandleFunc("/api/status", p.handleAPIStatus)
 	mux.HandleFunc("/api/history", p.handleAPIHistory)
+	mux.HandleFunc("/api/play", p.handleAPIPlay)
 	mux.HandleFunc("/api/characters", p.handleAPICharacters)
 	mux.HandleFunc("/assets/images/", p.handleCharacterImage)
 	mux.HandleFunc("/test-clip", p.handleTestClip)
@@ -863,6 +864,65 @@ func (p *HTTPStreamPlayer) handleAPIHistory(w http.ResponseWriter, _ *http.Reque
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	_, _ = w.Write(payload)
+}
+
+func (p *HTTPStreamPlayer) handleAPIPlay(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	if p.voicevoxClient == nil {
+		http.Error(w, "voicevox client is not configured", http.StatusServiceUnavailable)
+		return
+	}
+
+	var req ViewerPlayRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	p.mu.Lock()
+	silent := p.silent
+	silentReason := p.silentReason
+	p.mu.Unlock()
+
+	if silent {
+		resp := ViewerPlayResponse{Silent: true, SilentReason: silentReason}
+		payload, _ := json.Marshal(resp)
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		_, _ = w.Write(payload)
+		return
+	}
+
+	ctx := r.Context()
+	query, err := p.voicevoxClient.CreateQuery(ctx, req.Text, req.SpeakerID)
+	if err != nil {
+		p.logger.Error("/api/play CreateQuery failed", "speakerID", req.SpeakerID, "error", err)
+		http.Error(w, "failed to create audio query", http.StatusBadGateway)
+		return
+	}
+
+	q := query.WithOverrides(req.Speed, req.Pitch, req.Intonation)
+	wav, err := p.voicevoxClient.Synthesize(ctx, &q, req.SpeakerID)
+	if err != nil {
+		p.logger.Error("/api/play Synthesize failed", "speakerID", req.SpeakerID, "error", err)
+		http.Error(w, "failed to synthesize", http.StatusBadGateway)
+		return
+	}
+
+	meta := app.PlayMeta{Text: req.Text, SpeakerID: req.SpeakerID}
+	if err := p.Play(ctx, wav, meta); err != nil {
+		p.logger.Error("/api/play Play failed", "speakerID", req.SpeakerID, "error", err)
+		http.Error(w, "failed to play", http.StatusInternalServerError)
+		return
+	}
+
+	resp := ViewerPlayResponse{Silent: false}
+	payload, _ := json.Marshal(resp)
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	_, _ = w.Write(payload)
 }

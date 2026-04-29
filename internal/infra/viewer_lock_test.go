@@ -8,6 +8,9 @@ package infra_test
 // - ViewerAlreadyRunningError に先行PIDと起動時刻が含まれる    → TestAcquireViewerLock_AlreadyLocked_HasPIDAndTime
 // - ロック解放後に再取得できる（stale lock なし）               → TestAcquireViewerLock_ReacquireAfterRelease
 // - viewer/ ディレクトリが存在しなければ自動作成する            → TestAcquireViewerLock_CreatesViewerDir
+// - WriteAddr でロックファイルに addr が書き込まれる            → TestViewerLock_WriteAddr_WritesAddrToFile
+// - ReadViewerLockInfo で全フィールドが読み込める               → TestReadViewerLockInfo_ReadsAllFields
+// - ReadViewerLockInfo で addr なしのファイルも読み込める       → TestReadViewerLockInfo_NoAddrField
 
 import (
 	"errors"
@@ -167,5 +170,79 @@ func TestAcquireViewerLock_CreatesViewerDir(t *testing.T) {
 	}
 	if !info.IsDir() {
 		t.Errorf("expected %s to be a directory", viewerDir)
+	}
+}
+
+func TestViewerLock_WriteAddr_WritesAddrToFile(t *testing.T) {
+	dir := t.TempDir()
+	lockPath := filepath.Join(dir, "viewer", "viewer.lock")
+
+	vl, err := infra.AcquireViewerLock(lockPath)
+	if err != nil {
+		t.Fatalf("AcquireViewerLock: %v", err)
+	}
+	defer vl.Release() //nolint:errcheck
+
+	addr := "127.0.0.1:8080"
+	if err := vl.WriteAddr(addr); err != nil {
+		t.Fatalf("WriteAddr: %v", err)
+	}
+
+	data, err := os.ReadFile(lockPath)
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	content := string(data)
+	if !strings.Contains(content, "addr="+addr) {
+		t.Errorf("expected lock file to contain addr=%s, got:\n%s", addr, content)
+	}
+}
+
+func TestReadViewerLockInfo_ReadsAllFields(t *testing.T) {
+	dir := t.TempDir()
+	lockPath := filepath.Join(dir, "viewer", "viewer.lock")
+
+	vl, err := infra.AcquireViewerLock(lockPath)
+	if err != nil {
+		t.Fatalf("AcquireViewerLock: %v", err)
+	}
+	defer vl.Release() //nolint:errcheck
+
+	addr := "127.0.0.1:9090"
+	if err := vl.WriteAddr(addr); err != nil {
+		t.Fatalf("WriteAddr: %v", err)
+	}
+
+	info, err := infra.ReadViewerLockInfo(lockPath)
+	if err != nil {
+		t.Fatalf("ReadViewerLockInfo: %v", err)
+	}
+	if info.PID != os.Getpid() {
+		t.Errorf("expected PID=%d, got %d", os.Getpid(), info.PID)
+	}
+	if time.Since(info.StartedAt) > 5*time.Second {
+		t.Errorf("expected StartedAt to be recent, got %v", info.StartedAt)
+	}
+	if info.Addr != addr {
+		t.Errorf("expected Addr=%s, got %s", addr, info.Addr)
+	}
+}
+
+func TestReadViewerLockInfo_NoAddrField(t *testing.T) {
+	dir := t.TempDir()
+	lockPath := filepath.Join(dir, "viewer", "viewer.lock")
+
+	vl, err := infra.AcquireViewerLock(lockPath)
+	if err != nil {
+		t.Fatalf("AcquireViewerLock: %v", err)
+	}
+	defer vl.Release() //nolint:errcheck
+
+	info, err := infra.ReadViewerLockInfo(lockPath)
+	if err != nil {
+		t.Fatalf("ReadViewerLockInfo: %v", err)
+	}
+	if info.Addr != "" {
+		t.Errorf("expected empty Addr, got %s", info.Addr)
 	}
 }

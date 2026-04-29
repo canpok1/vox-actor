@@ -2,15 +2,27 @@ package cmd
 
 import (
 	"bytes"
+	"context"
+	"encoding/json"
 	"errors"
+	"log/slog"
+	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/canpok1/vox-actor/internal/app"
+	"github.com/canpok1/vox-actor/internal/domain/entity"
 	"github.com/spf13/cobra"
 )
 
 // act コマンド テストリスト（すべて実装済み）
+// #418 viewer 連携:
+// DONE: viewer 起動中は /api/play を行ごとに POST してローカル再生しない    → TestRunAct_ViewerRunning_POSTsPerLine
+// DONE: viewer 未起動はローカル再生にフォールバック                         → TestRunAct_ViewerNotRunning_UsesLocalPlayer
+// DONE: --dry-run 時は viewer へ POST しない                               → TestRunAct_DryRun_NoViewerPost
+// DONE: 途中行で POST 失敗した場合即座にエラー終了する                      → TestRunAct_ViewerRunning_PostFails_StopsEarly
 
 // グレースフルシャットダウン テストリスト
 // DONE: actコマンドのcontextにシグナルハンドリングが設定されていることを確認
@@ -311,3 +323,206 @@ func TestActCmd_EnvVarVOXSpeaker_InvalidValue(t *testing.T) {
 		t.Errorf("expected default speaker 3 when env var is invalid, got: %d", speaker)
 	}
 }
+
+// --- viewer 連携テスト (#418) ---
+
+// stubScriptReaderForAct はテキストファイルを渡さずに固定スクリプトを返すスタブ。
+type stubScriptReaderForAct struct {
+	scripts []entity.Script
+}
+
+func (s stubScriptReaderForAct) Read(_ string) ([]entity.Script, error) {
+	return s.scripts, nil
+}
+
+func TestRunAct_ViewerRunning_POSTsPerLine(t *testing.T) {
+	var postCount int
+	var capturedTexts []string
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/status", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) })
+	mux.HandleFunc("/api/play", func(w http.ResponseWriter, r *http.Request) {
+		postCount++
+		var req map[string]interface{}
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		if text, ok := req["text"].(string); ok {
+			capturedTexts = append(capturedTexts, text)
+		}
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"silent": false})
+	})
+	lockPath, _ := setupFakeViewer(t, mux)
+
+	scriptFile := filepath.Join(t.TempDir(), "test.txt")
+	if err := os.WriteFile(scriptFile, []byte("line1\nline2\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	cmd := newCmdWithContext(t)
+	registerCommonFlags(cmd)
+	_ = cmd.ParseFlags([]string{})
+
+	deps := &ActDeps{
+		Reader:           stubScriptReaderForAct{scripts: []entity.Script{{Text: "line1"}, {Text: "line2"}}},
+		ClientFactory:    func(_ string) app.VoicevoxClient { return &noopClient{} },
+		Player:           &noopPlayer{},
+		LockPathResolver: func() (string, error) { return lockPath, nil },
+	}
+
+	if err := runAct(cmd, []string{scriptFile}, deps); err != nil {
+		t.Fatalf("runAct: %v", err)
+	}
+	if postCount != 2 {
+		t.Errorf("expected 2 POSTs, got %d", postCount)
+	}
+	if len(capturedTexts) != 2 || capturedTexts[0] != "line1" || capturedTexts[1] != "line2" {
+		t.Errorf("expected texts [line1, line2], got %v", capturedTexts)
+	}
+}
+
+func TestRunAct_ViewerNotRunning_UsesLocalPlayer(t *testing.T) {
+	playCalled := 0
+	player := &trackingPlayer{playFn: func() { playCalled++ }}
+	client := &mockSayClient{}
+
+	dir := t.TempDir()
+	lockPath := filepath.Join(dir, "viewer.lock")
+
+	scriptFile := filepath.Join(t.TempDir(), "test.txt")
+	if err := os.WriteFile(scriptFile, []byte("hello\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	cmd := newCmdWithContext(t)
+	registerCommonFlags(cmd)
+	_ = cmd.ParseFlags([]string{})
+
+	deps := &ActDeps{
+		Reader:           stubScriptReaderForAct{scripts: []entity.Script{{Text: "hello"}}},
+		ClientFactory:    func(_ string) app.VoicevoxClient { return client },
+		Player:           player,
+		LockPathResolver: func() (string, error) { return lockPath, nil },
+	}
+
+	if err := runAct(cmd, []string{scriptFile}, deps); err != nil {
+		t.Fatalf("runAct: %v", err)
+	}
+	if playCalled != 1 {
+		t.Errorf("expected local player called once, got %d", playCalled)
+	}
+}
+
+func TestRunAct_DryRun_NoViewerPost(t *testing.T) {
+	var postCount int
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/status", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) })
+	mux.HandleFunc("/api/play", func(w http.ResponseWriter, r *http.Request) {
+		postCount++
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"silent": false})
+	})
+	lockPath, _ := setupFakeViewer(t, mux)
+
+	scriptFile := filepath.Join(t.TempDir(), "test.txt")
+	if err := os.WriteFile(scriptFile, []byte("hello\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	cmd := newCmdWithContext(t)
+	registerCommonFlags(cmd)
+	_ = cmd.ParseFlags([]string{"--dry-run"})
+
+	deps := &ActDeps{
+		Reader:           stubScriptReaderForAct{scripts: []entity.Script{{Text: "hello"}}},
+		ClientFactory:    func(_ string) app.VoicevoxClient { return &noopClient{} },
+		Player:           &noopPlayer{},
+		LockPathResolver: func() (string, error) { return lockPath, nil },
+	}
+
+	if err := runAct(cmd, []string{scriptFile}, deps); err != nil {
+		t.Fatalf("runAct: %v", err)
+	}
+	if postCount != 0 {
+		t.Errorf("expected no POST in dry-run, got %d", postCount)
+	}
+}
+
+func TestRunAct_ViewerRunning_PostFails_StopsEarly(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/status", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) })
+	mux.HandleFunc("/api/play", func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+	})
+	lockPath, _ := setupFakeViewer(t, mux)
+
+	scriptFile := filepath.Join(t.TempDir(), "test.txt")
+	if err := os.WriteFile(scriptFile, []byte("line1\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	cmd := newCmdWithContext(t)
+	registerCommonFlags(cmd)
+	_ = cmd.ParseFlags([]string{})
+
+	deps := &ActDeps{
+		Reader:           stubScriptReaderForAct{scripts: []entity.Script{{Text: "line1"}}},
+		ClientFactory:    func(_ string) app.VoicevoxClient { return &noopClient{} },
+		Player:           &noopPlayer{},
+		LockPathResolver: func() (string, error) { return lockPath, nil },
+	}
+
+	err := runAct(cmd, []string{scriptFile}, deps)
+	if err == nil {
+		t.Fatal("expected error when POST fails, got nil")
+	}
+}
+
+func TestRunAct_ViewerRunning_SilentMode_Warns(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/status", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) })
+	mux.HandleFunc("/api/play", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"silent":        true,
+			"silent_reason": "VOICEVOX接続失敗",
+		})
+	})
+	lockPath, _ := setupFakeViewer(t, mux)
+
+	scriptFile := filepath.Join(t.TempDir(), "test.txt")
+	if err := os.WriteFile(scriptFile, []byte("hello\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	cmd := newCmdWithContext(t)
+	registerCommonFlags(cmd)
+	_ = cmd.ParseFlags([]string{})
+
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
+
+	deps := &ActDeps{
+		Reader:           stubScriptReaderForAct{scripts: []entity.Script{{Text: "hello"}}},
+		ClientFactory:    func(_ string) app.VoicevoxClient { return &noopClient{} },
+		Player:           &noopPlayer{},
+		LockPathResolver: func() (string, error) { return lockPath, nil },
+		Logger:           logger,
+	}
+
+	if err := runAct(cmd, []string{scriptFile}, deps); err != nil {
+		t.Fatalf("runAct: %v", err)
+	}
+	output := buf.String()
+	if !strings.Contains(output, "WARN") {
+		t.Errorf("expected WARN log for silent mode, got: %s", output)
+	}
+}
+
+// mockActClient は act テスト用の VoicevoxClient スタブ（HealthCheck OK、合成成功）。
+type mockActClient struct{}
+
+func (c *mockActClient) HealthCheck(_ context.Context) error { return nil }
+func (c *mockActClient) CreateQuery(_ context.Context, _ string, _ int) (*entity.AudioQuery, error) {
+	return &entity.AudioQuery{}, nil
+}
+func (c *mockActClient) Synthesize(_ context.Context, _ *entity.AudioQuery, _ int) ([]byte, error) {
+	return []byte("RIFFx"), nil
+}
+func (c *mockActClient) GetSpeakers(_ context.Context) ([]entity.Speaker, error) { return nil, nil }

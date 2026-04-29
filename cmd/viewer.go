@@ -111,15 +111,22 @@ func makeViewerCmd(deps *ViewerDeps) *cobra.Command {
 	return cmd
 }
 
-func resolveViewerLockPath(deps *ViewerDeps) (string, error) {
-	if deps != nil && deps.LockPathResolver != nil {
-		return deps.LockPathResolver()
+func resolveViewerLockPathWith(resolver func() (string, error)) (string, error) {
+	if resolver != nil {
+		return resolver()
 	}
 	ws, err := resolveWorkspaceWithFallback()
 	if err != nil {
 		return "", err
 	}
 	return filepath.Join(ws, "viewer", "viewer.lock"), nil
+}
+
+func resolveViewerLockPath(deps *ViewerDeps) (string, error) {
+	if deps != nil {
+		return resolveViewerLockPathWith(deps.LockPathResolver)
+	}
+	return resolveViewerLockPathWith(nil)
 }
 
 func runViewer(cmd *cobra.Command, deps *ViewerDeps) error {
@@ -190,6 +197,10 @@ func runViewer(cmd *cobra.Command, deps *ViewerDeps) error {
 		}
 	}()
 	logger.Info("stream server listening", "addr", sp.Addr(), "silent", silent)
+
+	if err := viewerLock.WriteAddr(sp.Addr()); err != nil {
+		logger.Warn("failed to write addr to viewer.lock", "error", err)
+	}
 
 	if len(dirs) == 0 {
 		<-ctx.Done()

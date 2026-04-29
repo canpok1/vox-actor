@@ -8,6 +8,7 @@ import (
 	"syscall"
 
 	"github.com/canpok1/vox-actor/internal/app"
+	"github.com/canpok1/vox-actor/internal/infra"
 	"github.com/spf13/cobra"
 )
 
@@ -18,6 +19,8 @@ type ActDeps struct {
 	Player            app.AudioPlayer
 	Mover             app.FileMover
 	DirWatcherFactory func(logger *slog.Logger) app.DirWatcher
+	LockPathResolver  func() (string, error)
+	Logger            *slog.Logger
 }
 
 func makeActCmd(deps *ActDeps) *cobra.Command {
@@ -41,6 +44,13 @@ func makeActCmd(deps *ActDeps) *cobra.Command {
 	cmd.Flags().Bool("watch-delete", false, "ディレクトリ監視モード（処理済みファイルを削除）")
 
 	return cmd
+}
+
+func resolveActLockPath(deps *ActDeps) (string, error) {
+	if deps != nil {
+		return resolveViewerLockPathWith(deps.LockPathResolver)
+	}
+	return resolveViewerLockPathWith(nil)
 }
 
 func runAct(cmd *cobra.Command, args []string, deps *ActDeps) error {
@@ -80,7 +90,12 @@ func runAct(cmd *cobra.Command, args []string, deps *ActDeps) error {
 	intonation, _ := cmd.Flags().GetFloat64("intonation")
 	dryRun, _ := cmd.Flags().GetBool("dry-run")
 
-	logger := buildLoggerFromFlags(cmd)
+	var logger *slog.Logger
+	if deps.Logger != nil {
+		logger = deps.Logger
+	} else {
+		logger = buildLoggerFromFlags(cmd)
+	}
 
 	client := deps.ClientFactory(engineURL)
 	if client == nil {
@@ -105,6 +120,48 @@ func runAct(cmd *cobra.Command, args []string, deps *ActDeps) error {
 			Intonation: &intonation,
 			DryRun:     dryRun,
 		})
+	}
+
+	if !dryRun {
+		lockPath, lockErr := resolveActLockPath(deps)
+		if lockErr != nil {
+			logger.Debug("could not resolve viewer lock path, using local player", "error", lockErr)
+		} else if addr, ok := infra.DetectViewer(lockPath); ok {
+			logger.Info("viewer detected, sending audio via /api/play", "addr", addr)
+			scripts, err := deps.Reader.Read(args[0])
+			if err != nil {
+				return err
+			}
+			vc := infra.NewViewerAPIClient(addr)
+			for _, script := range scripts {
+				if script.IsEmpty {
+					continue
+				}
+				if ctx.Err() != nil {
+					return nil
+				}
+				effectiveSpeakerID := script.ResolveSpeakerID(speakerID)
+				effectiveSpeed := script.ResolveSpeed(&speed)
+				effectivePitch := script.ResolvePitch(&pitch)
+				effectiveIntonation := script.ResolveIntonation(&intonation)
+				resp, postErr := vc.Play(ctx, infra.ViewerPlayRequest{
+					Text:       script.Text,
+					SpeakerID:  effectiveSpeakerID,
+					Speed:      effectiveSpeed,
+					Pitch:      effectivePitch,
+					Intonation: effectiveIntonation,
+				})
+				if postErr != nil {
+					return fmt.Errorf("act via viewer: %w", postErr)
+				}
+				if resp.Silent {
+					logger.Warn("viewer is in silent mode", "reason", resp.SilentReason)
+				}
+			}
+			return nil
+		} else {
+			logger.Debug("viewer not running, using local player")
+		}
 	}
 
 	uc := app.NewActUsecase(deps.Reader, client, deps.Player, app.WithLogger(logger))
