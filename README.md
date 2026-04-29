@@ -13,6 +13,9 @@
 - [VOICEVOXエンジン](https://voicevox.hiroshiba.jp/) が起動していること（デフォルト: `http://localhost:50021`）
   - インストーラー版: [公式サイト](https://voicevox.hiroshiba.jp/)からダウンロードしてインストール後、アプリを起動する
   - Docker版: `docker run --rm -p 50021:50021 voicevox/voicevox_engine:latest`
+- **Linux のみ**: ALSA ランタイムライブラリ（`libasound2` / `alsa-lib`）がインストールされていること
+  - Debian/Ubuntu: `sudo apt install libasound2` （Ubuntu 24.04 Noble 以降は `sudo apt install libasound2t64`）
+  - RHEL/Fedora 系: `sudo dnf install alsa-lib`
 - Go 1.26.1 以上（ソースからビルドする場合のみ）
 
 ## 🚀 クイックスタート
@@ -130,6 +133,8 @@ export VOX_ACTOR_MONOLOGUE_MODE=file
 
    [GitHub Releases](https://github.com/canpok1/vox-actor/releases)からビルド済みバイナリをダウンロードして配置します。
 
+   > **Linux ユーザーへ**: バイナリは ALSA ランタイムに動的リンクされています。実行前に `libasound2`（Ubuntu 24.04 以降は `libasound2t64`）または `alsa-lib`（RHEL/Fedora 系）をインストールしてください。詳細は[前提条件](#-前提条件)を参照してください。
+
    ```bash
    # Linux (x86_64) の場合
    curl -fLo vox-actor.tar.gz https://github.com/canpok1/vox-actor/releases/latest/download/vox-actor_Linux_x86_64.tar.gz
@@ -164,6 +169,22 @@ export VOX_ACTOR_MONOLOGUE_MODE=file
 - [CLIリファレンス](./docs/reference/cli.md) — `say` / `script` / `act` / `watch` サブコマンドの詳細
 - [プラグイン／スキルリファレンス](./docs/reference/plugins.md) — 対応キャラクター、スキルごとの仕様、再生モード、音声デバイス利用不可環境のセットアップ
 - [開発者向け情報](./docs/development/contributing.md) — ビルド・テスト・Lint等のコマンド、レイヤー構成と責務ルール
+
+## 🔧 トラブルシューティング
+
+### Linux: `error while loading shared libraries: libasound.so.2`
+
+```
+vox-actor: error while loading shared libraries: libasound.so.2: cannot open shared object file: No such file or directory
+```
+
+Linux 向けバイナリは ALSA（Advanced Linux Sound Architecture）ランタイムに動的リンクされています。上記エラーが出た場合は ALSA ランタイムをインストールしてください。
+
+| ディストリビューション | コマンド |
+|---|---|
+| Debian/Ubuntu（Ubuntu 23.10 以前） | `sudo apt install libasound2` |
+| Ubuntu 24.04 Noble 以降 | `sudo apt install libasound2t64` |
+| RHEL/Fedora 系 | `sudo dnf install alsa-lib` |
 
 ## ライセンス
 
