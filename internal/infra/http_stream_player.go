@@ -560,6 +560,7 @@ func (p *HTTPStreamPlayer) handleClip(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
+	w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 	writeWAV(w, data)
 }
 
