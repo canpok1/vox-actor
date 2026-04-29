@@ -200,3 +200,176 @@ func TestActE2E_JsonFile_OmittedParams_UsesCLIFlagDefaults(t *testing.T) {
 		}
 	}
 }
+
+func TestActE2E_WatchFlag_ExitCode2(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+
+	_, stderr, exitCode := runCLI(t, nil, "act", "--watch", dir)
+	if exitCode != 2 {
+		t.Fatalf("expected exit code 2 for removed --watch flag, got %d\nstderr:\n%s", exitCode, stderr)
+	}
+}
+
+func TestActE2E_WatchDeleteFlag_ExitCode2(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+
+	_, stderr, exitCode := runCLI(t, nil, "act", "--watch-delete", dir)
+	if exitCode != 2 {
+		t.Fatalf("expected exit code 2 for removed --watch-delete flag, got %d\nstderr:\n%s", exitCode, stderr)
+	}
+}
+
+func TestActE2E_Help_ExitZeroWithAllFlags(t *testing.T) {
+	t.Parallel()
+
+	stdout, _, exitCode := runCLI(t, nil, "act", "--help")
+
+	if exitCode != 0 {
+		t.Fatalf("expected exit 0 for act --help, got %d", exitCode)
+	}
+	for _, flag := range []string{"--engine-url", "--speaker", "--speed", "--pitch", "--intonation", "--verbose", "--dry-run"} {
+		if !strings.Contains(stdout, flag) {
+			t.Errorf("expected act --help to contain %q\nstdout:\n%s", flag, stdout)
+		}
+	}
+}
+
+func TestActE2E_EmptyFile_Txt_ExitsZero(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	path := writeTempFile(t, dir, "empty.txt", "")
+
+	_, stderr, exitCode := runCLI(t, nil, "act", "--dry-run", path)
+	if exitCode != 0 {
+		t.Fatalf("expected exit 0 for empty .txt, got %d\nstderr:\n%s", exitCode, stderr)
+	}
+}
+
+func TestActE2E_EmptyFile_Jsonl_ExitsZero(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	path := writeTempFile(t, dir, "empty.jsonl", "")
+
+	_, stderr, exitCode := runCLI(t, nil, "act", "--dry-run", path)
+	if exitCode != 0 {
+		t.Fatalf("expected exit 0 for empty .jsonl, got %d\nstderr:\n%s", exitCode, stderr)
+	}
+}
+
+func TestActE2E_EmptyJson_NoTextField_NonZero(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	path := writeTempFile(t, dir, "empty.json", "{}")
+
+	_, stderr, exitCode := runCLI(t, nil, "act", "--dry-run", path)
+	if exitCode == 0 {
+		t.Fatalf("expected non-zero exit for JSON missing 'text' field, got 0\nstderr:\n%s", stderr)
+	}
+	if strings.TrimSpace(stderr) == "" {
+		t.Error("expected non-empty stderr for missing 'text' field")
+	}
+}
+
+func TestActE2E_UnsupportedExtension_ExitsZero(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	path := writeTempFile(t, dir, "note.md", "# 見出し\n本文テキスト")
+
+	_, stderr, exitCode := runCLI(t, nil, "act", "--dry-run", path)
+	if exitCode != 0 {
+		t.Fatalf("expected exit 0 for .md file (treated as plain text), got %d\nstderr:\n%s", exitCode, stderr)
+	}
+}
+
+func TestActE2E_JsonlFile_PerLineParams_Reflected(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	content := `{"text":"いちぎょうめ","speaker":11,"speedScale":1.2,"pitchScale":0.05,"intonationScale":1.3}
+{"text":"にぎょうめ","speaker":7}
+`
+	path := writeTempFile(t, dir, "params.jsonl", content)
+
+	_, stderr, exitCode := runCLI(t, nil, "act", "--dry-run", path)
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d\nstderr:\n%s", exitCode, stderr)
+	}
+
+	lines := strings.Split(stderr, "\n")
+	var playbackLines []string
+	for _, l := range lines {
+		if strings.Contains(l, "playback completed") {
+			playbackLines = append(playbackLines, l)
+		}
+	}
+	if len(playbackLines) != 2 {
+		t.Fatalf("expected 2 playback lines, got %d\nstderr:\n%s", len(playbackLines), stderr)
+	}
+	for _, want := range []string{"speaker=11", "speed=1.2", "pitch=0.05", "intonation=1.3"} {
+		if !strings.Contains(playbackLines[0], want) {
+			t.Errorf("expected first line to contain %q\nline: %s", want, playbackLines[0])
+		}
+	}
+	if !strings.Contains(playbackLines[1], "speaker=7") {
+		t.Errorf("expected second line to contain speaker=7\nline: %s", playbackLines[1])
+	}
+}
+
+func TestActE2E_JsonlFile_EmptyLines_Skipped(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	content := `{"text":"いちぎょうめ"}
+
+{"text":"さんぎょうめ"}
+`
+	path := writeTempFile(t, dir, "with_empty.jsonl", content)
+
+	_, stderr, exitCode := runCLI(t, nil, "act", "--dry-run", path)
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d\nstderr:\n%s", exitCode, stderr)
+	}
+	if got := strings.Count(stderr, "playback completed"); got != 2 {
+		t.Errorf("expected 2 'playback completed' (empty line skipped), got %d\nstderr:\n%s", got, stderr)
+	}
+}
+
+func TestActE2E_Verbose_ShowsDebugLogs(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	path := writeTempFile(t, dir, "script.txt", "デバッグテスト")
+
+	_, stderr, exitCode := runCLI(t, nil, "act", "--dry-run", "--verbose", path)
+	if exitCode != 0 {
+		t.Fatalf("expected exit 0, got %d\nstderr:\n%s", exitCode, stderr)
+	}
+	debugLine := extractLineContaining(t, stderr, "act starting")
+	if !strings.Contains(debugLine, "path=") {
+		t.Errorf("expected debug line to contain 'path='\nline: %s", debugLine)
+	}
+}
+
+func TestActE2E_Dir_ScriptsLoadedLog(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	writeTempFile(t, dir, "a.txt", "エー")
+	writeTempFile(t, dir, "b.txt", "ビー")
+
+	_, stderr, exitCode := runCLI(t, nil, "act", "--dry-run", dir)
+	if exitCode != 0 {
+		t.Fatalf("expected exit 0, got %d\nstderr:\n%s", exitCode, stderr)
+	}
+	if !strings.Contains(stderr, "scripts loaded") {
+		t.Errorf("expected 'scripts loaded' log in stderr\nstderr:\n%s", stderr)
+	}
+}
