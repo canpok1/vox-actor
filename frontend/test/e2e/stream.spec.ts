@@ -13,15 +13,16 @@ test.describe("配信タブ: SSE と Timeline", () => {
     await page.goto("/");
     await expect(page.getByText("● 接続中")).toBeVisible();
 
+    const ts = 1700000000101;
     await pushClip(request, {
-      id: 101,
-      url: "/clips/101.wav",
+      url: `/clips/${ts}.wav`,
       text: "こんにちはなのだ",
       speakerName: "ずんだもん",
       styleName: "ノーマル",
+      timestamp: ts,
     });
 
-    const item = page.locator('[data-clip-id="101"]');
+    const item = page.locator(`[data-clip-timestamp="${ts}"]`);
     await expect(item).toBeVisible();
     await expect(item).toContainText("こんにちはなのだ");
     await expect(item).toContainText("ずんだもん");

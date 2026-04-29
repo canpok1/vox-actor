@@ -29,15 +29,16 @@ test.describe("無音モード", () => {
     await page.goto("/");
     await expect(page.getByText("● 接続中")).toBeVisible();
 
+    const ts = 1700000000501;
     await pushClip(request, {
-      id: 501,
       url: "",
       text: "無音モードで配信されたテキスト",
       speakerName: "ずんだもん",
       styleName: "ノーマル",
+      timestamp: ts,
     });
 
-    const item = page.locator('[data-clip-id="501"]');
+    const item = page.locator(`[data-clip-timestamp="${ts}"]`);
     await expect(item).toBeVisible();
     await expect(item).toContainText("無音モードで配信されたテキスト");
   });
