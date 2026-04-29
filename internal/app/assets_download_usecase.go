@@ -84,6 +84,8 @@ func (u *AssetsDownloadUsecase) Run(ctx context.Context, params AssetsDownloadPa
 		return err
 	}
 
+	u.logger.Debug("asset targets resolved", "count", len(targets))
+
 	for name, entry := range targets {
 		srcPath := filepath.Join(repoDir, entry.Path)
 		destPath := filepath.Join(params.AssetsDir, name)
