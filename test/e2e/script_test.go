@@ -34,6 +34,22 @@ func readScriptJSON(t *testing.T, path string) scriptJSON {
 	return s
 }
 
+// collectSayJSONFiles は dir 配下の *_say.json ファイル名一覧を返す。
+func collectSayJSONFiles(t *testing.T, dir string) []string {
+	t.Helper()
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("failed to read dir %s: %v", dir, err)
+	}
+	var files []string
+	for _, e := range entries {
+		if strings.HasSuffix(e.Name(), "_say.json") {
+			files = append(files, e.Name())
+		}
+	}
+	return files
+}
+
 // ─────────────────────────────────────────
 // A. 基本的な書き出し挙動
 // ─────────────────────────────────────────
@@ -219,16 +235,18 @@ func TestScriptAppendE2E_VoiceParams_Omitempty(t *testing.T) {
 		t.Fatalf("expected exit 0, got %d\nstderr:\n%s", exitCode, stderr)
 	}
 
-	data, err := os.ReadFile(dest)
-	if err != nil {
-		t.Fatalf("failed to read file: %v", err)
+	s := readScriptJSON(t, dest)
+	if s.Speaker != nil {
+		t.Errorf("expected speaker to be omitted, got %v", *s.Speaker)
 	}
-	line := strings.TrimRight(string(data), "\n")
-
-	for _, field := range []string{"speaker", "speedScale", "pitchScale", "intonationScale"} {
-		if strings.Contains(line, `"`+field+`"`) {
-			t.Errorf("expected %q to be omitted when flag not specified\nline: %s", field, line)
-		}
+	if s.SpeedScale != nil {
+		t.Errorf("expected speedScale to be omitted, got %v", *s.SpeedScale)
+	}
+	if s.PitchScale != nil {
+		t.Errorf("expected pitchScale to be omitted, got %v", *s.PitchScale)
+	}
+	if s.IntonationScale != nil {
+		t.Errorf("expected intonationScale to be omitted, got %v", *s.IntonationScale)
 	}
 }
 
@@ -266,16 +284,7 @@ func TestScriptAppendE2E_Dir_TrailingSlash(t *testing.T) {
 		t.Fatalf("expected exit 0, got %d\nstderr:\n%s", exitCode, stderr)
 	}
 
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		t.Fatalf("failed to read dir: %v", err)
-	}
-	var jsonFiles []string
-	for _, e := range entries {
-		if strings.HasSuffix(e.Name(), "_say.json") {
-			jsonFiles = append(jsonFiles, e.Name())
-		}
-	}
+	jsonFiles := collectSayJSONFiles(t, dir)
 	if len(jsonFiles) != 1 {
 		t.Fatalf("expected 1 *_say.json file, got %d: %v", len(jsonFiles), jsonFiles)
 	}
@@ -296,16 +305,7 @@ func TestScriptAppendE2E_Dir_ExistingDir(t *testing.T) {
 		t.Fatalf("expected exit 0, got %d\nstderr:\n%s", exitCode, stderr)
 	}
 
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		t.Fatalf("failed to read dir: %v", err)
-	}
-	var jsonFiles []string
-	for _, e := range entries {
-		if strings.HasSuffix(e.Name(), "_say.json") {
-			jsonFiles = append(jsonFiles, e.Name())
-		}
-	}
+	jsonFiles := collectSayJSONFiles(t, dir)
 	if len(jsonFiles) != 1 {
 		t.Fatalf("expected 1 *_say.json file, got %d: %v", len(jsonFiles), jsonFiles)
 	}
@@ -315,14 +315,14 @@ func TestScriptAppendE2E_Dir_CreateNew(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	newDir := filepath.Join(dir, "newsubdir") + string(os.PathSeparator)
+	newDir := filepath.Join(dir, "newsubdir")
 
-	_, stderr, exitCode := runCLI(t, nil, "script", "append", newDir, "新規ディレクトリ")
+	_, stderr, exitCode := runCLI(t, nil, "script", "append", newDir+string(os.PathSeparator), "新規ディレクトリ")
 	if exitCode != 0 {
 		t.Fatalf("expected exit 0, got %d\nstderr:\n%s", exitCode, stderr)
 	}
 
-	info, err := os.Stat(strings.TrimSuffix(newDir, string(os.PathSeparator)))
+	info, err := os.Stat(newDir)
 	if err != nil {
 		t.Fatalf("expected dir to be created: %v", err)
 	}
@@ -330,16 +330,7 @@ func TestScriptAppendE2E_Dir_CreateNew(t *testing.T) {
 		t.Errorf("expected %s to be a directory", newDir)
 	}
 
-	entries, err := os.ReadDir(strings.TrimSuffix(newDir, string(os.PathSeparator)))
-	if err != nil {
-		t.Fatalf("failed to read created dir: %v", err)
-	}
-	var jsonFiles []string
-	for _, e := range entries {
-		if strings.HasSuffix(e.Name(), "_say.json") {
-			jsonFiles = append(jsonFiles, e.Name())
-		}
-	}
+	jsonFiles := collectSayJSONFiles(t, newDir)
 	if len(jsonFiles) != 1 {
 		t.Fatalf("expected 1 *_say.json file, got %d", len(jsonFiles))
 	}
@@ -404,16 +395,6 @@ func TestScriptAppendE2E_Help_Flags(t *testing.T) {
 			t.Errorf("expected help to contain %q\nstdout:\n%s", flag, stdout)
 		}
 	}
-}
-
-func TestScriptAppendE2E_Help_NoEngineUrlDryRun(t *testing.T) {
-	t.Parallel()
-
-	stdout, stderr, exitCode := runCLI(t, nil, "script", "append", "--help")
-	if exitCode != 0 {
-		t.Fatalf("expected exit 0, got %d\nstderr:\n%s", exitCode, stderr)
-	}
-
 	for _, flag := range []string{"--engine-url", "--dry-run"} {
 		if strings.Contains(stdout, flag) {
 			t.Errorf("expected help NOT to contain %q\nstdout:\n%s", flag, stdout)
@@ -433,15 +414,10 @@ func TestScriptAppendE2E_EnvVar_VOXSpeaker(t *testing.T) {
 		t.Fatalf("expected exit 0, got %d\nstderr:\n%s", exitCode, stderr)
 	}
 
-	// VOX_SPEAKER はデフォルト値を設定するが Changed() は false のため omitempty で省略される。
-	// speaker フィールドが省略されていることを確認する。
-	data, err := os.ReadFile(dest)
-	if err != nil {
-		t.Fatalf("failed to read file: %v", err)
-	}
-	line := strings.TrimRight(string(data), "\n")
-	if strings.Contains(line, `"speaker"`) {
-		t.Errorf("expected speaker field to be absent when only env var set (not --speaker flag)\nline: %s", line)
+	// VOX_SPEAKER はデフォルト値を設定するが、cobra の Changed() は false のため omitempty で省略される。
+	s := readScriptJSON(t, dest)
+	if s.Speaker != nil {
+		t.Errorf("expected speaker to be absent when only env var set (not --speaker flag), got %v", *s.Speaker)
 	}
 }
 
