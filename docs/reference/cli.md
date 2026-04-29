@@ -279,7 +279,7 @@ vox-actor config <key>
 
 1. 環境変数 `VOX_ACTOR_WORKSPACE` が設定されていればその値をワークスペースルートとして扱う
 2. gitリポジトリ内であれば `git rev-parse --path-format=absolute --git-common-dir` の結果の親ディレクトリ配下の `.vox-actor` をワークスペースルートとする
-3. git管理外の場合はカレントディレクトリをワークスペースルートとして扱う
+3. git管理外の場合はカレントディレクトリの `.vox-actor` サブディレクトリをワークスペースルートとして扱う
 
 `path.queue` と `path.tmp` はワークスペースルートに各サブディレクトリを結合した値を返すため、常に以下の関係が成立します:
 - `path.workspace`/queue = `path.queue`

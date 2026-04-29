@@ -138,7 +138,7 @@ func TestConfigCmd_PathWorkspace_WithEnv_PrintsEnvValue(t *testing.T) {
 	}
 }
 
-func TestConfigCmd_PathWorkspace_OutsideGitRepo_PrintsCwd(t *testing.T) {
+func TestConfigCmd_PathWorkspace_OutsideGitRepo_PrintsVoxActorSubdir(t *testing.T) {
 	t.Setenv("VOX_ACTOR_WORKSPACE", "")
 	cwd := withTempNonGitDir(t)
 
@@ -154,11 +154,12 @@ func TestConfigCmd_PathWorkspace_OutsideGitRepo_PrintsCwd(t *testing.T) {
 	}
 
 	got := strings.TrimRight(outBuf.String(), "\n")
+	want := filepath.Join(cwd, ".vox-actor")
 	// macOS の /var → /private/var シンボリックリンクを考慮して比較する。
-	gotEval, _ := filepath.EvalSymlinks(got)
-	cwdEval, _ := filepath.EvalSymlinks(cwd)
-	if gotEval != cwdEval {
-		t.Errorf("got %q, want %q", got, cwd)
+	gotEval, _ := filepath.EvalSymlinks(filepath.Dir(got))
+	wantEval, _ := filepath.EvalSymlinks(filepath.Dir(want))
+	if gotEval != wantEval || filepath.Base(got) != filepath.Base(want) {
+		t.Errorf("got %q, want %q", got, want)
 	}
 }
 
@@ -200,7 +201,7 @@ func TestConfigCmd_PathQueue_OutsideGitRepo_PrintsCwdQueue(t *testing.T) {
 	}
 
 	got := strings.TrimRight(outBuf.String(), "\n")
-	want := filepath.Join(cwd, "queue")
+	want := filepath.Join(cwd, ".vox-actor", "queue")
 	wantEval, _ := filepath.EvalSymlinks(filepath.Dir(want))
 	gotEval, _ := filepath.EvalSymlinks(filepath.Dir(got))
 	if gotEval != wantEval || filepath.Base(got) != filepath.Base(want) {
@@ -248,7 +249,7 @@ func TestConfigCmd_PathTmp_OutsideGitRepo_PrintsCwdTmp(t *testing.T) {
 	}
 
 	got := strings.TrimRight(outBuf.String(), "\n")
-	want := filepath.Join(cwd, "tmp")
+	want := filepath.Join(cwd, ".vox-actor", "tmp")
 	wantEval, _ := filepath.EvalSymlinks(filepath.Dir(want))
 	gotEval, _ := filepath.EvalSymlinks(filepath.Dir(got))
 	if gotEval != wantEval || filepath.Base(got) != filepath.Base(want) {

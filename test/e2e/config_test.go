@@ -151,8 +151,9 @@ func TestConfigE2E_PathWorkspace_OutsideGitRepo(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to eval symlinks for %q: %v", dir, err)
 	}
-	if got != resolved {
-		t.Errorf("got %q, want %q", got, resolved)
+	want := filepath.Join(resolved, ".vox-actor")
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
 	}
 }
 
@@ -170,7 +171,7 @@ func TestConfigE2E_PathQueue_OutsideGitRepo(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to eval symlinks for %q: %v", dir, err)
 	}
-	want := filepath.Join(resolved, "queue")
+	want := filepath.Join(resolved, ".vox-actor", "queue")
 	if got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}
@@ -190,7 +191,7 @@ func TestConfigE2E_PathTmp_OutsideGitRepo(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to eval symlinks for %q: %v", dir, err)
 	}
-	want := filepath.Join(resolved, "tmp")
+	want := filepath.Join(resolved, ".vox-actor", "tmp")
 	if got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}

@@ -26,7 +26,7 @@ var gitRunner = exec.Command
 // 解決順:
 //  1. 環境変数 VOX_ACTOR_WORKSPACE が設定されていればその値
 //  2. git リポジトリ内であれば `<repoRoot>/.vox-actor`
-//  3. それ以外は ErrNotInGitRepo
+//  3. それ以外は `<cwd>/.vox-actor`
 func ResolveWorkspacePath() (string, error) {
 	if v := os.Getenv(envWorkspaceKey); v != "" {
 		return v, nil
@@ -35,34 +35,48 @@ func ResolveWorkspacePath() (string, error) {
 	cmd := gitRunner("git", "rev-parse", "--path-format=absolute", "--git-common-dir")
 	out, err := cmd.Output()
 	if err != nil {
-		// ExitError（非0終了）は git 外で rev-parse を呼んだ想定に寄せて
-		// ErrNotInGitRepo に分類する。それ以外（バイナリ不在など）は ErrGitNotFound。
+		// ExitError（非0終了）は git 管理外で rev-parse を呼んだ想定に寄せて
+		// cwd/.vox-actor にフォールバックする。それ以外（バイナリ不在など）は ErrGitNotFound。
 		var exitErr *exec.ExitError
 		if errors.As(err, &exitErr) {
-			return "", ErrNotInGitRepo
+			return cwdDotVoxActor()
 		}
 		return "", ErrGitNotFound
 	}
 
 	gitCommonDir := strings.TrimSpace(string(out))
 	if gitCommonDir == "" {
-		return "", ErrNotInGitRepo
+		return cwdDotVoxActor()
 	}
 
 	repoRoot := filepath.Dir(gitCommonDir)
 	return filepath.Join(repoRoot, ".vox-actor"), nil
 }
 
+func cwdDotVoxActor() (string, error) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(cwd, ".vox-actor"), nil
+}
+
 // ResolveQueuePath はワークスペースルート配下の queue ディレクトリ絶対パスを返す。
-//
-// 実装は ResolveWorkspacePath の結果に `queue` を結合するだけで、環境変数/git解決は
-// ResolveWorkspacePath に一元化する。ディレクトリの作成は行わない。
 func ResolveQueuePath() (string, error) {
 	workspace, err := ResolveWorkspacePath()
 	if err != nil {
 		return "", err
 	}
 	return filepath.Join(workspace, "queue"), nil
+}
+
+// ResolveTmpPath はワークスペースルート配下の tmp ディレクトリ絶対パスを返す。
+func ResolveTmpPath() (string, error) {
+	workspace, err := ResolveWorkspacePath()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(workspace, "tmp"), nil
 }
 
 func resolveHomeViewerDir() (string, error) {
@@ -104,13 +118,6 @@ func ResolveHomeAssetsPath() (string, error) {
 // git リポジトリ内なら <repoRoot>/.vox-actor/assets/、それ以外は <cwd>/.vox-actor/assets/。
 func ResolveProjectAssetsPath() (string, error) {
 	path, err := ResolveWorkspacePath()
-	if errors.Is(err, ErrNotInGitRepo) {
-		cwd, cwdErr := os.Getwd()
-		if cwdErr != nil {
-			return "", cwdErr
-		}
-		return filepath.Join(cwd, ".vox-actor", "assets"), nil
-	}
 	if err != nil {
 		return "", err
 	}
