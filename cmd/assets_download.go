@@ -44,6 +44,7 @@ func makeAssetsDownloadCmd(deps *AssetsDownloadDeps) *cobra.Command {
 	cmd.Flags().StringArray("speaker", nil, "ダウンロード対象の speaker 名（リピート可、カンマ区切り可）")
 	cmd.Flags().Bool("force", false, "ローカルに同名 speaker が存在する場合に上書き")
 	cmd.Flags().String("scope", "project", "配置先スコープ（home: ~/.vox-actor/assets/、project: プロジェクト配下）")
+	cmd.Flags().Bool("verbose", false, "詳細ログを出力")
 
 	return cmd
 }
