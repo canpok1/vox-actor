@@ -16,7 +16,7 @@ export interface ClipEvent {
 export type ErrorCategory = "synthesis" | "file" | "connection";
 
 export interface ErrorEventPayload {
-  // clipEvent.id とは独立した連番。
+  // clip イベントの timestamp とは独立した連番。
   id: number;
   category: ErrorCategory;
   message: string;

@@ -138,7 +138,7 @@ type clipEvent struct {
 	SpeakerName string `json:"speakerName"`
 	StyleName   string `json:"styleName"`
 	// Timestamp は配信時刻の Unix ms（UTC）。ブラウザ側で HH:MM:SS に整形する。
-	// セッションをまたいでも単調増加するため再起動後の id 衝突が発生しない。
+	// セッション跨ぎで単調増加するため再起動後も timestamp が衝突しない。
 	Timestamp int64 `json:"timestamp"`
 }
 
