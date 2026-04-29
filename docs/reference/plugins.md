@@ -124,17 +124,6 @@ echo "こんばんは" > /path/to/watch-dir/sample.txt
 
 `watch` コマンドは `Ctrl+C`（SIGINT）または SIGTERM で停止できる。
 
-### `act --watch` / `act --watch-delete`（後方互換）
-
-従来どおり `act` コマンドでも単一ディレクトリの監視が可能です。
-
-```bash
-vox-actor act --watch /path/to/watch-dir
-vox-actor act --watch-delete /path/to/watch-dir
-```
-
-`--watch` と `--watch-delete` は同時に指定できません。複数ディレクトリを同時に監視したい場合は `watch` コマンドを使ってください。
-
 ### エラーログ
 
 `direct` モードでの失敗は以下のログに追記されます（末尾200行でローテーション）。`tail -f` で確認できます。`vox-actor config path.workspace` で解決されるワークスペースルート直下に配置されます。
