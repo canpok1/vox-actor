@@ -190,20 +190,24 @@ vox-actor watch --queue --delete
 
 ## `viewer` サブコマンド
 
+> **破壊的変更**: `--watch` / `--watch-queue` / `--delete` は削除されました。ディレクトリ監視は [`watch` サブコマンド](#watch-サブコマンド)を使用してください。
+>
+> | 旧コマンド | 新コマンド |
+> |---|---|
+> | `viewer --watch <dir>` | `viewer &` + `watch <dir>` |
+> | `viewer --watch-queue` | `viewer &` + `watch --queue` |
+> | `viewer --watch <dir> --delete` | `viewer &` + `watch --delete <dir>` |
+
 ```
-vox-actor viewer [--watch <dir>]... [--watch-queue] [--delete] \
-                 [--host <host>] [--port <port>] \
+vox-actor viewer [--host <host>] [--port <port>] \
                  [--engine-url <url>] [--speaker <id>] \
                  [--speed N] [--pitch N] [--intonation N] [--verbose]
 ```
 
-HTTPサーバーとブラウザUIを起動し、SSE経由でブラウザに音声を配信する。ブラウザ配信専用のサブコマンドで、`--watch` や `--watch-queue` でディレクトリを監視しながら配信できる。
+HTTPサーバーとブラウザUIを起動し、SSE経由でブラウザに音声を配信する。ディレクトリ監視が必要な場合は `vox-actor watch` を別途起動してください。
 
 | オプション | 環境変数 | デフォルト値 | 説明 |
 |---|---|---|---|
-| `--watch <dir>` | — | （未指定可・複数可） | 監視対象ディレクトリ（`--watch dir1 --watch dir2` のように複数回指定） |
-| `--watch-queue` | — | `false` | `vox-actor config path.queue` で解決される queue ディレクトリを監視対象に追加 |
-| `--delete` | — | `false` | 処理済みファイルを削除（未指定時は各ディレクトリの `done/` に移動） |
 | `--host` | — | `127.0.0.1` | HTTPサーバーのバインドホスト |
 | `--port` | — | `8080` | HTTPサーバーのバインドポート（1〜65535） |
 | `--engine-url` | `VOX_ENGINE_URL` | `http://localhost:50021` | VOICEVOXエンジンのURL |
@@ -216,23 +220,19 @@ HTTPサーバーとブラウザUIを起動し、SSE経由でブラウザに音�
 ### 起動パターン
 
 ```bash
-# 監視なし（HTTP+UIのみ）。「音声テスト」タブだけが機能する
+# HTTP+UI のみ起動
 vox-actor viewer
-
-# ディレクトリを監視しながら配信
-vox-actor viewer --watch /path/to/dir
-
-# 複数ディレクトリを並列監視
-vox-actor viewer --watch /path/to/dir1 --watch /path/to/dir2
-
-# queue ディレクトリを監視
-vox-actor viewer --watch-queue
-
-# --watch と --watch-queue の併用
-vox-actor viewer --watch /extra/dir --watch-queue
 
 # バインドアドレスを変更（LAN公開）
 vox-actor viewer --host 0.0.0.0 --port 8080
+
+# ディレクトリ監視と並行運用（viewer と watch を別プロセスで起動）
+vox-actor viewer &
+vox-actor watch /path/to/dir
+
+# queue ディレクトリ監視と並行運用
+vox-actor viewer &
+vox-actor watch --queue
 ```
 
 ### ロックファイルと再生履歴
@@ -251,8 +251,6 @@ viewer は端末内で `127.0.0.1:8080` にバインドする前提のため、�
 
 | 状況 | 終了コード | エラー出力 |
 |---|---|---|
-| `--watch` のパスがディレクトリ以外 | 2 (`ErrUsage`) | `Error: <path> is not a directory` |
-| `--watch-queue` 指定時に git管理外かつ `VOX_ACTOR_WORKSPACE` 未設定 | 2 (`ErrUsage`) | `Error: gitコマンドが見つかりません` 等 |
 | `--port` が 1〜65535 範囲外 | 2 (`ErrUsage`) | `Error: invalid port: <n>` |
 | HTTPサーバー起動失敗（ポート占有等） | 1 | `Error: failed to start stream server: ...` |
 | 同一ユーザーで viewer が既に起動中 | 1 | `Error: viewer は既に起動中です...` |
@@ -411,11 +409,13 @@ HTTPサーバーを起動し、SSE経由でブラウザに音声を配信しま�
 [`viewer` サブコマンド](#viewer-サブコマンド)を使ってください。
 
 ```bash
-# viewer
-vox-actor viewer --watch /path/to/watch-dir
+# viewer と watch を並行起動
+vox-actor viewer &
+vox-actor watch /path/to/watch-dir
 
-# viewer でバインドアドレスを変更
-vox-actor viewer --host 0.0.0.0 --port 8080 --watch /path/to/watch-dir
+# viewer でバインドアドレスを変更して並行起動
+vox-actor viewer --host 0.0.0.0 --port 8080 &
+vox-actor watch /path/to/watch-dir
 ```
 
 > **注意**: `watch --stream` および `watch --stream-addr` は削除されました。

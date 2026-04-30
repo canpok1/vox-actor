@@ -190,51 +190,6 @@ func TestViewerE2E_StatusEndpoint(t *testing.T) {
 	vp.assertCleanExit(3 * time.Second)
 }
 
-func TestViewerE2E_WithWatchDir_WatchesDirectory(t *testing.T) {
-	t.Parallel()
-
-	dir := t.TempDir()
-	port := freePort(t)
-	homeDir := t.TempDir()
-	workspace := t.TempDir()
-
-	vp := startViewer(t, map[string]string{"HOME": homeDir, "VOX_ACTOR_WORKSPACE": workspace},
-		"--port", fmt.Sprintf("%d", port),
-		"--watch", dir,
-	)
-
-	vp.waitForStderr("watching directory", 10*time.Second)
-	vp.assertCleanExit(3 * time.Second)
-}
-
-func TestViewerE2E_WatchQueue_StartsWatching(t *testing.T) {
-	t.Parallel()
-
-	homeDir := t.TempDir()
-	workspace := t.TempDir()
-	port := freePort(t)
-
-	vp := startViewer(t,
-		map[string]string{"HOME": homeDir, "VOX_ACTOR_WORKSPACE": workspace},
-		"--port", fmt.Sprintf("%d", port),
-		"--watch-queue",
-	)
-
-	vp.waitForStderr("watching directory", 10*time.Second)
-
-	// ResolveQueuePath: VOX_ACTOR_WORKSPACE/queue
-	queueDir := workspace + "/queue"
-	info, err := os.Stat(queueDir)
-	if err != nil {
-		t.Fatalf("expected queue dir to be auto-created at %s: %v", queueDir, err)
-	}
-	if !info.IsDir() {
-		t.Fatalf("expected %s to be a directory", queueDir)
-	}
-
-	vp.assertCleanExit(3 * time.Second)
-}
-
 func TestViewerE2E_InvalidPort_ReturnsUsageError(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
@@ -258,20 +213,6 @@ func TestViewerE2E_InvalidPort_ReturnsUsageError(t *testing.T) {
 				t.Error("expected non-empty stderr for usage error")
 			}
 		})
-	}
-}
-
-func TestViewerE2E_WatchNonDirectory_ReturnsUsageError(t *testing.T) {
-	t.Parallel()
-
-	dir := t.TempDir()
-	file := writeTempFile(t, dir, "notadir.txt", "hello")
-	homeDir := t.TempDir()
-	workspace := t.TempDir()
-
-	_, stderr, exitCode := runCLI(t, map[string]string{"HOME": homeDir, "VOX_ACTOR_WORKSPACE": workspace}, "viewer", "--watch", file)
-	if exitCode != 2 {
-		t.Fatalf("expected exit code 2 for non-directory --watch, got %d\nstderr:\n%s", exitCode, stderr)
 	}
 }
 

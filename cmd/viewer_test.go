@@ -119,14 +119,6 @@ func TestViewerCmd_DefaultOptionValues(t *testing.T) {
 	if intonation != 1.0 {
 		t.Errorf("expected default intonation 1.0, got: %f", intonation)
 	}
-	deleteMode, _ := viewerCmd.Flags().GetBool("delete")
-	if deleteMode {
-		t.Error("expected --delete default to be false")
-	}
-	watchQueue, _ := viewerCmd.Flags().GetBool("watch-queue")
-	if watchQueue {
-		t.Error("expected --watch-queue default to be false")
-	}
 	verbose, _ := viewerCmd.Flags().GetBool("verbose")
 	if verbose {
 		t.Error("expected --verbose default to be false")
@@ -138,6 +130,20 @@ func TestViewerCmd_NoDryRunFlag(t *testing.T) {
 	viewerCmd := findViewerCmd(t, rootCmd)
 	if viewerCmd.Flags().Lookup("dry-run") != nil {
 		t.Error("viewer should not have --dry-run flag")
+	}
+}
+
+func TestViewerCmd_NoWatchFlags(t *testing.T) {
+	rootCmd := makeRootCmd()
+	viewerCmd := findViewerCmd(t, rootCmd)
+	if viewerCmd.Flags().Lookup("watch") != nil {
+		t.Error("viewer should not have --watch flag (use 'vox-actor watch' instead)")
+	}
+	if viewerCmd.Flags().Lookup("watch-queue") != nil {
+		t.Error("viewer should not have --watch-queue flag (use 'vox-actor watch' instead)")
+	}
+	if viewerCmd.Flags().Lookup("delete") != nil {
+		t.Error("viewer should not have --delete flag")
 	}
 }
 
@@ -153,7 +159,7 @@ func TestViewerCmd_HelpContainsFlags(t *testing.T) {
 	}
 
 	output := buf.String()
-	flags := []string{"--engine-url", "--speaker", "--speed", "--pitch", "--intonation", "--host", "--port", "--watch", "--watch-queue", "--delete", "--verbose"}
+	flags := []string{"--engine-url", "--speaker", "--speed", "--pitch", "--intonation", "--host", "--port", "--verbose"}
 	for _, flag := range flags {
 		if !strings.Contains(output, flag) {
 			t.Errorf("expected help output to contain '%s'\noutput:\n%s", flag, output)
@@ -161,6 +167,15 @@ func TestViewerCmd_HelpContainsFlags(t *testing.T) {
 	}
 	if strings.Contains(output, "--dry-run") {
 		t.Error("viewer help should NOT contain '--dry-run'")
+	}
+	if strings.Contains(output, "--watch") {
+		t.Error("viewer help should NOT contain '--watch'")
+	}
+	if strings.Contains(output, "--watch-queue") {
+		t.Error("viewer help should NOT contain '--watch-queue'")
+	}
+	if strings.Contains(output, "--delete") {
+		t.Error("viewer help should NOT contain '--delete'")
 	}
 }
 
@@ -200,62 +215,6 @@ func TestViewerCmd_PortOutOfRange_ReturnsUsageError(t *testing.T) {
 	}
 }
 
-func TestViewerCmd_WatchWithFile_ReturnsUsageError(t *testing.T) {
-	dir := t.TempDir()
-	file := dir + "/test.txt"
-	if err := os.WriteFile(file, []byte("hello"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	deps := &Deps{
-		Viewer: &ViewerDeps{
-			ClientFactory: func(_ string) app.VoicevoxClient { return &stubVoicevoxClient{} },
-			StreamPlayerFactory: func(_ string, _ *slog.Logger, _ map[int]entity.SpeakerStyleInfo, _ []int, _ app.VoicevoxClient) (app.StreamPlayer, error) {
-				return &stubStreamPlayer{}, nil
-			},
-			LockPathResolver: tempLockResolver(t),
-		},
-	}
-	rootCmd := makeRootCmd(deps)
-	buf := new(bytes.Buffer)
-	rootCmd.SetOut(buf)
-	rootCmd.SetErr(buf)
-	rootCmd.SetArgs([]string{"viewer", "--watch", file})
-
-	err := rootCmd.Execute()
-	if err == nil {
-		t.Fatal("expected error when file path is given to --watch")
-	}
-	if !errors.Is(err, ErrUsage) {
-		t.Errorf("expected ErrUsage, got: %v", err)
-	}
-}
-
-func TestViewerCmd_WatchWithNonExistentPath_ReturnsUsageError(t *testing.T) {
-	deps := &Deps{
-		Viewer: &ViewerDeps{
-			ClientFactory: func(_ string) app.VoicevoxClient { return &stubVoicevoxClient{} },
-			StreamPlayerFactory: func(_ string, _ *slog.Logger, _ map[int]entity.SpeakerStyleInfo, _ []int, _ app.VoicevoxClient) (app.StreamPlayer, error) {
-				return &stubStreamPlayer{}, nil
-			},
-			LockPathResolver: tempLockResolver(t),
-		},
-	}
-	rootCmd := makeRootCmd(deps)
-	buf := new(bytes.Buffer)
-	rootCmd.SetOut(buf)
-	rootCmd.SetErr(buf)
-	rootCmd.SetArgs([]string{"viewer", "--watch", "/path/that/does/not/exist"})
-
-	err := rootCmd.Execute()
-	if err == nil {
-		t.Fatal("expected error when non-existent path given to --watch")
-	}
-	if !errors.Is(err, ErrUsage) {
-		t.Errorf("expected ErrUsage, got: %v", err)
-	}
-}
-
 func runViewerWithDeps(t *testing.T, deps *Deps, args ...string) error {
 	t.Helper()
 	rootCmd := makeRootCmd(deps)
@@ -273,10 +232,7 @@ func TestViewerCmd_HealthCheckFailure_FallsBackToSilent(t *testing.T) {
 	sp := &stubStreamPlayer{}
 	deps := &Deps{
 		Viewer: &ViewerDeps{
-			Reader:            stubScriptReader{},
-			ClientFactory:     func(_ string) app.VoicevoxClient { return &stubVoicevoxClient{healthCheckErr: errors.New("down")} },
-			Mover:             stubFileMover{},
-			DirWatcherFactory: func(_ *slog.Logger) app.DirWatcher { return stubDirWatcher{} },
+			ClientFactory: func(_ string) app.VoicevoxClient { return &stubVoicevoxClient{healthCheckErr: errors.New("down")} },
 			StreamPlayerFactory: func(_ string, _ *slog.Logger, _ map[int]entity.SpeakerStyleInfo, _ []int, _ app.VoicevoxClient) (app.StreamPlayer, error) {
 				return sp, nil
 			},
@@ -300,12 +256,9 @@ func TestViewerCmd_GetSpeakersFailure_FallsBackToSilent(t *testing.T) {
 	sp := &stubStreamPlayer{}
 	deps := &Deps{
 		Viewer: &ViewerDeps{
-			Reader: stubScriptReader{},
 			ClientFactory: func(_ string) app.VoicevoxClient {
 				return &stubVoicevoxClient{getSpeakersErr: errors.New("speakers down")}
 			},
-			Mover:             stubFileMover{},
-			DirWatcherFactory: func(_ *slog.Logger) app.DirWatcher { return stubDirWatcher{} },
 			StreamPlayerFactory: func(_ string, _ *slog.Logger, _ map[int]entity.SpeakerStyleInfo, _ []int, _ app.VoicevoxClient) (app.StreamPlayer, error) {
 				return sp, nil
 			},
@@ -329,7 +282,6 @@ func TestViewerCmd_EngineHealthy_DoesNotEnterSilent(t *testing.T) {
 	sp := &stubStreamPlayer{}
 	deps := &Deps{
 		Viewer: &ViewerDeps{
-			Reader: stubScriptReader{},
 			ClientFactory: func(_ string) app.VoicevoxClient {
 				return &stubVoicevoxClient{
 					speakers: []entity.Speaker{
@@ -337,8 +289,6 @@ func TestViewerCmd_EngineHealthy_DoesNotEnterSilent(t *testing.T) {
 					},
 				}
 			},
-			Mover:             stubFileMover{},
-			DirWatcherFactory: func(_ *slog.Logger) app.DirWatcher { return stubDirWatcher{} },
 			StreamPlayerFactory: func(_ string, _ *slog.Logger, _ map[int]entity.SpeakerStyleInfo, _ []int, _ app.VoicevoxClient) (app.StreamPlayer, error) {
 				return sp, nil
 			},
@@ -355,72 +305,6 @@ func TestViewerCmd_EngineHealthy_DoesNotEnterSilent(t *testing.T) {
 	}
 	if strings.Contains(logs, "VOICEVOX engine unreachable") {
 		t.Errorf("expected no WARN log in normal mode, got: %s", logs)
-	}
-}
-
-func TestViewerCmd_WatchQueue_ResolvesAndCreatesQueueDir(t *testing.T) {
-	baseDir := t.TempDir()
-	queueDir := baseDir + "/.vox-actor/queue"
-
-	resolverCalled := 0
-	sp := &stubStreamPlayer{}
-	deps := &Deps{
-		Viewer: &ViewerDeps{
-			Reader:            stubScriptReader{},
-			ClientFactory:     func(_ string) app.VoicevoxClient { return &stubVoicevoxClient{} },
-			Mover:             stubFileMover{},
-			DirWatcherFactory: func(_ *slog.Logger) app.DirWatcher { return stubDirWatcher{} },
-			StreamPlayerFactory: func(_ string, _ *slog.Logger, _ map[int]entity.SpeakerStyleInfo, _ []int, _ app.VoicevoxClient) (app.StreamPlayer, error) {
-				return sp, nil
-			},
-			QueuePathResolver: func() (string, error) {
-				resolverCalled++
-				return queueDir, nil
-			},
-			LockPathResolver: tempLockResolver(t),
-		},
-	}
-
-	_ = runViewerWithDeps(t, deps, "viewer", "--watch-queue")
-
-	if resolverCalled != 1 {
-		t.Errorf("expected QueuePathResolver to be called once, got %d", resolverCalled)
-	}
-	info, err := os.Stat(queueDir)
-	if err != nil {
-		t.Fatalf("expected queue directory to be auto-created at %s: %v", queueDir, err)
-	}
-	if !info.IsDir() {
-		t.Errorf("expected %s to be a directory", queueDir)
-	}
-}
-
-func TestViewerCmd_WatchQueue_ResolverReturnsNotInRepo_ReturnsError(t *testing.T) {
-	deps := &Deps{
-		Viewer: &ViewerDeps{
-			ClientFactory: func(_ string) app.VoicevoxClient { return &stubVoicevoxClient{} },
-			StreamPlayerFactory: func(_ string, _ *slog.Logger, _ map[int]entity.SpeakerStyleInfo, _ []int, _ app.VoicevoxClient) (app.StreamPlayer, error) {
-				return &stubStreamPlayer{}, nil
-			},
-			QueuePathResolver: func() (string, error) {
-				return "", infra.ErrNotInGitRepo
-			},
-			LockPathResolver: tempLockResolver(t),
-		},
-	}
-
-	rootCmd := makeRootCmd(deps)
-	buf := new(bytes.Buffer)
-	rootCmd.SetOut(buf)
-	rootCmd.SetErr(buf)
-	rootCmd.SetArgs([]string{"viewer", "--watch-queue"})
-
-	err := rootCmd.Execute()
-	if err == nil {
-		t.Fatal("expected error when resolver fails with not-in-git-repo")
-	}
-	if !strings.Contains(err.Error(), "gitリポジトリではありません") {
-		t.Errorf("expected error to contain 'gitリポジトリではありません', got: %v", err)
 	}
 }
 
