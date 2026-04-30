@@ -4,6 +4,7 @@ package e2e
 
 import (
 	"fmt"
+	"net/http"
 	"strings"
 	"testing"
 	"time"
@@ -82,7 +83,7 @@ func TestViewerE2E_Host_0000_Binds(t *testing.T) {
 	resp := getURLWithRetry(t, url)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != 200 {
+	if resp.StatusCode != http.StatusOK {
 		t.Errorf("expected 200 from 127.0.0.1 with --host 0.0.0.0, got %d", resp.StatusCode)
 	}
 
