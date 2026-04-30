@@ -77,10 +77,7 @@ func main() {
 			DirWatcherFactory: dirWatcherFactory,
 		},
 		Viewer: &cmd.ViewerDeps{
-			Reader:              reader,
 			ClientFactory:       clientFactory,
-			Mover:               mover,
-			DirWatcherFactory:   dirWatcherFactory,
 			StreamPlayerFactory: streamPlayerFactory,
 		},
 		Say: &cmd.SayDeps{

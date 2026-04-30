@@ -80,12 +80,8 @@ func startStreamPlayer(
 
 // ViewerDeps はviewerコマンドの依存を保持する。
 type ViewerDeps struct {
-	Reader              app.ScriptReader
 	ClientFactory       func(engineURL string) app.VoicevoxClient
-	Mover               app.FileMover
-	DirWatcherFactory   func(logger *slog.Logger) app.DirWatcher
 	StreamPlayerFactory func(addr string, logger *slog.Logger, speakerLookup map[int]entity.SpeakerStyleInfo, orderedSpeakerIDs []int, client app.VoicevoxClient) (app.StreamPlayer, error)
-	QueuePathResolver   func() (string, error)
 	LockPathResolver    func() (string, error)
 }
 
@@ -93,7 +89,7 @@ func makeViewerCmd(deps *ViewerDeps) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "viewer",
 		Short: "HTTPサーバーを起動してブラウザUIで音声配信を行う",
-		Long:  "HTTPサーバーとブラウザUIを起動して音声配信を行う。--watch や --watch-queue でディレクトリを監視できる。",
+		Long:  "HTTPサーバーとブラウザUIを起動して音声配信を行う。ディレクトリ監視は 'vox-actor watch' を併用してください。",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runViewer(cmd, deps)
@@ -101,9 +97,6 @@ func makeViewerCmd(deps *ViewerDeps) *cobra.Command {
 	}
 
 	registerBaseFlags(cmd)
-	cmd.Flags().StringArray("watch", nil, "監視対象ディレクトリ（複数回指定可）")
-	cmd.Flags().Bool("watch-queue", false, "vox-actor config path.queue で解決される queue ディレクトリを監視対象に追加")
-	cmd.Flags().Bool("delete", false, "処理済みファイルを削除する（未指定時は各ディレクトリの done/ に移動）")
 	cmd.Flags().String("host", "127.0.0.1", "HTTPサーバーのバインドホスト")
 	cmd.Flags().Int("port", 8080, "HTTPサーバーのバインドポート")
 
@@ -137,32 +130,10 @@ func runViewer(cmd *cobra.Command, deps *ViewerDeps) error {
 
 	host, _ := cmd.Flags().GetString("host")
 	port, _ := cmd.Flags().GetInt("port")
-	watchDirs, _ := cmd.Flags().GetStringArray("watch")
-	watchQueue, _ := cmd.Flags().GetBool("watch-queue")
-	deleteMode, _ := cmd.Flags().GetBool("delete")
 	engineURL, _ := cmd.Flags().GetString("engine-url")
-	speakerID, _ := cmd.Flags().GetInt("speaker")
-	speed, _ := cmd.Flags().GetFloat64("speed")
-	pitch, _ := cmd.Flags().GetFloat64("pitch")
-	intonation, _ := cmd.Flags().GetFloat64("intonation")
 
 	if port < 1 || port > 65535 {
 		return fmt.Errorf("%w: invalid port: %d", ErrUsage, port)
-	}
-
-	dirs, err := resolveViewerPaths(watchDirs, watchQueue, deps)
-	if err != nil {
-		return err
-	}
-
-	for _, path := range dirs {
-		info, statErr := os.Stat(path)
-		if statErr != nil {
-			return fmt.Errorf("%w: %v", ErrUsage, statErr)
-		}
-		if !info.IsDir() {
-			return fmt.Errorf("%w: %s is not a directory", ErrUsage, path)
-		}
 	}
 
 	if deps == nil || deps.ClientFactory == nil || deps.StreamPlayerFactory == nil {
@@ -197,48 +168,6 @@ func runViewer(cmd *cobra.Command, deps *ViewerDeps) error {
 		logger.Warn("failed to write addr to viewer.lock", "error", err)
 	}
 
-	if len(dirs) == 0 {
-		<-ctx.Done()
-		return nil
-	}
-
-	if deps.Reader == nil || deps.Mover == nil || deps.DirWatcherFactory == nil {
-		return fmt.Errorf("viewer command dependencies for watching are not initialized")
-	}
-
-	watcher := deps.DirWatcherFactory(logger)
-	opts := []app.WatchOption{app.WithWatchLogger(logger)}
-	if deleteMode {
-		opts = append(opts, app.WithDeleteMode())
-	}
-	if silent {
-		opts = append(opts, app.WithSilent())
-	}
-
-	uc := app.NewWatchUsecase(deps.Reader, client, sp, deps.Mover, watcher, opts...)
-	return uc.Run(ctx, app.WatchParams{
-		Paths:      dirs,
-		SpeakerID:  speakerID,
-		Speed:      &speed,
-		Pitch:      &pitch,
-		Intonation: &intonation,
-	})
-}
-
-func resolveViewerPaths(watchDirs []string, watchQueue bool, deps *ViewerDeps) ([]string, error) {
-	dirs := append([]string(nil), watchDirs...)
-
-	if watchQueue {
-		var resolver func() (string, error)
-		if deps != nil {
-			resolver = deps.QueuePathResolver
-		}
-		queuePath, err := resolveQueueDir(resolver)
-		if err != nil {
-			return nil, err
-		}
-		dirs = append(dirs, queuePath)
-	}
-
-	return dirs, nil
+	<-ctx.Done()
+	return nil
 }
