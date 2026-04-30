@@ -3,7 +3,10 @@
 package e2e
 
 import (
+	"bufio"
 	"bytes"
+	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -133,6 +136,99 @@ func getURLWithRetry(t *testing.T, url string) *http.Response {
 		t.Fatalf("GET %s: %v", url, getErr)
 	}
 	return resp
+}
+
+// waitForSSEClipEvent は resp から SSE clip イベントが届くまで最大 timeout 待機して返す。
+func waitForSSEClipEvent(t *testing.T, resp *http.Response, timeout time.Duration) sseEvent {
+	t.Helper()
+	ch := make(chan sseEvent, 1)
+	go func() {
+		r := bufio.NewReader(resp.Body)
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+		defer cancel()
+		for {
+			ev, err := readSSEEvent(ctx, r)
+			if err != nil {
+				return
+			}
+			if ev.EventType == "clip" {
+				ch <- ev
+				return
+			}
+		}
+	}()
+	select {
+	case ev := <-ch:
+		return ev
+	case <-time.After(timeout):
+		t.Fatalf("timeout (%s) waiting for SSE clip event", timeout)
+		return sseEvent{}
+	}
+}
+
+// assertSSEClipText は SSE clip イベントの data.text が want と一致することを検証する。
+func assertSSEClipText(t *testing.T, ev sseEvent, want string) {
+	t.Helper()
+	var data struct {
+		Text string `json:"text"`
+	}
+	if err := json.Unmarshal([]byte(ev.Data), &data); err != nil {
+		t.Fatalf("unmarshal clip data: %v\nraw: %s", err, ev.Data)
+	}
+	if data.Text != want {
+		t.Errorf("clip text: expected %q, got %q", want, data.Text)
+	}
+}
+
+// waitForFileInDir は dir 内に prefix で始まるファイルが現れるまで最大 timeout 待機して
+// そのパスを返す。タイムアウト時は t.Errorf を呼ぶ。
+func waitForFileInDir(t *testing.T, dir, prefix string, timeout time.Duration) string {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		entries, _ := os.ReadDir(dir)
+		for _, e := range entries {
+			if strings.HasPrefix(e.Name(), prefix) {
+				return filepath.Join(dir, e.Name())
+			}
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	t.Errorf("timeout (%s): no file with prefix %q found in %s\n%s", timeout, prefix, dir, dumpDir(t, dir))
+	return ""
+}
+
+// waitForFileGone は path が消えるまで最大 timeout 待機する。タイムアウト時は t.Errorf を呼ぶ。
+func waitForFileGone(t *testing.T, path string, timeout time.Duration) {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if _, err := os.Stat(path); os.IsNotExist(err) {
+			return
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	t.Errorf("timeout (%s): file still exists: %s", timeout, path)
+}
+
+// dumpDir はディレクトリ内のファイル一覧を文字列で返す（デバッグ用）。
+func dumpDir(t *testing.T, dir string) string {
+	t.Helper()
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return fmt.Sprintf("(ReadDir error: %v)", err)
+	}
+	var sb strings.Builder
+	for _, e := range entries {
+		fmt.Fprintf(&sb, "%s\n", e.Name())
+		if e.IsDir() {
+			sub, _ := os.ReadDir(filepath.Join(dir, e.Name()))
+			for _, s := range sub {
+				fmt.Fprintf(&sb, "  %s/%s\n", e.Name(), s.Name())
+			}
+		}
+	}
+	return sb.String()
 }
 
 // writeViewerLockFile は homeDir 配下に viewer ロックファイルを書き込む。
