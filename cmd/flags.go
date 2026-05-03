@@ -48,6 +48,11 @@ func registerVoiceParamFlags(cmd *cobra.Command) {
 	cmd.Flags().Bool("verbose", false, "詳細ログを出力")
 }
 
+// viewerURLDefaultFromEnv は VOX_VIEWER_URL 環境変数からデフォルトの viewer URL を解決する。
+func viewerURLDefaultFromEnv() string {
+	return os.Getenv("VOX_VIEWER_URL")
+}
+
 // registerBaseFlags は dry-run を除く共通フラグを登録する。viewer など dry-run を持たないコマンドで使う。
 func registerBaseFlags(cmd *cobra.Command) {
 	engineURLDefault := "http://localhost:50021"
@@ -59,8 +64,14 @@ func registerBaseFlags(cmd *cobra.Command) {
 	registerVoiceParamFlags(cmd)
 }
 
+// registerViewerURLFlag は --viewer-url フラグを登録する。
+func registerViewerURLFlag(cmd *cobra.Command) {
+	cmd.Flags().String("viewer-url", viewerURLDefaultFromEnv(), "viewer の HTTP エンドポイント URL (例: http://192.168.1.10:8080)。指定時は lockfile auto-detect をスキップして明示 URL の viewer に POST する。")
+}
+
 // registerCommonFlags は各サブコマンド共通のフラグを登録する。
 func registerCommonFlags(cmd *cobra.Command) {
 	registerBaseFlags(cmd)
 	cmd.Flags().Bool("dry-run", false, "VOICEVOX・音声再生を行わず、読み上げ対象をログ出力")
+	registerViewerURLFlag(cmd)
 }

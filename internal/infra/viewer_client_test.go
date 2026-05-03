@@ -10,6 +10,9 @@ package infra_test
 // - POST /api/play 成功 → ViewerAPIClient.Play が PlayResponse を返す      → TestViewerAPIClient_Play_Success
 // - POST /api/play 無音モード応答 → ViewerAPIClient.Play が silent=true    → TestViewerAPIClient_Play_Silent
 // - POST /api/play で非 200 応答 → ViewerAPIClient.Play がエラーを返す     → TestViewerAPIClient_Play_Error
+// #481 --viewer-url:
+// - NewViewerAPIClientFromURL でフル URL 指定 → POST /api/play が成功する  → TestViewerAPIClientFromURL_Play_Success
+// - NewViewerAPIClientFromURL でフル URL に trailing slash → POST が成功   → TestViewerAPIClientFromURL_Play_TrailingSlash
 
 import (
 	"encoding/json"
@@ -179,5 +182,46 @@ func TestViewerAPIClient_Play_Error(t *testing.T) {
 	_, err := client.Play(t.Context(), infra.ViewerPlayRequest{Text: "test", SpeakerID: 2})
 	if err == nil {
 		t.Fatal("expected error, got nil")
+	}
+}
+
+func TestViewerAPIClientFromURL_Play_Success(t *testing.T) {
+	t.Parallel()
+	var capturedReq infra.ViewerPlayRequest
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewDecoder(r.Body).Decode(&capturedReq)
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"silent": false})
+	}))
+	defer srv.Close()
+
+	client := infra.NewViewerAPIClientFromURL("http://" + srv.Listener.Addr().String())
+	resp, err := client.Play(t.Context(), infra.ViewerPlayRequest{Text: "テスト", SpeakerID: 3})
+	if err != nil {
+		t.Fatalf("Play: %v", err)
+	}
+	if resp.Silent {
+		t.Errorf("expected silent=false")
+	}
+	if capturedReq.Text != "テスト" {
+		t.Errorf("expected text=%q, got %q", "テスト", capturedReq.Text)
+	}
+}
+
+func TestViewerAPIClientFromURL_Play_TrailingSlash(t *testing.T) {
+	t.Parallel()
+	var called bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"silent": false})
+	}))
+	defer srv.Close()
+
+	client := infra.NewViewerAPIClientFromURL("http://" + srv.Listener.Addr().String() + "/")
+	_, err := client.Play(t.Context(), infra.ViewerPlayRequest{Text: "テスト", SpeakerID: 3})
+	if err != nil {
+		t.Fatalf("Play: %v", err)
+	}
+	if !called {
+		t.Error("expected POST /api/play to be called")
 	}
 }

@@ -136,3 +136,35 @@ func TestRegisterCommonFlags_EngineURL(t *testing.T) {
 		t.Errorf("expected default engine-url 'http://localhost:50021', got: %s", engineURL)
 	}
 }
+
+// #481 --viewer-url フラグ
+
+func TestRegisterCommonFlags_ViewerURL_DefaultEmpty(t *testing.T) {
+	t.Setenv("VOX_VIEWER_URL", "")
+
+	cmd := &cobra.Command{Use: "test"}
+	registerCommonFlags(cmd)
+
+	viewerURL, err := cmd.Flags().GetString("viewer-url")
+	if err != nil {
+		t.Fatalf("expected viewer-url flag to exist, got error: %v", err)
+	}
+	if viewerURL != "" {
+		t.Errorf("expected default viewer-url to be empty, got: %s", viewerURL)
+	}
+}
+
+func TestRegisterCommonFlags_ViewerURL_EnvVar(t *testing.T) {
+	t.Setenv("VOX_VIEWER_URL", "http://remote:8080")
+
+	cmd := &cobra.Command{Use: "test"}
+	registerCommonFlags(cmd)
+
+	viewerURL, err := cmd.Flags().GetString("viewer-url")
+	if err != nil {
+		t.Fatalf("expected viewer-url flag to exist, got error: %v", err)
+	}
+	if viewerURL != "http://remote:8080" {
+		t.Errorf("expected viewer-url 'http://remote:8080', got: %s", viewerURL)
+	}
+}

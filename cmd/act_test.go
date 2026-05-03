@@ -7,6 +7,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/canpok1/vox-actor/internal/app"
 	"github.com/canpok1/vox-actor/internal/domain/entity"
+	"github.com/canpok1/vox-actor/internal/infra"
 	"github.com/spf13/cobra"
 )
 
@@ -23,6 +25,11 @@ import (
 // DONE: viewer 未起動はローカル再生にフォールバック                         → TestRunAct_ViewerNotRunning_UsesLocalPlayer
 // DONE: --dry-run 時は viewer へ POST しない                               → TestRunAct_DryRun_NoViewerPost
 // DONE: 途中行で POST 失敗した場合即座にエラー終了する                      → TestRunAct_ViewerRunning_PostFails_StopsEarly
+// #481 --viewer-url:
+// DONE: --viewer-url 指定時は明示 URL の viewer に POST する                → TestRunAct_ExplicitViewerURL_POSTsToViewer
+// DONE: --viewer-url 指定時は lockfile auto-detect をスキップする           → TestRunAct_ExplicitViewerURL_SkipsLockfile
+// DONE: --viewer-url 指定時は AudioProbe をスキップする                     → TestRunAct_ExplicitViewerURL_SkipsAudioProbe
+// DONE: --viewer-url 指定時に接続失敗 → エラーを返す (no fallback)         → TestRunAct_ExplicitViewerURL_ConnectionError_ReturnsError
 
 // グレースフルシャットダウン テストリスト
 // DONE: actコマンドのcontextにシグナルハンドリングが設定されていることを確認
@@ -589,5 +596,160 @@ func TestRunAct_AudioProbe_FailureCausesError(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "audio") {
 		t.Errorf("expected error message to mention 'audio', got: %v", err)
+	}
+}
+
+// --- #481 --viewer-url テスト ---
+
+func TestRunAct_ExplicitViewerURL_POSTsToViewer(t *testing.T) {
+	dir := t.TempDir()
+	scriptFile := filepath.Join(dir, "test.txt")
+	if err := os.WriteFile(scriptFile, []byte("テストセリフ"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var postCount int
+	var capturedText string
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/play", func(w http.ResponseWriter, r *http.Request) {
+		postCount++
+		var req map[string]interface{}
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		if v, ok := req["text"].(string); ok {
+			capturedText = v
+		}
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"silent": false})
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	cmd := newCmdWithContext(t)
+	registerCommonFlags(cmd)
+	_ = cmd.ParseFlags([]string{"--viewer-url", srv.URL})
+
+	deps := &ActDeps{
+		Reader:        infra.NewFileReader(),
+		ClientFactory: func(_ string) app.VoicevoxClient { return &noopClient{} },
+		Player:        &noopPlayer{},
+	}
+
+	if err := runAct(cmd, []string{scriptFile}, deps); err != nil {
+		t.Fatalf("runAct: %v", err)
+	}
+	if postCount != 1 {
+		t.Errorf("expected 1 POST to /api/play, got %d", postCount)
+	}
+	if capturedText != "テストセリフ" {
+		t.Errorf("expected text=%q, got %q", "テストセリフ", capturedText)
+	}
+}
+
+func TestRunAct_ExplicitViewerURL_SkipsLockfile(t *testing.T) {
+	dir := t.TempDir()
+	scriptFile := filepath.Join(dir, "test.txt")
+	if err := os.WriteFile(scriptFile, []byte("テスト\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// lockfile に起動中 viewer があっても explicit URL が優先
+	var lockfilePostCount int
+	lockfileMux := http.NewServeMux()
+	lockfileMux.HandleFunc("/api/status", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) })
+	lockfileMux.HandleFunc("/api/play", func(w http.ResponseWriter, r *http.Request) {
+		lockfilePostCount++
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"silent": false})
+	})
+	lockPath, _ := setupFakeViewer(t, lockfileMux)
+
+	var explicitPostCount int
+	explicitMux := http.NewServeMux()
+	explicitMux.HandleFunc("/api/play", func(w http.ResponseWriter, r *http.Request) {
+		explicitPostCount++
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"silent": false})
+	})
+	explicitSrv := httptest.NewServer(explicitMux)
+	defer explicitSrv.Close()
+
+	cmd := newCmdWithContext(t)
+	registerCommonFlags(cmd)
+	_ = cmd.ParseFlags([]string{"--viewer-url", explicitSrv.URL})
+
+	deps := &ActDeps{
+		Reader:           infra.NewFileReader(),
+		ClientFactory:    func(_ string) app.VoicevoxClient { return &noopClient{} },
+		Player:           &noopPlayer{},
+		LockPathResolver: func() (string, error) { return lockPath, nil },
+	}
+
+	if err := runAct(cmd, []string{scriptFile}, deps); err != nil {
+		t.Fatalf("runAct: %v", err)
+	}
+	if lockfilePostCount != 0 {
+		t.Errorf("expected 0 POST to lockfile viewer, got %d", lockfilePostCount)
+	}
+	if explicitPostCount != 1 {
+		t.Errorf("expected 1 POST to explicit viewer, got %d", explicitPostCount)
+	}
+}
+
+func TestRunAct_ExplicitViewerURL_SkipsAudioProbe(t *testing.T) {
+	dir := t.TempDir()
+	scriptFile := filepath.Join(dir, "test.txt")
+	if err := os.WriteFile(scriptFile, []byte("テスト\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	probeCalled := false
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/play", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"silent": false})
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	cmd := newCmdWithContext(t)
+	registerCommonFlags(cmd)
+	_ = cmd.ParseFlags([]string{"--viewer-url", srv.URL})
+
+	deps := &ActDeps{
+		Reader:        infra.NewFileReader(),
+		ClientFactory: func(_ string) app.VoicevoxClient { return &noopClient{} },
+		Player:        &noopPlayer{},
+		AudioProbe:    func() error { probeCalled = true; return nil },
+	}
+
+	if err := runAct(cmd, []string{scriptFile}, deps); err != nil {
+		t.Fatalf("runAct: %v", err)
+	}
+	if probeCalled {
+		t.Error("expected AudioProbe to be skipped when --viewer-url is set, but it was called")
+	}
+}
+
+func TestRunAct_ExplicitViewerURL_ConnectionError_ReturnsError(t *testing.T) {
+	dir := t.TempDir()
+	scriptFile := filepath.Join(dir, "test.txt")
+	if err := os.WriteFile(scriptFile, []byte("テスト\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	playCalled := false
+
+	cmd := newCmdWithContext(t)
+	registerCommonFlags(cmd)
+	_ = cmd.ParseFlags([]string{"--viewer-url", "http://127.0.0.1:1"})
+
+	deps := &ActDeps{
+		Reader:        infra.NewFileReader(),
+		ClientFactory: func(_ string) app.VoicevoxClient { return &noopClient{} },
+		Player:        &trackingPlayer{playFn: func() { playCalled = true }},
+	}
+
+	err := runAct(cmd, []string{scriptFile}, deps)
+	if err == nil {
+		t.Fatal("expected error when viewer is not reachable, got nil")
+	}
+	if playCalled {
+		t.Error("expected no local playback when --viewer-url fails")
 	}
 }

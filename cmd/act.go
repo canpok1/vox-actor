@@ -94,6 +94,44 @@ func runAct(cmd *cobra.Command, args []string, deps *ActDeps) error {
 	}
 
 	if !dryRun {
+		viewerURL, _ := cmd.Flags().GetString("viewer-url")
+
+		if viewerURL != "" {
+			// 明示 URL: lockfile スキップ、AudioProbe スキップ、接続失敗時はエラー
+			logger.Info("using explicit viewer URL", "url", viewerURL)
+			scripts, err := deps.Reader.Read(args[0])
+			if err != nil {
+				return err
+			}
+			vc := infra.NewViewerAPIClientFromURL(viewerURL)
+			for _, script := range scripts {
+				if script.IsEmpty {
+					continue
+				}
+				if ctx.Err() != nil {
+					return nil
+				}
+				effectiveSpeakerID := script.ResolveSpeakerID(speakerID)
+				effectiveSpeed := script.ResolveSpeed(&speed)
+				effectivePitch := script.ResolvePitch(&pitch)
+				effectiveIntonation := script.ResolveIntonation(&intonation)
+				resp, postErr := vc.Play(ctx, infra.ViewerPlayRequest{
+					Text:       script.Text,
+					SpeakerID:  effectiveSpeakerID,
+					Speed:      effectiveSpeed,
+					Pitch:      effectivePitch,
+					Intonation: effectiveIntonation,
+				})
+				if postErr != nil {
+					return fmt.Errorf("act via viewer: %w", postErr)
+				}
+				if resp.Silent {
+					logger.Warn("viewer is in silent mode", "reason", resp.SilentReason)
+				}
+			}
+			return nil
+		}
+
 		lockPath, lockErr := resolveActLockPath(deps)
 		if lockErr != nil {
 			logger.Debug("could not resolve viewer lock path, using local player", "error", lockErr)
