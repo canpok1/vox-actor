@@ -104,6 +104,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 	"testing"
 	"testing/fstest"
 	"time"
@@ -1240,39 +1241,55 @@ func TestHTTPStreamPlayer_PlayText_UnknownSpeakerFallback(t *testing.T) {
 
 // testVoicevoxClient is a minimal stub implementing app.VoicevoxClient for /test-clip tests.
 type testVoicevoxClient struct {
-	createQueryCall  int
-	synthesizeCall   int
-	createQueryErr   error
-	synthesizeErr    error
-	wav              []byte
-	capturedText     string
-	capturedSpeaker  int
-	createQueryBlock chan struct{} // nil でなければ CreateQuery はこのチャネルが閉じるまでブロックする
+	mu              sync.Mutex
+	createQueryCall int
+	synthesizeCall  int
+	createQueryErr  error
+	synthesizeErr   error
+	// synthesizeErrOnNthCall が 0 の場合は全呼び出しで synthesizeErr を返す。
+	// N > 0 の場合は N 回目の呼び出しのみ synthesizeErr を返す。
+	synthesizeErrOnNthCall int
+	wav                    []byte
+	capturedText           string
+	capturedSpeaker        int
+	createQueryBlock       chan struct{} // nil でなければ CreateQuery はこのチャネルが閉じるまでブロックする
 }
 
 func (c *testVoicevoxClient) HealthCheck(_ context.Context) error { return nil }
 func (c *testVoicevoxClient) CreateQuery(ctx context.Context, text string, speakerID int) (*entity.AudioQuery, error) {
+	c.mu.Lock()
 	c.createQueryCall++
 	c.capturedText = text
 	c.capturedSpeaker = speakerID
-	if c.createQueryBlock != nil {
+	block := c.createQueryBlock
+	c.mu.Unlock()
+	if block != nil {
 		select {
-		case <-c.createQueryBlock:
+		case <-block:
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		}
 	}
-	if c.createQueryErr != nil {
-		return nil, c.createQueryErr
+	c.mu.Lock()
+	err := c.createQueryErr
+	c.mu.Unlock()
+	if err != nil {
+		return nil, err
 	}
 	return &entity.AudioQuery{}, nil
 }
 func (c *testVoicevoxClient) Synthesize(_ context.Context, _ *entity.AudioQuery, _ int) ([]byte, error) {
+	c.mu.Lock()
 	c.synthesizeCall++
-	if c.synthesizeErr != nil {
-		return nil, c.synthesizeErr
+	n := c.synthesizeCall
+	errOnN := c.synthesizeErrOnNthCall
+	synthErr := c.synthesizeErr
+	wav := c.wav
+	c.mu.Unlock()
+	if synthErr != nil && (errOnN == 0 || n == errOnN) {
+		return nil, synthErr
 	}
-	return c.wav, nil
+	return wav, nil
 }
 func (c *testVoicevoxClient) GetSpeakers(_ context.Context) ([]entity.Speaker, error) {
 	return nil, nil
@@ -3299,6 +3316,98 @@ func TestHTTPStreamPlayer_APIPlayback_CompletedClips(t *testing.T) {
 	}
 	if result.ClipCount != 2 {
 		t.Errorf("expected clip_count=2, got %d", result.ClipCount)
+	}
+}
+
+// --- #498 次クリップ事前 broadcast ---
+//
+// DONE: 現クリップ sleep 中に次クリップを並行 Synthesize して前倒し broadcast する → TestHTTPStreamPlayer_Prefetch_NextClipBroadcastedBeforeCurrentEnds
+// DONE: 前倒し Synthesize 失敗でバッチ全体が failed になる                         → TestHTTPStreamPlayer_Prefetch_SynthesizeFailureDuringPrefetchFails
+
+func TestHTTPStreamPlayer_Prefetch_NextClipBroadcastedBeforeCurrentEnds(t *testing.T) {
+	t.Parallel()
+	// byteRate=8000, dataSize=4800 → duration=600ms
+	wav := buildWAV(8000, 4800)
+	stub := &testVoicevoxClient{wav: wav}
+
+	leadTime := 200 * time.Millisecond
+	p := newStartedPlayerWithOpts(t,
+		WithVoicevoxClient(stub),
+		WithPrefetchLeadTime(leadTime),
+	)
+
+	events := subscribeSSE(t, "http://"+p.Addr())
+	time.Sleep(100 * time.Millisecond)
+
+	body := bytes.NewBufferString(`{"clips":[{"text":"first","speaker_id":2},{"text":"second","speaker_id":3}]}`)
+	_, err := http.Post("http://"+p.Addr()+"/api/play", "application/json", body)
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+
+	receivedAt := map[string]time.Time{}
+	timeout := time.After(5 * time.Second)
+	for len(receivedAt) < 2 {
+		select {
+		case data := <-events:
+			var ev clipEvent
+			if err := json.Unmarshal([]byte(data), &ev); err == nil {
+				if _, seen := receivedAt[ev.Text]; !seen {
+					receivedAt[ev.Text] = time.Now()
+				}
+			}
+		case <-timeout:
+			t.Fatalf("timeout: received clips %v", receivedAt)
+		}
+	}
+
+	// 前倒しで broadcast されるため、第2クリップのSSEは第1クリップの推定再生時間(600ms)内に届く。
+	gap := receivedAt["second"].Sub(receivedAt["first"])
+	if gap >= 600*time.Millisecond {
+		t.Errorf("second clip arrived too late (gap=%v), expected < 600ms (prefetch not working)", gap)
+	}
+}
+
+func TestHTTPStreamPlayer_Prefetch_SynthesizeFailureDuringPrefetchFails(t *testing.T) {
+	t.Parallel()
+	// byteRate=8000, dataSize=4800 → duration=600ms (プリフェッチが走る十分な長さ)
+	wav := buildWAV(8000, 4800)
+	stub := &testVoicevoxClient{
+		wav:                    wav,
+		synthesizeErr:          errors.New("prefetch synth failed"),
+		synthesizeErrOnNthCall: 2, // 2回目の Synthesize だけ失敗
+	}
+
+	p := newStartedPlayerWithOpts(t,
+		WithVoicevoxClient(stub),
+		WithPrefetchLeadTime(200*time.Millisecond),
+	)
+
+	body := bytes.NewBufferString(`{"clips":[{"text":"first","speaker_id":2},{"text":"second","speaker_id":3}]}`)
+	resp, err := http.Post("http://"+p.Addr()+"/api/play", "application/json", body)
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+	var result ViewerPlayResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+
+	// プリフェッチエラーは現クリップの sleep 中 (600ms-200ms=400ms) に検出される。
+	// 600ms 経過前（500ms時点）で "failed" になっていることを確認する。
+	// ※実装なしの場合は 600ms 後に直列で失敗するため、500ms 時点では "playing" のままになる。
+	time.Sleep(500 * time.Millisecond)
+
+	status, ok := p.PlaybackStatus(result.PlaybackID)
+	if !ok {
+		t.Fatalf("playback state not found for id=%s", result.PlaybackID)
+	}
+	if status != "failed" {
+		t.Errorf("expected prefetch error to fail batch within 500ms, got status=%s (prefetch not implemented?)", status)
 	}
 }
 

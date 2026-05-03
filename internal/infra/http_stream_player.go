@@ -90,6 +90,10 @@ type HTTPStreamPlayer struct {
 	// workerCancel は worker goroutine と GC goroutine を停止するためのキャンセル関数。
 	workerCancel context.CancelFunc
 
+	// prefetchLeadTime は次クリップを前倒し broadcast するリードタイム。
+	// 現クリップの推定再生時間残り prefetchLeadTime の段階で次クリップの clipEvent を送信する。
+	prefetchLeadTime time.Duration
+
 	// playbackMu は playbacks マップの排他制御。
 	playbackMu sync.Mutex
 	// playbacks は playback_id → state の in-memory store。TTL 1 時間で GC される。
@@ -126,6 +130,8 @@ const (
 	maxClipsPerBatch = 100
 	// batchQueueCapacity は pending バッチ数の上限。超過時は 503 を返す。
 	batchQueueCapacity = 64
+	// defaultPrefetchLeadTime は次クリップの前倒し broadcast タイミング（現クリップ残り時間）の既定値。
+	defaultPrefetchLeadTime = 500 * time.Millisecond
 	// playbackTTL は playback state を in-memory に保持する期間。
 	playbackTTL = time.Hour
 	// playbackGCInterval は GC goroutine の実行間隔。
@@ -289,6 +295,17 @@ func WithHistoryDir(dir string) HTTPStreamOption {
 	}
 }
 
+// WithPrefetchLeadTime は次クリップを前倒し broadcast するリードタイムを設定するオプション。
+// 現クリップの推定再生時間が leadTime より長い場合、残り leadTime の段階で
+// 次クリップの Synthesize 結果を broadcast する（テスト用・チューニング用）。
+func WithPrefetchLeadTime(leadTime time.Duration) HTTPStreamOption {
+	return func(p *HTTPStreamPlayer) {
+		if leadTime > 0 {
+			p.prefetchLeadTime = leadTime
+		}
+	}
+}
+
 // withNowFunc は clipEvent の timestamp 取得に使う関数を設定する（テスト用）。
 func withNowFunc(now func() time.Time) HTTPStreamOption {
 	return func(p *HTTPStreamPlayer) {
@@ -310,16 +327,17 @@ func NewHTTPStreamPlayer(addr string, staticFS fs.FS, opts ...HTTPStreamOption) 
 		return nil, fmt.Errorf("stream staticFS must not be nil")
 	}
 	p := &HTTPStreamPlayer{
-		addr:           addr,
-		logger:         slog.New(slog.DiscardHandler),
-		staticFS:       staticFS,
-		subscribers:    newSubscriberRegistry(),
-		nowFunc:        time.Now,
-		silentInterval: defaultSilentInterval,
-		testPhrase:     defaultTestPhrase,
-		testClipCache:  make(map[int][]byte),
-		batchQueue:     make(chan playBatch, batchQueueCapacity),
-		playbacks:      make(map[string]*playbackStateRecord),
+		addr:             addr,
+		logger:           slog.New(slog.DiscardHandler),
+		staticFS:         staticFS,
+		subscribers:      newSubscriberRegistry(),
+		nowFunc:          time.Now,
+		silentInterval:   defaultSilentInterval,
+		testPhrase:       defaultTestPhrase,
+		testClipCache:    make(map[int][]byte),
+		batchQueue:       make(chan playBatch, batchQueueCapacity),
+		playbacks:        make(map[string]*playbackStateRecord),
+		prefetchLeadTime: defaultPrefetchLeadTime,
 	}
 	for _, opt := range opts {
 		opt(p)
@@ -1081,50 +1099,77 @@ func (p *HTTPStreamPlayer) runWorker(ctx context.Context) {
 	}
 }
 
+// synthResult は並行 Synthesize goroutine の結果を格納する。
+type synthResult struct {
+	wav []byte
+	err error
+}
+
 // synthesize 失敗時はバッチ全体を中断する（all-or-nothing）。
+// 現クリップの再生中に次クリップを並行 Synthesize し、残り prefetchLeadTime の
+// タイミングで前倒し broadcast する。
+// メモリ増加: 最大 1 本分の追加 WAV バッファを保持する（VOICEVOX 負荷も +1 並列）。
 func (p *HTTPStreamPlayer) processBatch(ctx context.Context, batch playBatch) {
 	p.setPlaybackStatus(batch.playbackID, playbackStatusPlaying, "")
 
-	for _, clip := range batch.clips {
+	// 前のイテレーションで前倒し broadcast 済みの WAV（nil なら通常合成）。
+	var prefetchedWAV []byte
+
+	for i, clip := range batch.clips {
 		if ctx.Err() != nil {
 			return
 		}
 
-		query, err := p.voicevoxClient.CreateQuery(ctx, clip.Text, clip.SpeakerID)
-		if err != nil {
-			p.logger.Error("worker CreateQuery failed", "playbackID", batch.playbackID, "speakerID", clip.SpeakerID, "error", err)
-			p.setPlaybackStatus(batch.playbackID, playbackStatusFailed, err.Error())
-			return
-		}
-
-		q := query.WithOverrides(clip.Speed, clip.Pitch, clip.Intonation)
-		wav, err := p.voicevoxClient.Synthesize(ctx, &q, clip.SpeakerID)
-		if err != nil {
-			p.logger.Error("worker Synthesize failed", "playbackID", batch.playbackID, "speakerID", clip.SpeakerID, "error", err)
-			p.setPlaybackStatus(batch.playbackID, playbackStatusFailed, err.Error())
-			return
-		}
-
-		meta := app.PlayMeta{Text: clip.Text, SpeakerID: clip.SpeakerID}
-		if err := p.Play(ctx, wav, meta); err != nil {
-			if ctx.Err() != nil {
+		var wav []byte
+		if prefetchedWAV != nil {
+			// 前イテレーションで既に Play() 済み。WAV だけ再利用する。
+			wav = prefetchedWAV
+			prefetchedWAV = nil
+		} else {
+			var err error
+			wav, err = p.synthesizeAndPlay(ctx, batch.playbackID, clip)
+			if err != nil {
 				return
 			}
-			p.logger.Error("worker Play failed", "playbackID", batch.playbackID, "speakerID", clip.SpeakerID, "error", err)
-			p.setPlaybackStatus(batch.playbackID, playbackStatusFailed, err.Error())
-			return
 		}
 
 		duration, dErr := estimateWAVDuration(wav)
-		if dErr == nil && duration > 0 {
-			timer := time.NewTimer(duration)
-			select {
-			case <-timer.C:
-			case <-ctx.Done():
-				if !timer.Stop() {
-					<-timer.C
+
+		// 次クリップが存在し、再生時間が prefetchLeadTime より長い場合に並行 Synthesize を開始。
+		// buffered channel (cap=1) を使うため goroutine は送信後にブロックしない。
+		var nextSynthCh chan synthResult
+		if i+1 < len(batch.clips) && dErr == nil && duration > p.prefetchLeadTime {
+			nextClip := batch.clips[i+1]
+			nextSynthCh = make(chan synthResult, 1)
+			go func() {
+				q2, err := p.voicevoxClient.CreateQuery(ctx, nextClip.Text, nextClip.SpeakerID)
+				if err != nil {
+					nextSynthCh <- synthResult{err: err}
+					return
 				}
-				return
+				q2o := q2.WithOverrides(nextClip.Speed, nextClip.Pitch, nextClip.Intonation)
+				w, err := p.voicevoxClient.Synthesize(ctx, &q2o, nextClip.SpeakerID)
+				nextSynthCh <- synthResult{wav: w, err: err}
+			}()
+		}
+
+		if dErr == nil && duration > 0 {
+			if nextSynthCh != nil {
+				var err error
+				prefetchedWAV, err = p.prefetchSleep(ctx, batch.playbackID, duration, nextSynthCh, batch.clips[i+1])
+				if err != nil {
+					return
+				}
+			} else {
+				timer := time.NewTimer(duration)
+				select {
+				case <-timer.C:
+				case <-ctx.Done():
+					if !timer.Stop() {
+						<-timer.C
+					}
+					return
+				}
 			}
 		}
 
@@ -1132,6 +1177,99 @@ func (p *HTTPStreamPlayer) processBatch(ctx context.Context, batch playBatch) {
 	}
 
 	p.setPlaybackStatus(batch.playbackID, playbackStatusCompleted, "")
+}
+
+// synthesizeAndPlay は clip を合成して Play() でブロードキャストする。
+// エラー時は playback を failed に遷移させて error を返す。
+func (p *HTTPStreamPlayer) synthesizeAndPlay(ctx context.Context, playbackID string, clip ViewerClip) ([]byte, error) {
+	query, err := p.voicevoxClient.CreateQuery(ctx, clip.Text, clip.SpeakerID)
+	if err != nil {
+		p.logger.Error("worker CreateQuery failed", "playbackID", playbackID, "speakerID", clip.SpeakerID, "error", err)
+		p.setPlaybackStatus(playbackID, playbackStatusFailed, err.Error())
+		return nil, err
+	}
+
+	q := query.WithOverrides(clip.Speed, clip.Pitch, clip.Intonation)
+	wav, err := p.voicevoxClient.Synthesize(ctx, &q, clip.SpeakerID)
+	if err != nil {
+		p.logger.Error("worker Synthesize failed", "playbackID", playbackID, "speakerID", clip.SpeakerID, "error", err)
+		p.setPlaybackStatus(playbackID, playbackStatusFailed, err.Error())
+		return nil, err
+	}
+
+	meta := app.PlayMeta{Text: clip.Text, SpeakerID: clip.SpeakerID}
+	if pErr := p.Play(ctx, wav, meta); pErr != nil {
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+		p.logger.Error("worker Play failed", "playbackID", playbackID, "speakerID", clip.SpeakerID, "error", pErr)
+		p.setPlaybackStatus(playbackID, playbackStatusFailed, pErr.Error())
+		return nil, pErr
+	}
+	return wav, nil
+}
+
+// prefetchSleep は duration の残り prefetchLeadTime 前に nextSynthCh から合成結果を受け取り
+// nextClip を前倒し broadcast する。broadcast に成功した場合は nextClip の WAV を返す（nil なら
+// タイムアウトで broadcast スキップ）。エラー時は playback を failed に遷移させて error を返す。
+// goroutine leak を防ぐため nextSynthCh は buffered channel (cap=1) であること。
+func (p *HTTPStreamPlayer) prefetchSleep(ctx context.Context, playbackID string, duration time.Duration, nextSynthCh chan synthResult, nextClip ViewerClip) ([]byte, error) {
+	// (duration - prefetchLeadTime) 待機後、前倒し broadcast を試みる。
+	timer1 := time.NewTimer(duration - p.prefetchLeadTime)
+	select {
+	case <-timer1.C:
+	case <-ctx.Done():
+		if !timer1.Stop() {
+			<-timer1.C
+		}
+		return nil, ctx.Err()
+	}
+
+	// 残り prefetchLeadTime 以内に合成が終わればそのまま broadcast する。
+	// タイムアウト時は goroutine の結果を破棄し、次イテレーションで通常合成にフォールバックする
+	// （buffered channel のため goroutine leak なし）。
+	remainTimer := time.NewTimer(p.prefetchLeadTime)
+	select {
+	case result := <-nextSynthCh:
+		if result.err != nil {
+			if !remainTimer.Stop() {
+				<-remainTimer.C
+			}
+			p.logger.Error("worker prefetch Synthesize failed", "playbackID", playbackID, "error", result.err)
+			p.setPlaybackStatus(playbackID, playbackStatusFailed, result.err.Error())
+			return nil, result.err
+		}
+		nextMeta := app.PlayMeta{Text: nextClip.Text, SpeakerID: nextClip.SpeakerID}
+		if pErr := p.Play(ctx, result.wav, nextMeta); pErr != nil {
+			if !remainTimer.Stop() {
+				<-remainTimer.C
+			}
+			if ctx.Err() != nil {
+				return nil, ctx.Err()
+			}
+			p.logger.Error("worker prefetch Play failed", "playbackID", playbackID, "error", pErr)
+			p.setPlaybackStatus(playbackID, playbackStatusFailed, pErr.Error())
+			return nil, pErr
+		}
+		// 残り time を消化してから次クリップへ進む。
+		select {
+		case <-remainTimer.C:
+		case <-ctx.Done():
+			if !remainTimer.Stop() {
+				<-remainTimer.C
+			}
+			return result.wav, ctx.Err()
+		}
+		return result.wav, nil
+	case <-remainTimer.C:
+		// 合成がリードタイム内に完了しなかった。次イテレーションで通常合成する。
+		return nil, nil
+	case <-ctx.Done():
+		if !remainTimer.Stop() {
+			<-remainTimer.C
+		}
+		return nil, ctx.Err()
+	}
 }
 
 func (p *HTTPStreamPlayer) runPlaybackGC(ctx context.Context) {
