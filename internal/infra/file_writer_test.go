@@ -136,13 +136,13 @@ func TestFileWriter_Write_JSON_OmitNilFields(t *testing.T) {
 	}
 
 	contents := string(data)
-	if strings.Contains(contents, "speed") {
+	if strings.Contains(contents, `"speed":`) {
 		t.Errorf("expected speed omitted, got: %s", contents)
 	}
-	if strings.Contains(contents, "pitch") {
+	if strings.Contains(contents, `"pitch":`) {
 		t.Errorf("expected pitch omitted, got: %s", contents)
 	}
-	if strings.Contains(contents, "intonation") {
+	if strings.Contains(contents, `"intonation":`) {
 		t.Errorf("expected intonation omitted, got: %s", contents)
 	}
 	if !strings.Contains(contents, `"speaker":2`) && !strings.Contains(contents, `"speaker": 2`) {
