@@ -61,7 +61,6 @@ func makeActCmd(deps *ActDeps) *cobra.Command {
 	return cmd
 }
 
-// actViaViewer は scripts を 1 回の POST にまとめて viewer に送り、playback_id を stdout に出力する。
 func actViaViewer(
 	ctx context.Context,
 	cmd *cobra.Command,
@@ -84,7 +83,7 @@ func actViaViewer(
 		})
 	}
 	if len(clips) == 0 {
-		_, _ = fmt.Fprintln(cmd.OutOrStdout(), "local_playback")
+		_, _ = fmt.Fprintln(cmd.OutOrStdout(), localPlaybackID)
 		return nil
 	}
 	if ctx.Err() != nil {
@@ -180,6 +179,6 @@ func runAct(cmd *cobra.Command, args []string, deps *ActDeps) error {
 	}); err != nil {
 		return err
 	}
-	_, _ = fmt.Fprintln(cmd.OutOrStdout(), "local_playback")
+	_, _ = fmt.Fprintln(cmd.OutOrStdout(), localPlaybackID)
 	return nil
 }

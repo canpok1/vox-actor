@@ -9,7 +9,9 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// PlaybackWaitDeps は playback wait コマンドの依存を保持する。
+// localPlaybackID はローカル再生モード時の playback_id 文字列。
+const localPlaybackID = "local_playback"
+
 type PlaybackWaitDeps struct {
 	LockPathResolver func() (string, error)
 }
@@ -53,7 +55,7 @@ func makePlaybackWaitCmd(deps *PlaybackWaitDeps) *cobra.Command {
 
 func runPlaybackWait(cmd *cobra.Command, args []string, deps *PlaybackWaitDeps) error {
 	id := args[0]
-	if id == "local_playback" {
+	if id == localPlaybackID {
 		return nil
 	}
 

@@ -3099,7 +3099,7 @@ func TestHTTPStreamPlayer_APIPlayback_UnknownID(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Errorf("expected 200, got %d", resp.StatusCode)
 	}
-	var result apiPlaybackResponse
+	var result ViewerPlaybackResponse
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
@@ -3152,7 +3152,7 @@ func TestHTTPStreamPlayer_APIPlayback_PendingStatus(t *testing.T) {
 		if err != nil {
 			t.Fatalf("GET: %v", err)
 		}
-		var result apiPlaybackResponse
+		var result ViewerPlaybackResponse
 		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 			_ = resp.Body.Close()
 			t.Fatalf("decode GET response: %v", err)
@@ -3203,7 +3203,7 @@ func TestHTTPStreamPlayer_APIPlayback_CompletedStatus(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Errorf("expected 200, got %d", resp.StatusCode)
 	}
-	var result apiPlaybackResponse
+	var result ViewerPlaybackResponse
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
@@ -3241,7 +3241,7 @@ func TestHTTPStreamPlayer_APIPlayback_FailedStatus(t *testing.T) {
 		t.Fatalf("GET: %v", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
-	var result apiPlaybackResponse
+	var result ViewerPlaybackResponse
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
@@ -3290,7 +3290,7 @@ func TestHTTPStreamPlayer_APIPlayback_CompletedClips(t *testing.T) {
 		t.Fatalf("GET: %v", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
-	var result apiPlaybackResponse
+	var result ViewerPlaybackResponse
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
@@ -3333,7 +3333,7 @@ func TestHTTPStreamPlayer_APIPlayback_TTLExpiry(t *testing.T) {
 		t.Fatalf("GET: %v", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
-	var result apiPlaybackResponse
+	var result ViewerPlaybackResponse
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}

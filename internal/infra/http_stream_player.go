@@ -153,17 +153,6 @@ type playbackStateRecord struct {
 	finishedAt     *int64 // Unix milliseconds
 }
 
-// apiPlaybackResponse は GET /api/playback/{id} のレスポンスペイロード。
-type apiPlaybackResponse struct {
-	ID             string `json:"id"`
-	Status         string `json:"status"`
-	ClipCount      int    `json:"clip_count"`
-	CompletedClips int    `json:"completed_clips"`
-	StartedAt      *int64 `json:"started_at"`
-	FinishedAt     *int64 `json:"finished_at"`
-	FailedReason   string `json:"failed_reason"`
-}
-
 // playBatch は worker への投入単位。
 type playBatch struct {
 	playbackID string
@@ -1054,14 +1043,14 @@ func (p *HTTPStreamPlayer) handleAPIPlayback(w http.ResponseWriter, r *http.Requ
 
 	p.playbackMu.Lock()
 	state, ok := p.playbacks[id]
-	var resp apiPlaybackResponse
+	var resp ViewerPlaybackResponse
 	if !ok {
-		resp = apiPlaybackResponse{
+		resp = ViewerPlaybackResponse{
 			ID:     id,
 			Status: "unknown",
 		}
 	} else {
-		resp = apiPlaybackResponse{
+		resp = ViewerPlaybackResponse{
 			ID:             id,
 			Status:         string(state.status),
 			ClipCount:      state.clipCount,

@@ -45,11 +45,10 @@ func makeSayCmd(deps *SayDeps) *cobra.Command {
 	return cmd
 }
 
-// sayViaViewer は clip を viewer に送り、playback_id を stdout に出力する。
 func sayViaViewer(ctx context.Context, cmd *cobra.Command, vc *infra.ViewerAPIClient, clip infra.ViewerClip, logger *slog.Logger) error {
 	resp, err := vc.Play(ctx, infra.ViewerPlayRequest{Clips: []infra.ViewerClip{clip}})
 	if err != nil {
-		return err
+		return fmt.Errorf("say via viewer: %w", err)
 	}
 	if resp.Silent {
 		logger.Warn("viewer is in silent mode", "reason", resp.SilentReason)
@@ -139,6 +138,6 @@ func runSay(cmd *cobra.Command, args []string, deps *SayDeps) error {
 	if err := uc.Run(ctx, params); err != nil {
 		return err
 	}
-	_, _ = fmt.Fprintln(cmd.OutOrStdout(), "local_playback")
+	_, _ = fmt.Fprintln(cmd.OutOrStdout(), localPlaybackID)
 	return nil
 }
