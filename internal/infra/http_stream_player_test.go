@@ -2823,6 +2823,7 @@ func TestHTTPStreamPlayer_APIPlay_SynthesisFails(t *testing.T) {
 // DONE: clips 形式で UUID v4 playback_id が即時返る               → TestHTTPStreamPlayer_APIPlay_ClipsFormatReturnsPlaybackID
 // DONE: 旧形式 (text/speaker_id) で 400 Bad Request               → TestHTTPStreamPlayer_APIPlay_OldFormatRejected
 // DONE: clips 空配列で 400 Bad Request                            → TestHTTPStreamPlayer_APIPlay_EmptyClipsRejected
+// DONE: clips[N].text 空文字で 400 Bad Request                   → TestHTTPStreamPlayer_APIPlay_EmptyClipTextRejected
 // DONE: キュー満杯（64 pending）で 503 Service Unavailable        → TestHTTPStreamPlayer_APIPlay_QueueFull
 // DONE: worker が clips を順次 SSE broadcast する                  → TestHTTPStreamPlayer_Worker_BroadcastsClipsInOrder
 // DONE: 1 件目 synthesize 失敗で残りクリップが broadcast されない → TestHTTPStreamPlayer_Worker_SynthesizeFailureStopsProcessing
@@ -2887,6 +2888,21 @@ func TestHTTPStreamPlayer_APIPlay_EmptyClipsRejected(t *testing.T) {
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Errorf("expected 400 for empty clips, got %d", resp.StatusCode)
+	}
+}
+
+func TestHTTPStreamPlayer_APIPlay_EmptyClipTextRejected(t *testing.T) {
+	t.Parallel()
+	stub := &testVoicevoxClient{wav: []byte("RIFFx")}
+	p := newStartedPlayerWithOpts(t, WithVoicevoxClient(stub))
+	body := bytes.NewBufferString(`{"clips":[{"text":"","speaker_id":2}]}`)
+	resp, err := http.Post("http://"+p.Addr()+"/api/play", "application/json", body)
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("expected 400 for empty clip text, got %d", resp.StatusCode)
 	}
 }
 

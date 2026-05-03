@@ -932,6 +932,12 @@ func (p *HTTPStreamPlayer) handleAPIPlay(w http.ResponseWriter, r *http.Request)
 		http.Error(w, fmt.Sprintf("clips count exceeds limit %d", maxClipsPerBatch), http.StatusBadRequest)
 		return
 	}
+	for i, clip := range req.Clips {
+		if clip.Text == "" {
+			http.Error(w, fmt.Sprintf("clips[%d].text must not be empty", i), http.StatusBadRequest)
+			return
+		}
+	}
 
 	playbackID, err := newUUIDv4()
 	if err != nil {
