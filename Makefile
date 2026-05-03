@@ -53,24 +53,28 @@ test-frontend-e2e: frontend/node_modules
 	cd frontend && npm run test:e2e
 
 # 配信画面のローカル開発用ターゲット。
-# dev-backend は frontend/dist を参照せず起動できる前提（assets.go の //go:embed all: と frontend/dist/.gitkeep でビルド可）。
+# dev-viewer は frontend/dist を参照せず起動できる前提（assets.go の //go:embed all: と frontend/dist/.gitkeep でビルド可）。
 # dev-frontend の Vite dev server (既定 :5173) は vite.config.ts の proxy で /events, /speakers.json, /test-clip, /clips/ を :8080 に中継する。
 # 詳細な起動フローは docs/development/contributing.md の「配信画面のローカル開発フロー」を参照。
 dev-frontend: frontend/node_modules
 	cd frontend && npm run dev
 
 # VOICEVOX エンジン URL は CLI 既定値（http://localhost:50021）または環境変数 VOX_ENGINE_URL に従う。
-# dev container 等で voicevox:50021 を使う場合は `VOX_ENGINE_URL=http://voicevox:50021 make dev-backend` のように指定する。
+# dev container 等で voicevox:50021 を使う場合は `VOX_ENGINE_URL=http://voicevox:50021 make dev-viewer` のように指定する。
 # viewer サブコマンドで HTTP サーバーを起動し、0.0.0.0:8080 でリッスンする。
-dev-backend:
-	go run . viewer --engine-url http://voicevox:50021 --host 0.0.0.0 --port 8080 --watch-queue
+dev-viewer:
+	go run . viewer --engine-url http://voicevox:50021 --host 0.0.0.0 --port 8080
+
+# watch サブコマンドでキュー監視を起動する。notify_queue イベントを受信して VOICEVOX 合成依頼を処理する。
+dev-watch:
+	go run . watch --queue --engine-url http://voicevox:50021
 
 dev:
-	$(MAKE) -j2 dev-backend dev-frontend
+	$(MAKE) -j3 dev-viewer dev-frontend dev-watch
 
 install: build-frontend
 	go install .
 
 all: build
 
-.PHONY: all setup build build-frontend clean test test-e2e test-frontend-unit test-frontend-e2e fmt lint lint-frontend typecheck depcheck dev dev-frontend dev-backend install
+.PHONY: all setup build build-frontend clean test test-e2e test-frontend-unit test-frontend-e2e fmt lint lint-frontend typecheck depcheck dev dev-frontend dev-viewer dev-watch install
