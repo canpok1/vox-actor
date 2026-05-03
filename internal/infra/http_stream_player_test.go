@@ -3076,3 +3076,268 @@ func TestHTTPStreamPlayer_APIPlay_SilentModeSkipsBroadcast(t *testing.T) {
 		t.Errorf("expected playback status=completed, got %s", status)
 	}
 }
+
+// --- #488 GET /api/playback/{id} エンドポイント ---
+//
+// TODO: 未知 ID で unknown を返す                         → TestHTTPStreamPlayer_APIPlayback_UnknownID
+// TODO: UUID v4 でない id で 400 を返す                  → TestHTTPStreamPlayer_APIPlayback_InvalidUUID
+// TODO: pending 状態を返す                               → TestHTTPStreamPlayer_APIPlayback_PendingStatus
+// TODO: completed 状態を返す                             → TestHTTPStreamPlayer_APIPlayback_CompletedStatus
+// TODO: failed 状態と failed_reason を返す               → TestHTTPStreamPlayer_APIPlayback_FailedStatus
+// TODO: completed_clips が全クリップ完了後に clip_count と一致する → TestHTTPStreamPlayer_APIPlayback_CompletedClips
+// TODO: TTL 切れ後の ID は unknown を返す                → TestHTTPStreamPlayer_APIPlayback_TTLExpiry
+
+func TestHTTPStreamPlayer_APIPlayback_UnknownID(t *testing.T) {
+	t.Parallel()
+	p := newStartedPlayerWithOpts(t, WithVoicevoxClient(&testVoicevoxClient{wav: []byte("RIFFx")}))
+	unknownID := "00000000-0000-4000-8000-000000000000"
+	resp, err := http.Get("http://" + p.Addr() + "/api/playback/" + unknownID)
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected 200, got %d", resp.StatusCode)
+	}
+	var result apiPlaybackResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if result.Status != "unknown" {
+		t.Errorf("expected status=unknown, got %q", result.Status)
+	}
+	if result.ID != unknownID {
+		t.Errorf("expected id=%s, got %q", unknownID, result.ID)
+	}
+}
+
+func TestHTTPStreamPlayer_APIPlayback_InvalidUUID(t *testing.T) {
+	t.Parallel()
+	p := newStartedPlayerWithOpts(t, WithVoicevoxClient(&testVoicevoxClient{wav: []byte("RIFFx")}))
+	for _, badID := range []string{"notauuid", "12345", "", "00000000-0000-0000-0000-000000000000"} {
+		resp, err := http.Get("http://" + p.Addr() + "/api/playback/" + badID)
+		if err != nil {
+			t.Fatalf("GET %q: %v", badID, err)
+		}
+		_ = resp.Body.Close()
+		if resp.StatusCode != http.StatusBadRequest {
+			t.Errorf("id=%q: expected 400, got %d", badID, resp.StatusCode)
+		}
+	}
+}
+
+func TestHTTPStreamPlayer_APIPlayback_PendingStatus(t *testing.T) {
+	t.Parallel()
+	block := make(chan struct{})
+	t.Cleanup(func() { close(block) })
+	stub := &testVoicevoxClient{createQueryBlock: block}
+	p := newStartedPlayerWithOpts(t, WithVoicevoxClient(stub))
+
+	body := bytes.NewBufferString(`{"clips":[{"text":"test","speaker_id":2}]}`)
+	postResp, err := http.Post("http://"+p.Addr()+"/api/play", "application/json", body)
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	var playResult ViewerPlayResponse
+	if err := json.NewDecoder(postResp.Body).Decode(&playResult); err != nil {
+		t.Fatalf("decode POST response: %v", err)
+	}
+	_ = postResp.Body.Close()
+
+	// worker がバッチを取り出す前（pending）に確認するため少し早めに polling
+	var foundPending bool
+	deadline := time.Now().Add(1 * time.Second)
+	for time.Now().Before(deadline) {
+		resp, err := http.Get("http://" + p.Addr() + "/api/playback/" + playResult.PlaybackID)
+		if err != nil {
+			t.Fatalf("GET: %v", err)
+		}
+		var result apiPlaybackResponse
+		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+			_ = resp.Body.Close()
+			t.Fatalf("decode GET response: %v", err)
+		}
+		_ = resp.Body.Close()
+		if result.Status == "pending" || result.Status == "playing" {
+			foundPending = true
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if !foundPending {
+		t.Error("expected to observe pending or playing status")
+	}
+}
+
+func TestHTTPStreamPlayer_APIPlayback_CompletedStatus(t *testing.T) {
+	t.Parallel()
+	stub := &testVoicevoxClient{wav: []byte("RIFFx")}
+	p := newStartedPlayerWithOpts(t, WithVoicevoxClient(stub))
+
+	events := subscribeSSE(t, "http://"+p.Addr())
+	time.Sleep(100 * time.Millisecond)
+
+	body := bytes.NewBufferString(`{"clips":[{"text":"test","speaker_id":2}]}`)
+	postResp, err := http.Post("http://"+p.Addr()+"/api/play", "application/json", body)
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	var playResult ViewerPlayResponse
+	if err := json.NewDecoder(postResp.Body).Decode(&playResult); err != nil {
+		t.Fatalf("decode POST response: %v", err)
+	}
+	_ = postResp.Body.Close()
+
+	select {
+	case <-events:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timeout waiting for clip event")
+	}
+	time.Sleep(50 * time.Millisecond)
+
+	resp, err := http.Get("http://" + p.Addr() + "/api/playback/" + playResult.PlaybackID)
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected 200, got %d", resp.StatusCode)
+	}
+	var result apiPlaybackResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if result.Status != "completed" {
+		t.Errorf("expected status=completed, got %q", result.Status)
+	}
+	if result.ClipCount != 1 {
+		t.Errorf("expected clip_count=1, got %d", result.ClipCount)
+	}
+	if result.FinishedAt == nil {
+		t.Error("expected non-nil finished_at")
+	}
+}
+
+func TestHTTPStreamPlayer_APIPlayback_FailedStatus(t *testing.T) {
+	t.Parallel()
+	stub := &testVoicevoxClient{createQueryErr: errors.New("synth error")}
+	p := newStartedPlayerWithOpts(t, WithVoicevoxClient(stub))
+
+	body := bytes.NewBufferString(`{"clips":[{"text":"test","speaker_id":2}]}`)
+	postResp, err := http.Post("http://"+p.Addr()+"/api/play", "application/json", body)
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	var playResult ViewerPlayResponse
+	if err := json.NewDecoder(postResp.Body).Decode(&playResult); err != nil {
+		t.Fatalf("decode POST response: %v", err)
+	}
+	_ = postResp.Body.Close()
+
+	time.Sleep(200 * time.Millisecond)
+
+	resp, err := http.Get("http://" + p.Addr() + "/api/playback/" + playResult.PlaybackID)
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	var result apiPlaybackResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if result.Status != "failed" {
+		t.Errorf("expected status=failed, got %q", result.Status)
+	}
+	if result.FailedReason == "" {
+		t.Error("expected non-empty failed_reason for failed status")
+	}
+	if result.FinishedAt == nil {
+		t.Error("expected non-nil finished_at on failure")
+	}
+}
+
+func TestHTTPStreamPlayer_APIPlayback_CompletedClips(t *testing.T) {
+	t.Parallel()
+	stub := &testVoicevoxClient{wav: []byte("RIFFx")}
+	p := newStartedPlayerWithOpts(t, WithVoicevoxClient(stub))
+
+	events := subscribeSSE(t, "http://"+p.Addr())
+	time.Sleep(100 * time.Millisecond)
+
+	body := bytes.NewBufferString(`{"clips":[{"text":"first","speaker_id":2},{"text":"second","speaker_id":2}]}`)
+	postResp, err := http.Post("http://"+p.Addr()+"/api/play", "application/json", body)
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	var playResult ViewerPlayResponse
+	if err := json.NewDecoder(postResp.Body).Decode(&playResult); err != nil {
+		t.Fatalf("decode POST response: %v", err)
+	}
+	_ = postResp.Body.Close()
+
+	// 2つのクリップイベントを待つ
+	for i := 0; i < 2; i++ {
+		select {
+		case <-events:
+		case <-time.After(3 * time.Second):
+			t.Fatalf("timeout waiting for clip %d event", i+1)
+		}
+	}
+	time.Sleep(50 * time.Millisecond)
+
+	resp, err := http.Get("http://" + p.Addr() + "/api/playback/" + playResult.PlaybackID)
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	var result apiPlaybackResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if result.CompletedClips != 2 {
+		t.Errorf("expected completed_clips=2, got %d", result.CompletedClips)
+	}
+	if result.ClipCount != 2 {
+		t.Errorf("expected clip_count=2, got %d", result.ClipCount)
+	}
+}
+
+func TestHTTPStreamPlayer_APIPlayback_TTLExpiry(t *testing.T) {
+	t.Parallel()
+	stub := &testVoicevoxClient{wav: []byte("RIFFx")}
+	// initPlayback 時の時刻を 2 時間前に固定（TTL=1h を超えるため GC で削除される）
+	createdAt := time.Now().Add(-2 * time.Hour)
+	fixedTime := createdAt
+	p := newStartedPlayerWithOpts(t,
+		WithVoicevoxClient(stub),
+		withNowFunc(func() time.Time { return fixedTime }),
+	)
+
+	body := bytes.NewBufferString(`{"clips":[{"text":"test","speaker_id":2}]}`)
+	postResp, err := http.Post("http://"+p.Addr()+"/api/play", "application/json", body)
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	var playResult ViewerPlayResponse
+	if err := json.NewDecoder(postResp.Body).Decode(&playResult); err != nil {
+		t.Fatalf("decode POST response: %v", err)
+	}
+	_ = postResp.Body.Close()
+
+	// 現在時刻を "今" に進め、GC を走らせる（createdAt = 2h前 < cutoff = now - 1h）
+	fixedTime = time.Now()
+	p.PrunePlaybacks()
+
+	resp, err := http.Get("http://" + p.Addr() + "/api/playback/" + playResult.PlaybackID)
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	var result apiPlaybackResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if result.Status != "unknown" {
+		t.Errorf("expected status=unknown after TTL expiry, got %q", result.Status)
+	}
+}

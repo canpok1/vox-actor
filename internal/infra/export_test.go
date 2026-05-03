@@ -17,3 +17,8 @@ func (p *HTTPStreamPlayer) PlaybackStatus(id string) (string, bool) {
 	}
 	return string(state.status), true
 }
+
+// PrunePlaybacks はテスト用に TTL 切れの playback state を削除する。
+func (p *HTTPStreamPlayer) PrunePlaybacks() {
+	p.prunePlaybacks()
+}

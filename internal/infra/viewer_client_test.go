@@ -240,3 +240,56 @@ func TestViewerAPIClientFromURL_Play_TrailingSlash(t *testing.T) {
 		t.Error("expected POST /api/play to be called")
 	}
 }
+func TestViewerAPIClient_GetPlayback_Success(t *testing.T) {
+	t.Parallel()
+	id := "00000000-0000-4000-8000-000000000001"
+	startedAt := int64(1000000000)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/playback/"+id {
+			http.NotFound(w, r)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"id":              id,
+			"status":          "completed",
+			"clip_count":      2,
+			"completed_clips": 2,
+			"started_at":      startedAt,
+			"finished_at":     startedAt + 5000,
+			"failed_reason":   "",
+		})
+	}))
+	defer srv.Close()
+
+	client := infra.NewViewerAPIClient(srv.Listener.Addr().String())
+	resp, err := client.GetPlayback(t.Context(), id)
+	if err != nil {
+		t.Fatalf("GetPlayback: %v", err)
+	}
+	if resp.Status != "completed" {
+		t.Errorf("expected status=completed, got %q", resp.Status)
+	}
+	if resp.ClipCount != 2 {
+		t.Errorf("expected clip_count=2, got %d", resp.ClipCount)
+	}
+	if resp.CompletedClips != 2 {
+		t.Errorf("expected completed_clips=2, got %d", resp.CompletedClips)
+	}
+	if resp.StartedAt == nil || *resp.StartedAt != startedAt {
+		t.Errorf("expected started_at=%d, got %v", startedAt, resp.StartedAt)
+	}
+}
+
+func TestViewerAPIClient_GetPlayback_Error(t *testing.T) {
+	t.Parallel()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "bad request", http.StatusBadRequest)
+	}))
+	defer srv.Close()
+
+	client := infra.NewViewerAPIClient(srv.Listener.Addr().String())
+	_, err := client.GetPlayback(t.Context(), "00000000-0000-4000-8000-000000000001")
+	if err == nil {
+		t.Fatal("expected error for non-200 response")
+	}
+}

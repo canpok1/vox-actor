@@ -144,9 +144,24 @@ const (
 
 // playbackStateRecord は 1 バッチの処理状態を保持する。
 type playbackStateRecord struct {
-	status    playbackStatus
-	reason    string
-	createdAt time.Time
+	status         playbackStatus
+	reason         string
+	createdAt      time.Time
+	clipCount      int
+	completedClips int
+	startedAt      *int64 // Unix milliseconds
+	finishedAt     *int64 // Unix milliseconds
+}
+
+// apiPlaybackResponse は GET /api/playback/{id} のレスポンスペイロード。
+type apiPlaybackResponse struct {
+	ID             string `json:"id"`
+	Status         string `json:"status"`
+	ClipCount      int    `json:"clip_count"`
+	CompletedClips int    `json:"completed_clips"`
+	StartedAt      *int64 `json:"started_at"`
+	FinishedAt     *int64 `json:"finished_at"`
+	FailedReason   string `json:"failed_reason"`
 }
 
 // playBatch は worker への投入単位。
@@ -158,6 +173,8 @@ type playBatch struct {
 var (
 	// pathSegmentPattern はファイルパスのセグメント検証に使う正規表現。
 	pathSegmentPattern = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
+	// uuidV4Pattern は UUID v4 形式の検証に使う正規表現。
+	uuidV4Pattern = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`)
 )
 
 // historyRecord は履歴ファイル（YYYY-MM-DD.jsonl）の 1 行スキーマ。
@@ -353,6 +370,7 @@ func (p *HTTPStreamPlayer) Start(_ context.Context) error {
 	mux.HandleFunc("/api/status", p.handleAPIStatus)
 	mux.HandleFunc("/api/history", p.handleAPIHistory)
 	mux.HandleFunc("/api/play", p.handleAPIPlay)
+	mux.HandleFunc("/api/playback/", p.handleAPIPlayback)
 	mux.HandleFunc("/api/characters", p.handleAPICharacters)
 	mux.HandleFunc("/assets/images/", p.handleCharacterImage)
 	mux.HandleFunc("/test-clip", p.handleTestClip)
@@ -951,11 +969,14 @@ func (p *HTTPStreamPlayer) handleAPIPlay(w http.ResponseWriter, r *http.Request)
 	silentReason := p.silentReason
 	p.mu.Unlock()
 
+	clipCount := len(req.Clips)
+	p.initPlayback(playbackID, clipCount)
+
 	if silent {
 		p.setPlaybackStatus(playbackID, playbackStatusCompleted, "")
 		resp := ViewerPlayResponse{
 			PlaybackID:   playbackID,
-			ClipCount:    len(req.Clips),
+			ClipCount:    clipCount,
 			Silent:       true,
 			SilentReason: silentReason,
 		}
@@ -964,8 +985,6 @@ func (p *HTTPStreamPlayer) handleAPIPlay(w http.ResponseWriter, r *http.Request)
 		_, _ = w.Write(payload)
 		return
 	}
-
-	p.setPlaybackStatus(playbackID, playbackStatusPending, "")
 	batch := playBatch{playbackID: playbackID, clips: req.Clips}
 	select {
 	case p.batchQueue <- batch:
@@ -977,12 +996,22 @@ func (p *HTTPStreamPlayer) handleAPIPlay(w http.ResponseWriter, r *http.Request)
 
 	resp := ViewerPlayResponse{
 		PlaybackID: playbackID,
-		ClipCount:  len(req.Clips),
+		ClipCount:  clipCount,
 		Silent:     false,
 	}
 	payload, _ := json.Marshal(resp)
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	_, _ = w.Write(payload)
+}
+
+func (p *HTTPStreamPlayer) initPlayback(id string, clipCount int) {
+	p.playbackMu.Lock()
+	defer p.playbackMu.Unlock()
+	p.playbacks[id] = &playbackStateRecord{
+		createdAt: p.nowFunc(),
+		clipCount: clipCount,
+		status:    playbackStatusPending,
+	}
 }
 
 func (p *HTTPStreamPlayer) setPlaybackStatus(id string, status playbackStatus, reason string) {
@@ -991,8 +1020,62 @@ func (p *HTTPStreamPlayer) setPlaybackStatus(id string, status playbackStatus, r
 	if _, ok := p.playbacks[id]; !ok {
 		p.playbacks[id] = &playbackStateRecord{createdAt: p.nowFunc()}
 	}
-	p.playbacks[id].status = status
-	p.playbacks[id].reason = reason
+	state := p.playbacks[id]
+	state.status = status
+	state.reason = reason
+	now := p.nowFunc().UnixMilli()
+	if status == playbackStatusPlaying && state.startedAt == nil {
+		state.startedAt = &now
+	}
+	if (status == playbackStatusCompleted || status == playbackStatusFailed) && state.finishedAt == nil {
+		state.finishedAt = &now
+	}
+}
+
+func (p *HTTPStreamPlayer) incrementCompletedClips(id string) {
+	p.playbackMu.Lock()
+	defer p.playbackMu.Unlock()
+	if state, ok := p.playbacks[id]; ok {
+		state.completedClips++
+	}
+}
+
+func (p *HTTPStreamPlayer) handleAPIPlayback(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	id := strings.TrimPrefix(r.URL.Path, "/api/playback/")
+	if !uuidV4Pattern.MatchString(id) {
+		http.Error(w, "invalid playback id", http.StatusBadRequest)
+		return
+	}
+
+	p.playbackMu.Lock()
+	state, ok := p.playbacks[id]
+	var resp apiPlaybackResponse
+	if !ok {
+		resp = apiPlaybackResponse{
+			ID:     id,
+			Status: "unknown",
+		}
+	} else {
+		resp = apiPlaybackResponse{
+			ID:             id,
+			Status:         string(state.status),
+			ClipCount:      state.clipCount,
+			CompletedClips: state.completedClips,
+			StartedAt:      state.startedAt,
+			FinishedAt:     state.finishedAt,
+			FailedReason:   state.reason,
+		}
+	}
+	p.playbackMu.Unlock()
+
+	payload, _ := json.Marshal(resp)
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	_, _ = w.Write(payload)
 }
 
 func (p *HTTPStreamPlayer) runWorker(ctx context.Context) {
@@ -1055,6 +1138,8 @@ func (p *HTTPStreamPlayer) processBatch(ctx context.Context, batch playBatch) {
 				return
 			}
 		}
+
+		p.incrementCompletedClips(batch.playbackID)
 	}
 
 	p.setPlaybackStatus(batch.playbackID, playbackStatusCompleted, "")
