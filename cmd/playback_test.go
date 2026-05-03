@@ -154,7 +154,33 @@ func TestRunPlaybackWait_ServerDown_Timeout(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error after server-down timeout, got nil")
 	}
+	if !strings.Contains(err.Error(), "server unreachable") {
+		t.Errorf("expected error to contain 'server unreachable', got: %v", err)
+	}
 	if elapsed > 3*time.Second {
 		t.Errorf("expected to fail within 3s, took %v", elapsed)
+	}
+}
+
+func TestRunPlaybackWait_ViewerNotFound_ReturnsError(t *testing.T) {
+	t.Parallel()
+	id := "77777777-7777-4777-8777-777777777777"
+
+	// no --viewer-url, no viewer lock file → viewer not found
+	cmd := newPlaybackWaitCmd(t)
+	cmd.Flags().String("viewer-url", "", "")
+	cmd.Flags().Duration("server-down-timeout", 5*time.Second, "")
+	_ = cmd.ParseFlags([]string{})
+
+	deps := &PlaybackWaitDeps{
+		LockPathResolver: func() (string, error) { return "/nonexistent/path/viewer.lock", nil },
+	}
+
+	err := runPlaybackWait(cmd, []string{id}, deps)
+	if err == nil {
+		t.Fatal("expected error when viewer not found, got nil")
+	}
+	if !strings.Contains(err.Error(), "viewer not found") {
+		t.Errorf("expected error to contain 'viewer not found', got: %v", err)
 	}
 }

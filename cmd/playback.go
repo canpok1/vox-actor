@@ -55,6 +55,9 @@ func makePlaybackWaitCmd(deps *PlaybackWaitDeps) *cobra.Command {
 
 func runPlaybackWait(cmd *cobra.Command, args []string, deps *PlaybackWaitDeps) error {
 	id := args[0]
+	if id == "" {
+		return fmt.Errorf("%w: id must not be empty", ErrUsage)
+	}
 	if id == localPlaybackID {
 		return nil
 	}
