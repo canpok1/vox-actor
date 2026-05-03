@@ -61,14 +61,14 @@ func TestFileWriter_Write_JSON_TextOnly(t *testing.T) {
 	if _, exists := got["speaker"]; exists {
 		t.Errorf("expected speaker omitted, got %v", got["speaker"])
 	}
-	if _, exists := got["speedScale"]; exists {
-		t.Errorf("expected speedScale omitted, got %v", got["speedScale"])
+	if _, exists := got["speed"]; exists {
+		t.Errorf("expected speed omitted, got %v", got["speed"])
 	}
-	if _, exists := got["pitchScale"]; exists {
-		t.Errorf("expected pitchScale omitted, got %v", got["pitchScale"])
+	if _, exists := got["pitch"]; exists {
+		t.Errorf("expected pitch omitted, got %v", got["pitch"])
 	}
-	if _, exists := got["intonationScale"]; exists {
-		t.Errorf("expected intonationScale omitted, got %v", got["intonationScale"])
+	if _, exists := got["intonation"]; exists {
+		t.Errorf("expected intonation omitted, got %v", got["intonation"])
 	}
 }
 
@@ -104,14 +104,14 @@ func TestFileWriter_Write_JSON_AllParams(t *testing.T) {
 	if got["speaker"].(float64) != 5 {
 		t.Errorf("speaker mismatch: %v", got["speaker"])
 	}
-	if got["speedScale"].(float64) != 1.5 {
-		t.Errorf("speedScale mismatch: %v", got["speedScale"])
+	if got["speed"].(float64) != 1.5 {
+		t.Errorf("speed mismatch: %v", got["speed"])
 	}
-	if got["pitchScale"].(float64) != 0.1 {
-		t.Errorf("pitchScale mismatch: %v", got["pitchScale"])
+	if got["pitch"].(float64) != 0.1 {
+		t.Errorf("pitch mismatch: %v", got["pitch"])
 	}
-	if got["intonationScale"].(float64) != 1.8 {
-		t.Errorf("intonationScale mismatch: %v", got["intonationScale"])
+	if got["intonation"].(float64) != 1.8 {
+		t.Errorf("intonation mismatch: %v", got["intonation"])
 	}
 }
 
@@ -136,14 +136,14 @@ func TestFileWriter_Write_JSON_OmitNilFields(t *testing.T) {
 	}
 
 	contents := string(data)
-	if strings.Contains(contents, "speedScale") {
-		t.Errorf("expected speedScale omitted, got: %s", contents)
+	if strings.Contains(contents, `"speed":`) {
+		t.Errorf("expected speed omitted, got: %s", contents)
 	}
-	if strings.Contains(contents, "pitchScale") {
-		t.Errorf("expected pitchScale omitted, got: %s", contents)
+	if strings.Contains(contents, `"pitch":`) {
+		t.Errorf("expected pitch omitted, got: %s", contents)
 	}
-	if strings.Contains(contents, "intonationScale") {
-		t.Errorf("expected intonationScale omitted, got: %s", contents)
+	if strings.Contains(contents, `"intonation":`) {
+		t.Errorf("expected intonation omitted, got: %s", contents)
 	}
 	if !strings.Contains(contents, `"speaker":2`) && !strings.Contains(contents, `"speaker": 2`) {
 		t.Errorf("expected speaker:2 included, got: %s", contents)

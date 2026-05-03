@@ -327,7 +327,7 @@ func TestFileReader_Read_JSONFile_AllParams(t *testing.T) {
 
 	dir := t.TempDir()
 	filePath := filepath.Join(dir, "script.json")
-	content := `{"text": "感情込めて", "speaker": 5, "speedScale": 1.5, "pitchScale": 0.1, "intonationScale": 1.8}`
+	content := `{"text": "感情込めて", "speaker": 5, "speed": 1.5, "pitch": 0.1, "intonation": 1.8}`
 	if err := os.WriteFile(filePath, []byte(content), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -381,7 +381,7 @@ func TestFileReader_Read_JSONFile_MissingText(t *testing.T) {
 
 	dir := t.TempDir()
 	filePath := filepath.Join(dir, "notext.json")
-	content := `{"speaker": 5, "speedScale": 1.0}`
+	content := `{"speaker": 5, "speed": 1.0}`
 	if err := os.WriteFile(filePath, []byte(content), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -441,6 +441,34 @@ func TestFileReader_Read_JSONFile_UnknownField(t *testing.T) {
 	_, err := reader.Read(filePath)
 	if err == nil {
 		t.Fatal("expected error for unknown field in JSON, got nil")
+	}
+}
+
+func TestFileReader_Read_JSONFile_LegacyFieldsRejected(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name    string
+		content string
+	}{
+		{"speedScale", `{"text": "こんにちは", "speedScale": 1.2}`},
+		{"pitchScale", `{"text": "こんにちは", "pitchScale": 0.1}`},
+		{"intonationScale", `{"text": "こんにちは", "intonationScale": 1.5}`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			dir := t.TempDir()
+			filePath := filepath.Join(dir, "script.json")
+			if err := os.WriteFile(filePath, []byte(tc.content), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			reader := infra.NewFileReader()
+			_, err := reader.Read(filePath)
+			if err == nil {
+				t.Fatalf("expected error for legacy field %q, got nil", tc.name)
+			}
+		})
 	}
 }
 
@@ -525,7 +553,7 @@ func TestFileReader_Read_JSONLFile_AllParams(t *testing.T) {
 
 	dir := t.TempDir()
 	filePath := filepath.Join(dir, "script.jsonl")
-	content := `{"text": "感情込めて", "speaker": 5, "speedScale": 1.5, "pitchScale": 0.1, "intonationScale": 1.8}`
+	content := `{"text": "感情込めて", "speaker": 5, "speed": 1.5, "pitch": 0.1, "intonation": 1.8}`
 	if err := os.WriteFile(filePath, []byte(content), 0o644); err != nil {
 		t.Fatal(err)
 	}

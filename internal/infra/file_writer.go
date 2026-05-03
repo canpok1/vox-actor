@@ -151,9 +151,9 @@ func (w *FileWriter) warnUnsavedParams(path string, script entity.Script) {
 type jsonScriptOut struct {
 	Text            string   `json:"text"`
 	Speaker         *int     `json:"speaker,omitempty"`
-	SpeedScale      *float64 `json:"speedScale,omitempty"`
-	PitchScale      *float64 `json:"pitchScale,omitempty"`
-	IntonationScale *float64 `json:"intonationScale,omitempty"`
+	SpeedScale      *float64 `json:"speed,omitempty"`
+	PitchScale      *float64 `json:"pitch,omitempty"`
+	IntonationScale *float64 `json:"intonation,omitempty"`
 }
 
 func toJSONScript(script entity.Script) jsonScriptOut {

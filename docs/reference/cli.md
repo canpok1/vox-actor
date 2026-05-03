@@ -34,9 +34,9 @@ vox-actor act --speed 1.2 --pitch 0.1 --intonation 1.5 script.txt
 {
   "text": "こんにちは",
   "speaker": 3,
-  "speedScale": 1.2,
-  "pitchScale": 0.1,
-  "intonationScale": 1.5
+  "speed": 1.2,
+  "pitch": 0.1,
+  "intonation": 1.5
 }
 ```
 
@@ -54,7 +54,7 @@ vox-actor act script.json
 
 ```jsonl
 {"text": "こんにちは", "speaker": 3}
-{"text": "また会いましょう", "speaker": 3, "speedScale": 1.2}
+{"text": "また会いましょう", "speaker": 3, "speed": 1.2}
 ```
 
 ```bash
@@ -106,7 +106,7 @@ vox-actor script append <file> <text>
 | `--verbose` | — | `false` | 詳細ログを出力 |
 
 - 出力先ファイルの拡張子で書き出し形式を自動判定します。
-  - `.json` → 1ファイル1スクリプトのJSON。`text` に加え、明示指定された `--speaker` / `--speed` / `--pitch` / `--intonation` を `speaker` / `speedScale` / `pitchScale` / `intonationScale` として保存
+  - `.json` → 1ファイル1スクリプトのJSON。`text` に加え、明示指定された `--speaker` / `--speed` / `--pitch` / `--intonation` を `speaker` / `speed` / `pitch` / `intonation` として保存
   - `.jsonl` → 1行JSON（フィールドは `.json` と同じ）
   - `.txt` および **未知の拡張子** → 本文のみのテキストファイル（拡張子はそのまま）
     - このとき `--speaker` / `--speed` / `--pitch` / `--intonation` がコマンドラインで明示指定されていたら、これらは保存できない旨を WARN ログで通知します（処理は継続）

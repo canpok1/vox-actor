@@ -38,12 +38,12 @@ claude code に `vox-actor-plugin` を導入すると、以下のスラッシュ
 ずんだもん（`speakers.ノーマル: 3`、`あまあま: 1`）と四国めたん（`ノーマル: 2`、`ツンツン: 6`）の会話例:
 
 ```jsonl
-{"text": "今日はクロージャについて解説するのだ！", "speaker": 3, "speedScale": 1.1}
-{"text": "あら、わたくしも勉強させてもらおうかしら", "speaker": 2, "speedScale": 1.0}
-{"text": "簡単に言うと、関数が作られた時の周りの変数を覚えておく仕組みなのだ", "speaker": 3, "speedScale": 1.0}
-{"text": "なるほど、お弁当箱みたいなものですわね", "speaker": 2, "speedScale": 1.0}
-{"text": "そう、そんな感じなのだー", "speaker": 1, "speedScale": 0.9}
-{"text": "よく分かりましたわ。ありがとう、ずんだもん", "speaker": 2, "speedScale": 1.0}
+{"text": "今日はクロージャについて解説するのだ！", "speaker": 3, "speed": 1.1}
+{"text": "あら、わたくしも勉強させてもらおうかしら", "speaker": 2, "speed": 1.0}
+{"text": "簡単に言うと、関数が作られた時の周りの変数を覚えておく仕組みなのだ", "speaker": 3, "speed": 1.0}
+{"text": "なるほど、お弁当箱みたいなものですわね", "speaker": 2, "speed": 1.0}
+{"text": "そう、そんな感じなのだー", "speaker": 1, "speed": 0.9}
+{"text": "よく分かりましたわ。ありがとう、ずんだもん", "speaker": 2, "speed": 1.0}
 ```
 
 ## 再生モード（direct／file）

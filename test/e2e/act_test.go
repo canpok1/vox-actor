@@ -28,7 +28,7 @@ func TestActE2E_TxtFile_DryRun(t *testing.T) {
 
 func TestActE2E_JsonFile_DryRun_OverrideParams(t *testing.T) {
 	dir := t.TempDir()
-	content := `{"text":"こんにちは","speaker":11,"speedScale":1.2,"pitchScale":0.1,"intonationScale":1.5}`
+	content := `{"text":"こんにちは","speaker":11,"speed":1.2,"pitch":0.1,"intonation":1.5}`
 	path := writeTempFile(t, dir, "script.json", content)
 
 	_, stderr, exitCode := runCLI(t, nil, "act", "--dry-run", path)
@@ -293,7 +293,7 @@ func TestActE2E_JsonlFile_PerLineParams_Reflected(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	content := `{"text":"いちぎょうめ","speaker":11,"speedScale":1.2,"pitchScale":0.05,"intonationScale":1.3}
+	content := `{"text":"いちぎょうめ","speaker":11,"speed":1.2,"pitch":0.05,"intonation":1.3}
 {"text":"にぎょうめ","speaker":7}
 `
 	path := writeTempFile(t, dir, "params.jsonl", content)
