@@ -959,6 +959,7 @@ func (p *HTTPStreamPlayer) handleAPIPlay(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	p.setPlaybackStatus(playbackID, playbackStatusPending, "")
 	batch := playBatch{playbackID: playbackID, clips: req.Clips}
 	select {
 	case p.batchQueue <- batch:
@@ -967,7 +968,6 @@ func (p *HTTPStreamPlayer) handleAPIPlay(w http.ResponseWriter, r *http.Request)
 		http.Error(w, "queue is full, retry later", http.StatusServiceUnavailable)
 		return
 	}
-	p.setPlaybackStatus(playbackID, playbackStatusPending, "")
 
 	resp := ViewerPlayResponse{
 		PlaybackID: playbackID,
@@ -979,7 +979,6 @@ func (p *HTTPStreamPlayer) handleAPIPlay(w http.ResponseWriter, r *http.Request)
 	_, _ = w.Write(payload)
 }
 
-// setPlaybackStatus は playback_id の状態を更新する。
 func (p *HTTPStreamPlayer) setPlaybackStatus(id string, status playbackStatus, reason string) {
 	p.playbackMu.Lock()
 	defer p.playbackMu.Unlock()
@@ -990,7 +989,6 @@ func (p *HTTPStreamPlayer) setPlaybackStatus(id string, status playbackStatus, r
 	p.playbacks[id].reason = reason
 }
 
-// runWorker はバッチキューからバッチを取り出して順次処理する goroutine。
 func (p *HTTPStreamPlayer) runWorker(ctx context.Context) {
 	for {
 		select {
@@ -1005,8 +1003,7 @@ func (p *HTTPStreamPlayer) runWorker(ctx context.Context) {
 	}
 }
 
-// processBatch は 1 バッチ内のクリップを順次 synthesize → SSE broadcast → duration sleep する。
-// synthesize 失敗時はバッチ全体を中断して status=failed にする（all-or-nothing）。
+// synthesize 失敗時はバッチ全体を中断する（all-or-nothing）。
 func (p *HTTPStreamPlayer) processBatch(ctx context.Context, batch playBatch) {
 	p.setPlaybackStatus(batch.playbackID, playbackStatusPlaying, "")
 
@@ -1046,7 +1043,9 @@ func (p *HTTPStreamPlayer) processBatch(ctx context.Context, batch playBatch) {
 			select {
 			case <-timer.C:
 			case <-ctx.Done():
-				timer.Stop()
+				if !timer.Stop() {
+					<-timer.C
+				}
 				return
 			}
 		}
@@ -1055,7 +1054,6 @@ func (p *HTTPStreamPlayer) processBatch(ctx context.Context, batch playBatch) {
 	p.setPlaybackStatus(batch.playbackID, playbackStatusCompleted, "")
 }
 
-// runPlaybackGC は TTL を超えた playback state を定期的に削除する goroutine。
 func (p *HTTPStreamPlayer) runPlaybackGC(ctx context.Context) {
 	ticker := time.NewTicker(playbackGCInterval)
 	defer ticker.Stop()
@@ -1069,7 +1067,6 @@ func (p *HTTPStreamPlayer) runPlaybackGC(ctx context.Context) {
 	}
 }
 
-// prunePlaybacks は TTL を超えた playback state を削除する。
 func (p *HTTPStreamPlayer) prunePlaybacks() {
 	cutoff := p.nowFunc().Add(-playbackTTL)
 	p.playbackMu.Lock()
@@ -1081,7 +1078,6 @@ func (p *HTTPStreamPlayer) prunePlaybacks() {
 	}
 }
 
-// newUUIDv4 は UUID v4 を生成して返す。
 func newUUIDv4() (string, error) {
 	var uuid [16]byte
 	if _, err := rand.Read(uuid[:]); err != nil {
