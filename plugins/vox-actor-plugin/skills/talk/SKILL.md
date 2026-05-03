@@ -37,3 +37,4 @@ allowed-tools: Bash(vox-actor *) Bash(scripts/play-script.sh *)
 - ファイルパス・URL・UUID 等の長い文字列はセリフに含めない
 - セリフ内のダブルクォート・バックスラッシュは JSON / JSONL 仕様でエスケープ
 - 利用可能なキャラクターが存在しない場合は、 `--speaker` を省略してデフォルト声でセリフ生成する
+- `scripts/play-script.sh` は必ず **foreground で実行**すること（`run_in_background: true` や `&` によるバックグラウンド実行は禁止）。バックグラウンド実行すると再生完了時の `task-notification` が新しいターンとして扱われ、Stop hook の `stop_hook_active` フラグがリセットされ独り言生成の無限ループを引き起こす。
