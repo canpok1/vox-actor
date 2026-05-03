@@ -22,6 +22,9 @@ type WatchDeps struct {
 	// QueuePathResolver は --queue 指定時に監視対象パスを解決する関数。
 	// nil の場合は infra.ResolveQueuePath がデフォルトで使われる。
 	QueuePathResolver func() (string, error)
+	// AudioProbe は起動時に音声デバイス可用性を検査する関数。
+	// nil の場合は検査をスキップする。--dry-run 時は呼ばれない。
+	AudioProbe func() error
 }
 
 func makeWatchCmd(deps *WatchDeps) *cobra.Command {
@@ -128,6 +131,12 @@ func runWatch(cmd *cobra.Command, args []string, deps *WatchDeps) error {
 
 	if deps == nil || deps.ClientFactory == nil || deps.Reader == nil || deps.Player == nil || deps.Mover == nil || deps.DirWatcherFactory == nil {
 		return fmt.Errorf("watch command dependencies are not initialized")
+	}
+
+	if !dryRun && deps.AudioProbe != nil {
+		if err := deps.AudioProbe(); err != nil {
+			return fmt.Errorf("audio device unavailable: %w", err)
+		}
 	}
 
 	ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)

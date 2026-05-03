@@ -19,6 +19,9 @@ type ActDeps struct {
 	Player           app.AudioPlayer
 	LockPathResolver func() (string, error)
 	Logger           *slog.Logger
+	// AudioProbe はローカル再生前に音声デバイス可用性を検査する関数。
+	// nil の場合は検査をスキップする。--dry-run 時は呼ばれない。
+	AudioProbe func() error
 }
 
 func makeActCmd(deps *ActDeps) *cobra.Command {
@@ -129,6 +132,12 @@ func runAct(cmd *cobra.Command, args []string, deps *ActDeps) error {
 			return nil
 		} else {
 			logger.Debug("viewer not running, using local player")
+		}
+	}
+
+	if !dryRun && deps.AudioProbe != nil {
+		if err := deps.AudioProbe(); err != nil {
+			return fmt.Errorf("audio device unavailable: %w", err)
 		}
 	}
 

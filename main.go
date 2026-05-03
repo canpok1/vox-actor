@@ -68,6 +68,10 @@ func main() {
 			Reader:        reader,
 			ClientFactory: clientFactory,
 			Player:        player,
+			AudioProbe: func() error {
+				_, err := infra.CheckAudioDevice(infra.NewOtoAudioProbe())
+				return err
+			},
 		},
 		Watch: &cmd.WatchDeps{
 			Reader:            reader,
@@ -75,6 +79,10 @@ func main() {
 			Player:            player,
 			Mover:             mover,
 			DirWatcherFactory: dirWatcherFactory,
+			AudioProbe: func() error {
+				_, err := infra.CheckAudioDevice(infra.NewOtoAudioProbe())
+				return err
+			},
 		},
 		Viewer: &cmd.ViewerDeps{
 			ClientFactory:       clientFactory,
@@ -83,6 +91,10 @@ func main() {
 		Say: &cmd.SayDeps{
 			ClientFactory: clientFactory,
 			Player:        player,
+			AudioProbe: func() error {
+				_, err := infra.CheckAudioDevice(infra.NewOtoAudioProbe())
+				return err
+			},
 		},
 		ScriptAppend: &cmd.ScriptAppendDeps{
 			WriterFactory: func(logger *slog.Logger) app.ScriptWriter {

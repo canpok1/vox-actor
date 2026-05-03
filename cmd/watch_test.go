@@ -442,3 +442,88 @@ func TestWatchCmd_HelpContainsQueueFlag(t *testing.T) {
 		t.Errorf("expected help output to contain '--queue'")
 	}
 }
+
+// --- AudioProbe テスト (#468) ---
+// DONE: watch で非dryRun時に起動直後 AudioProbe が呼ばれる            → TestRunWatch_AudioProbe_CalledAtStartup
+// DONE: watch で dry-run の場合 AudioProbe がスキップされる           → TestRunWatch_AudioProbe_SkippedOnDryRun
+// DONE: watch で AudioProbe が失敗した場合起動拒否してエラーを返す    → TestRunWatch_AudioProbe_FailureCausesError
+
+// makeWatchDepsWithProbe は AudioProbe 付きの WatchDeps を組み立てるテストヘルパー。
+func makeWatchDepsWithProbe(probe func() error) *WatchDeps {
+	return &WatchDeps{
+		Reader:            stubScriptReader{},
+		ClientFactory:     func(_ string) app.VoicevoxClient { return &stubVoicevoxClient{} },
+		Player:            stubAudioPlayer{},
+		Mover:             stubFileMover{},
+		DirWatcherFactory: func(_ *slog.Logger) app.DirWatcher { return stubDirWatcher{} },
+		AudioProbe:        probe,
+	}
+}
+
+func TestRunWatch_AudioProbe_CalledAtStartup(t *testing.T) {
+	probeCalled := false
+	watchDir := t.TempDir()
+
+	cmd := newCmdWithContext(t)
+	registerCommonFlags(cmd)
+	cmd.Flags().Bool("delete", false, "")
+	cmd.Flags().Bool("queue", false, "")
+	_ = cmd.ParseFlags([]string{})
+
+	deps := makeWatchDepsWithProbe(func() error { probeCalled = true; return nil })
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	cmd.SetContext(ctx)
+
+	_ = runWatch(cmd, []string{watchDir}, deps)
+	if !probeCalled {
+		t.Error("expected AudioProbe to be called at startup, but it was not")
+	}
+}
+
+func TestRunWatch_AudioProbe_SkippedOnDryRun(t *testing.T) {
+	probeCalled := false
+	watchDir := t.TempDir()
+
+	cmd := newCmdWithContext(t)
+	registerCommonFlags(cmd)
+	cmd.Flags().Bool("delete", false, "")
+	cmd.Flags().Bool("queue", false, "")
+	_ = cmd.ParseFlags([]string{"--dry-run"})
+
+	deps := makeWatchDepsWithProbe(func() error { probeCalled = true; return nil })
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	cmd.SetContext(ctx)
+
+	_ = runWatch(cmd, []string{watchDir}, deps)
+	if probeCalled {
+		t.Error("expected AudioProbe to be skipped in dry-run, but it was called")
+	}
+}
+
+func TestRunWatch_AudioProbe_FailureCausesError(t *testing.T) {
+	watchDir := t.TempDir()
+
+	cmd := newCmdWithContext(t)
+	registerCommonFlags(cmd)
+	cmd.Flags().Bool("delete", false, "")
+	cmd.Flags().Bool("queue", false, "")
+	_ = cmd.ParseFlags([]string{})
+
+	deps := makeWatchDepsWithProbe(func() error { return errors.New("no audio device") })
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	cmd.SetContext(ctx)
+
+	err := runWatch(cmd, []string{watchDir}, deps)
+	if err == nil {
+		t.Fatal("expected error when AudioProbe fails, got nil")
+	}
+	if !strings.Contains(err.Error(), "audio") {
+		t.Errorf("expected error message to mention 'audio', got: %v", err)
+	}
+}
