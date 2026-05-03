@@ -78,6 +78,7 @@ vox-actor say <text>
 | オプション | 環境変数 | デフォルト値 | 説明 |
 |---|---|---|---|
 | `--engine-url` | `VOX_ENGINE_URL` | `http://localhost:50021` | VOICEVOXエンジンのURL |
+| `--viewer-url` | `VOX_VIEWER_URL` | (未指定) | viewer の HTTP エンドポイント URL (例: `http://192.168.1.10:8080`)。指定時は lockfile auto-detect をスキップして明示 URL の viewer に POST `/api/play` する。接続失敗時はローカル再生にフォールバックせずエラー終了する。 |
 | `--speaker` | `VOX_SPEAKER` | `3` | キャラクターID |
 | `--speed` | — | `1.0` | 話速 |
 | `--pitch` | — | `0.0` | 音高 |
@@ -176,6 +177,7 @@ vox-actor act <path>
 | オプション | 環境変数 | デフォルト値 | 説明 |
 |---|---|---|---|
 | `--engine-url` | `VOX_ENGINE_URL` | `http://localhost:50021` | VOICEVOXエンジンのURL |
+| `--viewer-url` | `VOX_VIEWER_URL` | (未指定) | viewer の HTTP エンドポイント URL (例: `http://192.168.1.10:8080`)。指定時は lockfile auto-detect をスキップして明示 URL の viewer に POST `/api/play` する。接続失敗時はローカル再生にフォールバックせずエラー終了する。 |
 | `--speaker` | `VOX_SPEAKER` | `3` | キャラクターID |
 | `--speed` | — | `1.0` | 話速 |
 | `--pitch` | — | `0.0` | 音高 |
@@ -202,6 +204,7 @@ vox-actor watch --queue
 | オプション | 環境変数 | デフォルト値 | 説明 |
 |---|---|---|---|
 | `--engine-url` | `VOX_ENGINE_URL` | `http://localhost:50021` | VOICEVOXエンジンのURL |
+| `--viewer-url` | `VOX_VIEWER_URL` | (未指定) | viewer の HTTP エンドポイント URL (例: `http://192.168.1.10:8080`)。指定時は lockfile auto-detect をスキップして明示 URL の viewer に POST `/api/play` する。 |
 | `--speaker` | `VOX_SPEAKER` | `3` | キャラクターID |
 | `--speed` | — | `1.0` | 話速 |
 | `--pitch` | — | `0.0` | 音高 |

@@ -3,11 +3,16 @@ package cmd
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"log/slog"
+	"net/http"
+	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/canpok1/vox-actor/internal/app"
 	"github.com/canpok1/vox-actor/internal/domain/entity"
@@ -448,6 +453,15 @@ func TestWatchCmd_HelpContainsQueueFlag(t *testing.T) {
 // DONE: watch で dry-run の場合 AudioProbe がスキップされる           → TestRunWatch_AudioProbe_SkippedOnDryRun
 // DONE: watch で AudioProbe が失敗した場合起動拒否してエラーを返す    → TestRunWatch_AudioProbe_FailureCausesError
 
+// --- #481 --viewer-url / lockfile auto-detect テスト ---
+// DONE: --viewer-url フラグがヘルプに含まれる                                             → TestWatchCmd_HelpContainsViewerURL
+// DONE: --viewer-url デフォルトは空文字                                                   → TestWatchCmd_ViewerURL_DefaultEmpty
+// DONE: VOX_VIEWER_URL 環境変数でデフォルト値が設定される                                 → TestWatchCmd_EnvVarVOXViewerURL
+// DONE: --viewer-url 指定時は AudioProbe をスキップする                                   → TestRunWatch_ExplicitViewerURL_SkipsAudioProbe
+// DONE: lockfile auto-detect で viewer 検知時は AudioProbe をスキップする                 → TestRunWatch_LockfileAutoDetect_SkipsAudioProbe
+// DONE: --viewer-url 指定時にファイル検知 → viewer に POST する                          → TestRunWatch_ExplicitViewerURL_PostsToViewer
+// DONE: lockfile auto-detect で viewer 検知時にファイル検知 → viewer に POST する        → TestRunWatch_LockfileAutoDetect_PostsToViewer
+
 // makeWatchDepsWithProbe は AudioProbe 付きの WatchDeps を組み立てるテストヘルパー。
 func makeWatchDepsWithProbe(probe func() error) *WatchDeps {
 	return &WatchDeps{
@@ -525,5 +539,258 @@ func TestRunWatch_AudioProbe_FailureCausesError(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "audio") {
 		t.Errorf("expected error message to mention 'audio', got: %v", err)
+	}
+}
+
+// --- #481 --viewer-url テスト ---
+
+func TestWatchCmd_HelpContainsViewerURL(t *testing.T) {
+	rootCmd := makeRootCmd()
+	buf := new(bytes.Buffer)
+	rootCmd.SetOut(buf)
+	rootCmd.SetArgs([]string{"watch", "--help"})
+
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("expected no error for --help, got: %v", err)
+	}
+	if !strings.Contains(buf.String(), "--viewer-url") {
+		t.Error("expected help output to contain '--viewer-url'")
+	}
+}
+
+func TestWatchCmd_ViewerURL_DefaultEmpty(t *testing.T) {
+	t.Setenv("VOX_VIEWER_URL", "")
+
+	rootCmd := makeRootCmd()
+	watchCmd := findWatchCmd(t, rootCmd)
+
+	viewerURL, err := watchCmd.Flags().GetString("viewer-url")
+	if err != nil {
+		t.Fatalf("expected viewer-url flag to exist, got error: %v", err)
+	}
+	if viewerURL != "" {
+		t.Errorf("expected default viewer-url to be empty, got: %s", viewerURL)
+	}
+}
+
+func TestWatchCmd_EnvVarVOXViewerURL(t *testing.T) {
+	t.Setenv("VOX_VIEWER_URL", "http://remote:8080")
+
+	rootCmd := makeRootCmd()
+	watchCmd := findWatchCmd(t, rootCmd)
+
+	viewerURL, err := watchCmd.Flags().GetString("viewer-url")
+	if err != nil {
+		t.Fatalf("expected viewer-url flag to exist, got error: %v", err)
+	}
+	if viewerURL != "http://remote:8080" {
+		t.Errorf("expected viewer-url 'http://remote:8080', got: %s", viewerURL)
+	}
+}
+
+func TestRunWatch_ExplicitViewerURL_SkipsAudioProbe(t *testing.T) {
+	probeCalled := false
+	watchDir := t.TempDir()
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/play", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"silent": false})
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	cmd := newCmdWithContext(t)
+	registerCommonFlags(cmd)
+	cmd.Flags().Bool("delete", false, "")
+	cmd.Flags().Bool("queue", false, "")
+	_ = cmd.ParseFlags([]string{"--viewer-url", srv.URL})
+
+	deps := &WatchDeps{
+		Reader:            stubScriptReader{},
+		ClientFactory:     func(_ string) app.VoicevoxClient { return &stubVoicevoxClient{} },
+		Player:            stubAudioPlayer{},
+		Mover:             stubFileMover{},
+		DirWatcherFactory: func(_ *slog.Logger) app.DirWatcher { return stubDirWatcher{} },
+		AudioProbe:        func() error { probeCalled = true; return nil },
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	cmd.SetContext(ctx)
+
+	_ = runWatch(cmd, []string{watchDir}, deps)
+	if probeCalled {
+		t.Error("expected AudioProbe to be skipped when --viewer-url is set, but it was called")
+	}
+}
+
+func TestRunWatch_LockfileAutoDetect_SkipsAudioProbe(t *testing.T) {
+	probeCalled := false
+	watchDir := t.TempDir()
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/status", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) })
+	mux.HandleFunc("/api/play", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"silent": false})
+	})
+	lockPath, _ := setupFakeViewer(t, mux)
+
+	cmd := newCmdWithContext(t)
+	registerCommonFlags(cmd)
+	cmd.Flags().Bool("delete", false, "")
+	cmd.Flags().Bool("queue", false, "")
+	_ = cmd.ParseFlags([]string{})
+
+	deps := &WatchDeps{
+		Reader:            stubScriptReader{},
+		ClientFactory:     func(_ string) app.VoicevoxClient { return &stubVoicevoxClient{} },
+		Player:            stubAudioPlayer{},
+		Mover:             stubFileMover{},
+		DirWatcherFactory: func(_ *slog.Logger) app.DirWatcher { return stubDirWatcher{} },
+		AudioProbe:        func() error { probeCalled = true; return nil },
+		LockPathResolver:  func() (string, error) { return lockPath, nil },
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	cmd.SetContext(ctx)
+
+	_ = runWatch(cmd, []string{watchDir}, deps)
+	if probeCalled {
+		t.Error("expected AudioProbe to be skipped when viewer is auto-detected, but it was called")
+	}
+}
+
+// oneFileDirWatcher は指定ファイルを1件送信してから待機するスタブ DirWatcher。
+type oneFileDirWatcher struct {
+	filePath string
+}
+
+func (w *oneFileDirWatcher) Watch(ctx context.Context, _ string) (<-chan string, <-chan error) {
+	fileCh := make(chan string, 1)
+	errCh := make(chan error)
+	fileCh <- w.filePath
+	go func() {
+		<-ctx.Done()
+		close(fileCh)
+		close(errCh)
+	}()
+	return fileCh, errCh
+}
+
+func TestRunWatch_ExplicitViewerURL_PostsToViewer(t *testing.T) {
+	watchDir := t.TempDir()
+	scriptFile := filepath.Join(watchDir, "test.txt")
+	if err := os.WriteFile(scriptFile, []byte("ウォッチテスト"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var postCount int
+	var capturedText string
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/play", func(w http.ResponseWriter, r *http.Request) {
+		postCount++
+		var req map[string]interface{}
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		if v, ok := req["text"].(string); ok {
+			capturedText = v
+		}
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"silent": false})
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	cmd := newCmdWithContext(t)
+	registerCommonFlags(cmd)
+	cmd.Flags().Bool("delete", false, "")
+	cmd.Flags().Bool("queue", false, "")
+	_ = cmd.ParseFlags([]string{"--viewer-url", srv.URL})
+
+	deps := &WatchDeps{
+		Reader:        infra.NewFileReader(),
+		ClientFactory: func(_ string) app.VoicevoxClient { return &stubVoicevoxClient{} },
+		Player:        stubAudioPlayer{},
+		Mover:         stubFileMover{},
+		DirWatcherFactory: func(_ *slog.Logger) app.DirWatcher {
+			return &oneFileDirWatcher{filePath: scriptFile}
+		},
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	cmd.SetContext(ctx)
+
+	done := make(chan error, 1)
+	go func() { done <- runWatch(cmd, []string{watchDir}, deps) }()
+
+	// Wait for the POST to be received
+	for i := 0; i < 100; i++ {
+		if postCount > 0 {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	cancel()
+	<-done
+
+	if postCount == 0 {
+		t.Error("expected at least 1 POST to /api/play, got 0")
+	}
+	if capturedText != "ウォッチテスト" {
+		t.Errorf("expected text=%q, got %q", "ウォッチテスト", capturedText)
+	}
+}
+
+func TestRunWatch_LockfileAutoDetect_PostsToViewer(t *testing.T) {
+	watchDir := t.TempDir()
+	scriptFile := filepath.Join(watchDir, "test.txt")
+	if err := os.WriteFile(scriptFile, []byte("ロックファイルテスト"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var postCount int
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/status", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) })
+	mux.HandleFunc("/api/play", func(w http.ResponseWriter, r *http.Request) {
+		postCount++
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"silent": false})
+	})
+	lockPath, _ := setupFakeViewer(t, mux)
+
+	cmd := newCmdWithContext(t)
+	registerCommonFlags(cmd)
+	cmd.Flags().Bool("delete", false, "")
+	cmd.Flags().Bool("queue", false, "")
+	_ = cmd.ParseFlags([]string{})
+
+	deps := &WatchDeps{
+		Reader:        infra.NewFileReader(),
+		ClientFactory: func(_ string) app.VoicevoxClient { return &stubVoicevoxClient{} },
+		Player:        stubAudioPlayer{},
+		Mover:         stubFileMover{},
+		DirWatcherFactory: func(_ *slog.Logger) app.DirWatcher {
+			return &oneFileDirWatcher{filePath: scriptFile}
+		},
+		LockPathResolver: func() (string, error) { return lockPath, nil },
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	cmd.SetContext(ctx)
+
+	done := make(chan error, 1)
+	go func() { done <- runWatch(cmd, []string{watchDir}, deps) }()
+
+	for i := 0; i < 100; i++ {
+		if postCount > 0 {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	cancel()
+	<-done
+
+	if postCount == 0 {
+		t.Error("expected at least 1 POST to /api/play via lockfile auto-detect, got 0")
 	}
 }

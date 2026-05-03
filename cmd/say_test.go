@@ -7,6 +7,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"net/http/httptest"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -31,6 +32,14 @@ import (
 // DONE: 環境変数VOX_SPEAKERがデフォルト値に反映される
 // DONE: VOX_SPEAKERに不正な値が設定されている場合デフォルト値が使われる
 // DONE: --verboseフラグのデフォルト値がfalse
+// #481 --viewer-url:
+// DONE: --viewer-url フラグがヘルプに含まれる                                   → TestSayCmd_HelpContainsViewerURL
+// DONE: --viewer-url デフォルトは空文字                                          → TestSayCmd_ViewerURL_DefaultEmpty
+// DONE: VOX_VIEWER_URL 環境変数でデフォルト値が設定される                       → TestSayCmd_EnvVarVOXViewerURL
+// DONE: --viewer-url 指定時は明示 URL の viewer に POST する                     → TestRunSay_ExplicitViewerURL_POSTsToViewer
+// DONE: --viewer-url 指定時は lockfile auto-detect をスキップする                → TestRunSay_ExplicitViewerURL_SkipsLockfile
+// DONE: --viewer-url 指定時は AudioProbe をスキップする                          → TestRunSay_ExplicitViewerURL_SkipsAudioProbe
+// DONE: --viewer-url 指定時に接続失敗 → フォールバックせずエラーを返す          → TestRunSay_ExplicitViewerURL_ConnectionError_ReturnsError
 
 // findSayCmd はrootCmdからsayサブコマンドを検索して返すテストヘルパー。
 func findSayCmd(t *testing.T, rootCmd *cobra.Command) *cobra.Command {
@@ -478,5 +487,179 @@ func TestRunSay_AudioProbe_FailureCausesError(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "audio") {
 		t.Errorf("expected error message to mention 'audio', got: %v", err)
+	}
+}
+
+// --- #481 --viewer-url テスト ---
+
+func TestSayCmd_HelpContainsViewerURL(t *testing.T) {
+	rootCmd := makeRootCmd()
+	buf := new(bytes.Buffer)
+	rootCmd.SetOut(buf)
+	rootCmd.SetArgs([]string{"say", "--help"})
+
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("expected no error for --help, got: %v", err)
+	}
+	if !strings.Contains(buf.String(), "--viewer-url") {
+		t.Error("expected help output to contain '--viewer-url'")
+	}
+}
+
+func TestSayCmd_ViewerURL_DefaultEmpty(t *testing.T) {
+	t.Setenv("VOX_VIEWER_URL", "")
+
+	rootCmd := makeRootCmd()
+	sayCmd := findSayCmd(t, rootCmd)
+
+	viewerURL, err := sayCmd.Flags().GetString("viewer-url")
+	if err != nil {
+		t.Fatalf("expected viewer-url flag to exist, got error: %v", err)
+	}
+	if viewerURL != "" {
+		t.Errorf("expected default viewer-url to be empty, got: %s", viewerURL)
+	}
+}
+
+func TestSayCmd_EnvVarVOXViewerURL(t *testing.T) {
+	t.Setenv("VOX_VIEWER_URL", "http://remote:8080")
+
+	rootCmd := makeRootCmd()
+	sayCmd := findSayCmd(t, rootCmd)
+
+	viewerURL, err := sayCmd.Flags().GetString("viewer-url")
+	if err != nil {
+		t.Fatalf("expected viewer-url flag to exist, got error: %v", err)
+	}
+	if viewerURL != "http://remote:8080" {
+		t.Errorf("expected viewer-url 'http://remote:8080', got: %s", viewerURL)
+	}
+}
+
+func TestRunSay_ExplicitViewerURL_POSTsToViewer(t *testing.T) {
+	var postCount int
+	var capturedText string
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/play", func(w http.ResponseWriter, r *http.Request) {
+		postCount++
+		var req map[string]interface{}
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		if v, ok := req["text"].(string); ok {
+			capturedText = v
+		}
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"silent": false})
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	cmd := newCmdWithContext(t)
+	registerCommonFlags(cmd)
+	_ = cmd.ParseFlags([]string{"--viewer-url", srv.URL})
+
+	deps := &SayDeps{
+		ClientFactory: func(_ string) app.VoicevoxClient { return &noopClient{} },
+		Player:        &noopPlayer{},
+	}
+
+	if err := runSay(cmd, []string{"リモートテスト"}, deps); err != nil {
+		t.Fatalf("runSay: %v", err)
+	}
+	if postCount != 1 {
+		t.Errorf("expected 1 POST to /api/play, got %d", postCount)
+	}
+	if capturedText != "リモートテスト" {
+		t.Errorf("expected text=%q, got %q", "リモートテスト", capturedText)
+	}
+}
+
+func TestRunSay_ExplicitViewerURL_SkipsLockfile(t *testing.T) {
+	// lockfile には起動中の viewer が存在するが、--viewer-url 優先のため lockfile は使われない
+	var lockfilePostCount int
+	lockfileMux := http.NewServeMux()
+	lockfileMux.HandleFunc("/api/status", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) })
+	lockfileMux.HandleFunc("/api/play", func(w http.ResponseWriter, r *http.Request) {
+		lockfilePostCount++
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"silent": false})
+	})
+	lockPath, _ := setupFakeViewer(t, lockfileMux)
+
+	// explicit URL 側のサーバー
+	var explicitPostCount int
+	explicitMux := http.NewServeMux()
+	explicitMux.HandleFunc("/api/play", func(w http.ResponseWriter, r *http.Request) {
+		explicitPostCount++
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"silent": false})
+	})
+	explicitSrv := httptest.NewServer(explicitMux)
+	defer explicitSrv.Close()
+
+	cmd := newCmdWithContext(t)
+	registerCommonFlags(cmd)
+	_ = cmd.ParseFlags([]string{"--viewer-url", explicitSrv.URL})
+
+	deps := &SayDeps{
+		ClientFactory:    func(_ string) app.VoicevoxClient { return &noopClient{} },
+		Player:           &noopPlayer{},
+		LockPathResolver: func() (string, error) { return lockPath, nil },
+	}
+
+	if err := runSay(cmd, []string{"テスト"}, deps); err != nil {
+		t.Fatalf("runSay: %v", err)
+	}
+	if lockfilePostCount != 0 {
+		t.Errorf("expected 0 POST to lockfile viewer, got %d", lockfilePostCount)
+	}
+	if explicitPostCount != 1 {
+		t.Errorf("expected 1 POST to explicit viewer, got %d", explicitPostCount)
+	}
+}
+
+func TestRunSay_ExplicitViewerURL_SkipsAudioProbe(t *testing.T) {
+	probeCalled := false
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/play", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"silent": false})
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	cmd := newCmdWithContext(t)
+	registerCommonFlags(cmd)
+	_ = cmd.ParseFlags([]string{"--viewer-url", srv.URL})
+
+	deps := &SayDeps{
+		ClientFactory: func(_ string) app.VoicevoxClient { return &noopClient{} },
+		Player:        &noopPlayer{},
+		AudioProbe:    func() error { probeCalled = true; return nil },
+	}
+
+	if err := runSay(cmd, []string{"テスト"}, deps); err != nil {
+		t.Fatalf("runSay: %v", err)
+	}
+	if probeCalled {
+		t.Error("expected AudioProbe to be skipped when --viewer-url is set, but it was called")
+	}
+}
+
+func TestRunSay_ExplicitViewerURL_ConnectionError_ReturnsError(t *testing.T) {
+	// Not-listening server to simulate connection failure
+	playCalled := false
+
+	cmd := newCmdWithContext(t)
+	registerCommonFlags(cmd)
+	_ = cmd.ParseFlags([]string{"--viewer-url", "http://127.0.0.1:1"})
+
+	deps := &SayDeps{
+		ClientFactory: func(_ string) app.VoicevoxClient { return &noopClient{} },
+		Player:        &trackingPlayer{playFn: func() { playCalled = true }},
+	}
+
+	err := runSay(cmd, []string{"テスト"}, deps)
+	if err == nil {
+		t.Fatal("expected error when viewer is not reachable, got nil")
+	}
+	if playCalled {
+		t.Error("expected no local playback when --viewer-url fails")
 	}
 }

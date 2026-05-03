@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"os"
@@ -22,6 +23,9 @@ type WatchDeps struct {
 	// QueuePathResolver は --queue 指定時に監視対象パスを解決する関数。
 	// nil の場合は infra.ResolveQueuePath がデフォルトで使われる。
 	QueuePathResolver func() (string, error)
+	// LockPathResolver は viewer ロックファイルのパスを解決する関数。
+	// nil の場合は infra.ResolveHomeViewerLockPath がデフォルトで使われる。
+	LockPathResolver func() (string, error)
 	// AudioProbe は起動時に音声デバイス可用性を検査する関数。
 	// nil の場合は検査をスキップする。--dry-run 時は呼ばれない。
 	AudioProbe func() error
@@ -59,6 +63,41 @@ func makeWatchCmd(deps *WatchDeps) *cobra.Command {
 	_ = cmd.Flags().MarkHidden("stream-addr")
 
 	return cmd
+}
+
+func resolveWatchLockPath(deps *WatchDeps) (string, error) {
+	if deps != nil {
+		return resolveViewerLockPathWith(deps.LockPathResolver)
+	}
+	return resolveViewerLockPathWith(nil)
+}
+
+// viewerWatchPlayer は watch 時に viewer へ音声再生リクエストを転送するプレイヤー。
+// app.AudioPlayer と textPlayer の両インターフェースを実装する。
+type viewerWatchPlayer struct {
+	vc         *infra.ViewerAPIClient
+	speed      *float64
+	pitch      *float64
+	intonation *float64
+}
+
+func (p *viewerWatchPlayer) Play(ctx context.Context, _ []byte, meta app.PlayMeta) error {
+	return p.playViaViewer(ctx, meta)
+}
+
+func (p *viewerWatchPlayer) PlayText(ctx context.Context, meta app.PlayMeta) error {
+	return p.playViaViewer(ctx, meta)
+}
+
+func (p *viewerWatchPlayer) playViaViewer(ctx context.Context, meta app.PlayMeta) error {
+	_, err := p.vc.Play(ctx, infra.ViewerPlayRequest{
+		Text:       meta.Text,
+		SpeakerID:  meta.SpeakerID,
+		Speed:      p.speed,
+		Pitch:      p.pitch,
+		Intonation: p.intonation,
+	})
+	return err
 }
 
 // resolveWatchPaths は watch の監視対象パスを確定する。
@@ -133,10 +172,6 @@ func runWatch(cmd *cobra.Command, args []string, deps *WatchDeps) error {
 		return fmt.Errorf("watch command dependencies are not initialized")
 	}
 
-	if err := runAudioProbe(deps.AudioProbe, dryRun); err != nil {
-		return err
-	}
-
 	ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
@@ -151,6 +186,54 @@ func runWatch(cmd *cobra.Command, args []string, deps *WatchDeps) error {
 	opts := []app.WatchOption{app.WithWatchLogger(logger)}
 	if deleteMode {
 		opts = append(opts, app.WithDeleteMode())
+	}
+
+	// viewer 優先順位: 明示 URL > lockfile auto-detect > ローカル再生
+	var vwPlayer *viewerWatchPlayer
+	if !dryRun {
+		viewerURL, _ := cmd.Flags().GetString("viewer-url")
+		if viewerURL != "" {
+			// 明示 URL: lockfile スキップ、AudioProbe スキップ
+			logger.Info("using explicit viewer URL for watch", "url", viewerURL)
+			vwPlayer = &viewerWatchPlayer{
+				vc:         infra.NewViewerAPIClientFromURL(viewerURL),
+				speed:      &speed,
+				pitch:      &pitch,
+				intonation: &intonation,
+			}
+		} else {
+			// lockfile auto-detect
+			lockPath, lockErr := resolveWatchLockPath(deps)
+			if lockErr != nil {
+				logger.Debug("could not resolve viewer lock path", "error", lockErr)
+			} else if addr, ok := infra.DetectViewer(lockPath); ok {
+				logger.Info("viewer detected, will use viewer for watch playback", "addr", addr)
+				vwPlayer = &viewerWatchPlayer{
+					vc:         infra.NewViewerAPIClient(addr),
+					speed:      &speed,
+					pitch:      &pitch,
+					intonation: &intonation,
+				}
+			}
+		}
+	}
+
+	if vwPlayer != nil {
+		// viewer 使用時: AudioProbe スキップ、WithSilent で VOICEVOX 合成もスキップ
+		opts = append(opts, app.WithSilent())
+		uc := app.NewWatchUsecase(deps.Reader, client, vwPlayer, deps.Mover, watcher, opts...)
+		return uc.Run(ctx, app.WatchParams{
+			Paths:      args,
+			SpeakerID:  speakerID,
+			Speed:      &speed,
+			Pitch:      &pitch,
+			Intonation: &intonation,
+			DryRun:     dryRun,
+		})
+	}
+
+	if err := runAudioProbe(deps.AudioProbe, dryRun); err != nil {
+		return err
 	}
 
 	uc := app.NewWatchUsecase(deps.Reader, client, deps.Player, deps.Mover, watcher, opts...)

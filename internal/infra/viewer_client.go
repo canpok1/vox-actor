@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -48,15 +49,24 @@ type ViewerPlayResponse struct {
 
 // ViewerAPIClient is a thin HTTP client for calling viewer's /api/play.
 type ViewerAPIClient struct {
-	addr   string
-	client *http.Client
+	baseURL string // e.g., "http://host:port"
+	client  *http.Client
 }
 
 // NewViewerAPIClient creates a client targeting the viewer at addr (host:port).
 func NewViewerAPIClient(addr string) *ViewerAPIClient {
 	return &ViewerAPIClient{
-		addr:   addr,
-		client: &http.Client{},
+		baseURL: "http://" + addr,
+		client:  &http.Client{},
+	}
+}
+
+// NewViewerAPIClientFromURL creates a client targeting the viewer at the given base URL.
+// Trailing slashes are trimmed.
+func NewViewerAPIClientFromURL(rawURL string) *ViewerAPIClient {
+	return &ViewerAPIClient{
+		baseURL: strings.TrimRight(rawURL, "/"),
+		client:  &http.Client{},
 	}
 }
 
@@ -67,7 +77,7 @@ func (c *ViewerAPIClient) Play(ctx context.Context, req ViewerPlayRequest) (*Vie
 		return nil, fmt.Errorf("marshal play request: %w", err)
 	}
 
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, "http://"+c.addr+"/api/play", bytes.NewReader(body))
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/api/play", bytes.NewReader(body))
 	if err != nil {
 		return nil, fmt.Errorf("create request: %w", err)
 	}
