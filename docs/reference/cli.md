@@ -476,6 +476,139 @@ $ echo $?
 1
 ```
 
+## `playback` サブコマンド
+
+再生状態を管理するサブコマンド群。
+
+### `playback wait` サブコマンド
+
+```
+vox-actor playback wait <id>
+```
+
+`playback_id` を指定して再生が完了するまでポーリングする。`local_playback` を渡すと即時終了する。
+
+| オプション | 環境変数 | デフォルト値 | 説明 |
+|---|---|---|---|
+| `--viewer-url` | `VOX_VIEWER_URL` | (未指定) | viewer の HTTP エンドポイント URL (例: `http://192.168.1.10:8080`)。指定時は lockfile auto-detect をスキップして明示 URL の viewer に接続する。 |
+| `--server-down-timeout` | — | `30s` | サーバーへの接続失敗が連続してこの時間を超えた場合にエラー終了する |
+
+**引数:**
+
+| 引数 | 必須 | 説明 |
+|---|---|---|
+| `<id>` | ✓ | 再生ID。`local_playback` を渡すと即時終了する。 |
+
+**使用例:**
+
+```bash
+# 再生完了を待機
+vox-actor playback wait <playback_id>
+
+# viewer URL を明示して待機
+vox-actor playback wait --viewer-url http://192.168.1.10:8080 <playback_id>
+
+# ローカル再生モード（即時終了）
+vox-actor playback wait local_playback
+```
+
+## `assets` サブコマンド
+
+キャラクター画像などのアセットを管理するサブコマンド群。
+
+### `assets download` サブコマンド
+
+```
+vox-actor assets download <repo-url>
+```
+
+指定した git リポジトリから `vox-actor-assets.json` を読み取り、キャラクター画像を `.vox-actor/assets/` へコピーする。
+
+| オプション | 環境変数 | デフォルト値 | 説明 |
+|---|---|---|---|
+| `--speaker` | — | (未指定) | ダウンロード対象の speaker 名（リピート可、カンマ区切り可）。省略時は全 speaker をダウンロードする。 |
+| `--force` | — | `false` | ローカルに同名 speaker が存在する場合に上書きする |
+| `--scope` | — | `project` | 配置先スコープ（`home`: `~/.vox-actor/assets/`、`project`: プロジェクト配下の `.vox-actor/assets/`） |
+| `--verbose` | — | `false` | 詳細ログを出力 |
+
+**引数:**
+
+| 引数 | 必須 | 説明 |
+|---|---|---|
+| `<repo-url>` | ✓ | キャラクター設定を含む git リポジトリの URL |
+
+**使用例:**
+
+```bash
+# 全 speaker をプロジェクトスコープにダウンロード
+vox-actor assets download https://example.com/character-repo.git
+
+# 特定の speaker のみダウンロード
+vox-actor assets download --speaker ずんだもん https://example.com/character-repo.git
+
+# 複数の speaker をカンマ区切りで指定
+vox-actor assets download --speaker "ずんだもん,四国めたん" https://example.com/character-repo.git
+
+# ホームスコープにダウンロード（全プロジェクトで共有）
+vox-actor assets download --scope home https://example.com/character-repo.git
+
+# 既存 speaker を強制上書き
+vox-actor assets download --force https://example.com/character-repo.git
+```
+
+## `speakers` サブコマンド
+
+利用可能なキャラクター（スピーカー）を管理するサブコマンド群。
+
+### `speakers list` サブコマンド
+
+```
+vox-actor speakers list
+```
+
+利用可能なキャラクター一覧をJSON形式で出力する。オプションはなし。
+
+**出力サンプル:**
+
+```json
+[{"id":"metan","name":"四国めたん"},{"id":"zundamon","name":"ずんだもん"}]
+```
+
+**使用例:**
+
+```bash
+vox-actor speakers list
+```
+
+### `speakers profile` サブコマンド
+
+```
+vox-actor speakers profile (--id <id> | --name <name>)
+```
+
+指定したキャラクターのプロフィールをJSON形式で返す。`--id` と `--name` はどちらか一方のみ指定する（両方または両方省略はエラー）。
+
+| オプション | 環境変数 | デフォルト値 | 説明 |
+|---|---|---|---|
+| `--id` | — | (未指定) | assets 配下のディレクトリ名でキャラクターを指定する |
+| `--name` | — | (未指定) | `speaker.json` の `name` フィールドでキャラクターを指定する |
+
+**出力サンプル:**
+
+```json
+{"id":"zundamon","name":"ずんだもん","pronoun":"ボク","speechSuffix":["〜のだ","〜なのだ"],"personality":["元気","明るい","素直","前向き","おっちょこちょい","好奇心旺盛"],"speakers":{"ノーマル":3,"あまあま":1},"styles":["ノーマル","あまあま"],"description":"# ずんだもん キャラクター設定\n..."}
+```
+
+**使用例:**
+
+```bash
+# ID でプロフィールを取得
+vox-actor speakers profile --id zundamon
+
+# 名前でプロフィールを取得
+vox-actor speakers profile --name ずんだもん
+```
+
 ## ストリーム配信モード
 
 HTTPサーバーを起動し、SSE経由でブラウザに音声を配信します。音声デバイスが利用できない環境でホスト側のブラウザに再生させるケースで利用できます。
