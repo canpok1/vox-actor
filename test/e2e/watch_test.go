@@ -358,7 +358,7 @@ func TestWatchE2E_JsonFile_DryRun_OverrideParams(t *testing.T) {
 	wp := startWatch(t, nil, "--dry-run", dir)
 	wp.waitForStderr("watching directory", 5*time.Second)
 
-	content := `{"text":"こんにちは","speaker":11,"speedScale":1.2,"pitchScale":0.1,"intonationScale":1.5}`
+	content := `{"text":"こんにちは","speaker":11,"speed":1.2,"pitch":0.1,"intonation":1.5}`
 	src := writeTempFile(t, dir, "b.json", content)
 
 	line := wp.waitForStderr("playback completed", 10*time.Second)
@@ -603,7 +603,7 @@ func TestWatchE2E_JsonlPerLineOverride_DryRun(t *testing.T) {
 	wp := startWatch(t, nil, "--dry-run", dir)
 	wp.waitForStderr("watching directory", 5*time.Second)
 
-	content := `{"text":"てきすと","speaker":11,"speedScale":1.2,"pitchScale":0.1,"intonationScale":1.5}` + "\n"
+	content := `{"text":"てきすと","speaker":11,"speed":1.2,"pitch":0.1,"intonation":1.5}` + "\n"
 	writeTempFile(t, dir, "a.jsonl", content)
 
 	line := wp.waitForStderr("playback completed", 10*time.Second)

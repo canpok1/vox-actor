@@ -327,7 +327,7 @@ func TestFileReader_Read_JSONFile_AllParams(t *testing.T) {
 
 	dir := t.TempDir()
 	filePath := filepath.Join(dir, "script.json")
-	content := `{"text": "感情込めて", "speaker": 5, "speedScale": 1.5, "pitchScale": 0.1, "intonationScale": 1.8}`
+	content := `{"text": "感情込めて", "speaker": 5, "speed": 1.5, "pitch": 0.1, "intonation": 1.8}`
 	if err := os.WriteFile(filePath, []byte(content), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -381,7 +381,7 @@ func TestFileReader_Read_JSONFile_MissingText(t *testing.T) {
 
 	dir := t.TempDir()
 	filePath := filepath.Join(dir, "notext.json")
-	content := `{"speaker": 5, "speedScale": 1.0}`
+	content := `{"speaker": 5, "speed": 1.0}`
 	if err := os.WriteFile(filePath, []byte(content), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -525,7 +525,7 @@ func TestFileReader_Read_JSONLFile_AllParams(t *testing.T) {
 
 	dir := t.TempDir()
 	filePath := filepath.Join(dir, "script.jsonl")
-	content := `{"text": "感情込めて", "speaker": 5, "speedScale": 1.5, "pitchScale": 0.1, "intonationScale": 1.8}`
+	content := `{"text": "感情込めて", "speaker": 5, "speed": 1.5, "pitch": 0.1, "intonation": 1.8}`
 	if err := os.WriteFile(filePath, []byte(content), 0o644); err != nil {
 		t.Fatal(err)
 	}

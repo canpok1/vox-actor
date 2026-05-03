@@ -14,9 +14,9 @@ import (
 type scriptJSON struct {
 	Text            string   `json:"text"`
 	Speaker         *int     `json:"speaker"`
-	SpeedScale      *float64 `json:"speedScale"`
-	PitchScale      *float64 `json:"pitchScale"`
-	IntonationScale *float64 `json:"intonationScale"`
+	SpeedScale      *float64 `json:"speed"`
+	PitchScale      *float64 `json:"pitch"`
+	IntonationScale *float64 `json:"intonation"`
 }
 
 // readScriptJSON は path のファイルの最初の行を JSON としてパースして返す。
@@ -214,13 +214,13 @@ func TestScriptAppendE2E_VoiceParams_Reflected(t *testing.T) {
 		t.Errorf("expected speaker=5, got %v", s.Speaker)
 	}
 	if s.SpeedScale == nil || *s.SpeedScale != 1.2 {
-		t.Errorf("expected speedScale=1.2, got %v", s.SpeedScale)
+		t.Errorf("expected speed=1.2, got %v", s.SpeedScale)
 	}
 	if s.PitchScale == nil || *s.PitchScale != 0.05 {
-		t.Errorf("expected pitchScale=0.05, got %v", s.PitchScale)
+		t.Errorf("expected pitch=0.05, got %v", s.PitchScale)
 	}
 	if s.IntonationScale == nil || *s.IntonationScale != 1.5 {
-		t.Errorf("expected intonationScale=1.5, got %v", s.IntonationScale)
+		t.Errorf("expected intonation=1.5, got %v", s.IntonationScale)
 	}
 }
 
@@ -240,13 +240,13 @@ func TestScriptAppendE2E_VoiceParams_Omitempty(t *testing.T) {
 		t.Errorf("expected speaker to be omitted, got %v", *s.Speaker)
 	}
 	if s.SpeedScale != nil {
-		t.Errorf("expected speedScale to be omitted, got %v", *s.SpeedScale)
+		t.Errorf("expected speed to be omitted, got %v", *s.SpeedScale)
 	}
 	if s.PitchScale != nil {
-		t.Errorf("expected pitchScale to be omitted, got %v", *s.PitchScale)
+		t.Errorf("expected pitch to be omitted, got %v", *s.PitchScale)
 	}
 	if s.IntonationScale != nil {
-		t.Errorf("expected intonationScale to be omitted, got %v", *s.IntonationScale)
+		t.Errorf("expected intonation to be omitted, got %v", *s.IntonationScale)
 	}
 }
 

@@ -30,9 +30,9 @@ var supportedExts = map[string]bool{
 type jsonScript struct {
 	Text            *string  `json:"text"`
 	Speaker         *int     `json:"speaker"`
-	SpeedScale      *float64 `json:"speedScale"`
-	PitchScale      *float64 `json:"pitchScale"`
-	IntonationScale *float64 `json:"intonationScale"`
+	SpeedScale      *float64 `json:"speed"`
+	PitchScale      *float64 `json:"pitch"`
+	IntonationScale *float64 `json:"intonation"`
 }
 
 // toScript は jsonScript を entity.Script に変換する。
