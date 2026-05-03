@@ -212,8 +212,10 @@ func TestViewerE2E_APIPlay_CreateQueryFails(t *testing.T) {
 	resp := postAPIPlay(t, addr, "テスト", 3)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusBadGateway {
-		t.Errorf("expected 502, got %d", resp.StatusCode)
+	// 非同期 worker 化により、リクエストは即座に 200 で返る。
+	// worker が synthesize エラーを検知し playback state を failed に更新する。
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected 200 (async), got %d", resp.StatusCode)
 	}
 }
 
@@ -234,8 +236,10 @@ func TestViewerE2E_APIPlay_SynthesisFails(t *testing.T) {
 	resp := postAPIPlay(t, addr, "テスト", 3)
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusBadGateway {
-		t.Errorf("expected 502, got %d", resp.StatusCode)
+	// 非同期 worker 化により、リクエストは即座に 200 で返る。
+	// worker が synthesize エラーを検知し playback state を failed に更新する。
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected 200 (async), got %d", resp.StatusCode)
 	}
 
 	vp.assertCleanExit(3 * time.Second)
