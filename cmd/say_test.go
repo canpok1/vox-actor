@@ -673,3 +673,67 @@ func TestRunSay_ExplicitViewerURL_ConnectionError_ReturnsError(t *testing.T) {
 		t.Error("expected no local playback when --viewer-url fails")
 	}
 }
+
+// --- #489 say が viewer モードで playback_id を stdout 出力 ---
+
+func TestRunSay_ViewerMode_PrintsPlaybackIDToStdout(t *testing.T) {
+	t.Parallel()
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/status", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) })
+	mux.HandleFunc("/api/play", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"playback_id": "22222222-2222-4222-8222-222222222222",
+			"clip_count":  1,
+			"silent":      false,
+		})
+	})
+	lockPath, _ := setupFakeViewer(t, mux)
+
+	cmd := newCmdWithContext(t)
+	registerCommonFlags(cmd)
+	_ = cmd.ParseFlags([]string{})
+
+	var stdout bytes.Buffer
+	cmd.SetOut(&stdout)
+
+	deps := &SayDeps{
+		ClientFactory:    func(_ string) app.VoicevoxClient { return &noopClient{} },
+		Player:           &noopPlayer{},
+		LockPathResolver: func() (string, error) { return lockPath, nil },
+	}
+
+	if err := runSay(cmd, []string{"こんにちは"}, deps); err != nil {
+		t.Fatalf("runSay: %v", err)
+	}
+	got := strings.TrimSpace(stdout.String())
+	if got != "22222222-2222-4222-8222-222222222222" {
+		t.Errorf("expected stdout=playback_id, got %q", got)
+	}
+}
+
+func TestRunSay_LocalMode_PrintsLocalPlaybackToStdout(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	lockPath := filepath.Join(dir, "viewer.lock")
+
+	cmd := newCmdWithContext(t)
+	registerCommonFlags(cmd)
+	_ = cmd.ParseFlags([]string{})
+
+	var stdout bytes.Buffer
+	cmd.SetOut(&stdout)
+
+	deps := &SayDeps{
+		ClientFactory:    func(_ string) app.VoicevoxClient { return &mockSayClient{} },
+		Player:           &trackingPlayer{playFn: func() {}},
+		LockPathResolver: func() (string, error) { return lockPath, nil },
+	}
+
+	if err := runSay(cmd, []string{"こんにちは"}, deps); err != nil {
+		t.Fatalf("runSay: %v", err)
+	}
+	got := strings.TrimSpace(stdout.String())
+	if got != "local_playback" {
+		t.Errorf("expected stdout=local_playback, got %q", got)
+	}
+}

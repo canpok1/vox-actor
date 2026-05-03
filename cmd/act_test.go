@@ -236,7 +236,7 @@ func (s stubScriptReaderForAct) Read(_ string) ([]entity.Script, error) {
 	return s.scripts, nil
 }
 
-func TestRunAct_ViewerRunning_POSTsPerLine(t *testing.T) {
+func TestRunAct_ViewerRunning_BatchesAllClipsInOnePOST(t *testing.T) {
 	var postCount int
 	var capturedTexts []string
 
@@ -246,15 +246,17 @@ func TestRunAct_ViewerRunning_POSTsPerLine(t *testing.T) {
 		postCount++
 		var req map[string]interface{}
 		_ = json.NewDecoder(r.Body).Decode(&req)
-		// clips 形式: {"clips":[{"text":"...","speaker_id":...}]}
-		if clips, ok := req["clips"].([]interface{}); ok && len(clips) > 0 {
-			if clip, ok := clips[0].(map[string]interface{}); ok {
-				if text, ok := clip["text"].(string); ok {
-					capturedTexts = append(capturedTexts, text)
+		// clips 形式: {"clips":[{"text":"...","speaker_id":...}, ...]}
+		if clips, ok := req["clips"].([]interface{}); ok {
+			for _, c := range clips {
+				if clip, ok := c.(map[string]interface{}); ok {
+					if text, ok := clip["text"].(string); ok {
+						capturedTexts = append(capturedTexts, text)
+					}
 				}
 			}
 		}
-		_ = json.NewEncoder(w).Encode(map[string]interface{}{"silent": false})
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"playback_id": "abc", "clip_count": 2, "silent": false})
 	})
 	lockPath, _ := setupFakeViewer(t, mux)
 
@@ -266,6 +268,7 @@ func TestRunAct_ViewerRunning_POSTsPerLine(t *testing.T) {
 	cmd := newCmdWithContext(t)
 	registerCommonFlags(cmd)
 	_ = cmd.ParseFlags([]string{})
+	cmd.SetOut(new(bytes.Buffer))
 
 	deps := &ActDeps{
 		Reader:           stubScriptReaderForAct{scripts: []entity.Script{{Text: "line1"}, {Text: "line2"}}},
@@ -277,8 +280,8 @@ func TestRunAct_ViewerRunning_POSTsPerLine(t *testing.T) {
 	if err := runAct(cmd, []string{scriptFile}, deps); err != nil {
 		t.Fatalf("runAct: %v", err)
 	}
-	if postCount != 2 {
-		t.Errorf("expected 2 POSTs, got %d", postCount)
+	if postCount != 1 {
+		t.Errorf("expected 1 batch POST, got %d", postCount)
 	}
 	if len(capturedTexts) != 2 || capturedTexts[0] != "line1" || capturedTexts[1] != "line2" {
 		t.Errorf("expected texts [line1, line2], got %v", capturedTexts)
@@ -761,5 +764,133 @@ func TestRunAct_ExplicitViewerURL_ConnectionError_ReturnsError(t *testing.T) {
 	}
 	if playCalled {
 		t.Error("expected no local playback when --viewer-url fails")
+	}
+}
+
+// --- #489 say/act が viewer モードで playback_id を stdout 出力 ---
+
+func TestRunAct_ViewerMode_PrintsPlaybackIDToStdout(t *testing.T) {
+	t.Parallel()
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/status", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) })
+	mux.HandleFunc("/api/play", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"playback_id": "11111111-1111-4111-8111-111111111111",
+			"clip_count":  2,
+			"silent":      false,
+		})
+	})
+	lockPath, _ := setupFakeViewer(t, mux)
+
+	scriptFile := filepath.Join(t.TempDir(), "test.txt")
+	if err := os.WriteFile(scriptFile, []byte("line1\nline2\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	cmd := newCmdWithContext(t)
+	registerCommonFlags(cmd)
+	_ = cmd.ParseFlags([]string{})
+
+	var stdout bytes.Buffer
+	cmd.SetOut(&stdout)
+
+	deps := &ActDeps{
+		Reader:           stubScriptReaderForAct{scripts: []entity.Script{{Text: "line1"}, {Text: "line2"}}},
+		ClientFactory:    func(_ string) app.VoicevoxClient { return &noopClient{} },
+		Player:           &noopPlayer{},
+		LockPathResolver: func() (string, error) { return lockPath, nil },
+	}
+
+	if err := runAct(cmd, []string{scriptFile}, deps); err != nil {
+		t.Fatalf("runAct: %v", err)
+	}
+	got := strings.TrimSpace(stdout.String())
+	if got != "11111111-1111-4111-8111-111111111111" {
+		t.Errorf("expected stdout=playback_id, got %q", got)
+	}
+}
+
+func TestRunAct_ViewerMode_BatchesAllClipsInSinglePOST(t *testing.T) {
+	t.Parallel()
+	var postCount int
+	var capturedClips []map[string]interface{}
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/status", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) })
+	mux.HandleFunc("/api/play", func(w http.ResponseWriter, r *http.Request) {
+		postCount++
+		var req map[string]interface{}
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		if clips, ok := req["clips"].([]interface{}); ok {
+			for _, c := range clips {
+				if m, ok := c.(map[string]interface{}); ok {
+					capturedClips = append(capturedClips, m)
+				}
+			}
+		}
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"playback_id": "abc", "clip_count": 2, "silent": false})
+	})
+	lockPath, _ := setupFakeViewer(t, mux)
+
+	scriptFile := filepath.Join(t.TempDir(), "test.txt")
+	if err := os.WriteFile(scriptFile, []byte("line1\nline2\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	cmd := newCmdWithContext(t)
+	registerCommonFlags(cmd)
+	_ = cmd.ParseFlags([]string{})
+	cmd.SetOut(new(bytes.Buffer))
+
+	deps := &ActDeps{
+		Reader:           stubScriptReaderForAct{scripts: []entity.Script{{Text: "line1"}, {Text: "line2"}}},
+		ClientFactory:    func(_ string) app.VoicevoxClient { return &noopClient{} },
+		Player:           &noopPlayer{},
+		LockPathResolver: func() (string, error) { return lockPath, nil },
+	}
+
+	if err := runAct(cmd, []string{scriptFile}, deps); err != nil {
+		t.Fatalf("runAct: %v", err)
+	}
+	if postCount != 1 {
+		t.Errorf("expected 1 batch POST, got %d", postCount)
+	}
+	if len(capturedClips) != 2 {
+		t.Errorf("expected 2 clips in batch, got %d", len(capturedClips))
+	}
+}
+
+func TestRunAct_LocalMode_PrintsLocalPlaybackToStdout(t *testing.T) {
+	t.Parallel()
+	player := &trackingPlayer{playFn: func() {}}
+	client := &mockSayClient{}
+
+	dir := t.TempDir()
+	lockPath := filepath.Join(dir, "viewer.lock")
+
+	scriptFile := filepath.Join(t.TempDir(), "test.txt")
+	if err := os.WriteFile(scriptFile, []byte("hello\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	cmd := newCmdWithContext(t)
+	registerCommonFlags(cmd)
+	_ = cmd.ParseFlags([]string{})
+
+	var stdout bytes.Buffer
+	cmd.SetOut(&stdout)
+
+	deps := &ActDeps{
+		Reader:           stubScriptReaderForAct{scripts: []entity.Script{{Text: "hello"}}},
+		ClientFactory:    func(_ string) app.VoicevoxClient { return client },
+		Player:           player,
+		LockPathResolver: func() (string, error) { return lockPath, nil },
+	}
+
+	if err := runAct(cmd, []string{scriptFile}, deps); err != nil {
+		t.Fatalf("runAct: %v", err)
+	}
+	got := strings.TrimSpace(stdout.String())
+	if got != "local_playback" {
+		t.Errorf("expected stdout=local_playback, got %q", got)
 	}
 }
