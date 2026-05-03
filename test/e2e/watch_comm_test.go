@@ -88,6 +88,7 @@ func TestWatchE2E_RealComm_HealthCheckConnFailed_ExitsNonZero(t *testing.T) {
 
 func TestWatchE2E_RealComm_QueryFails_MonitoringContinues(t *testing.T) {
 	t.Parallel()
+	skipIfNoAudioDevice(t)
 
 	dir := t.TempDir()
 	homeDir := t.TempDir()
@@ -122,6 +123,7 @@ func TestWatchE2E_RealComm_QueryFails_MonitoringContinues(t *testing.T) {
 
 func TestWatchE2E_RealComm_SynthPipeline_Invoked(t *testing.T) {
 	t.Parallel()
+	skipIfNoAudioDevice(t)
 
 	dir := t.TempDir()
 	homeDir := t.TempDir()

@@ -60,6 +60,11 @@ func main() {
 		return infra.NewHTTPStreamPlayer(addr, staticFS, opts...)
 	}
 
+	audioProbe := func() error {
+		_, err := infra.CheckAudioDevice(infra.NewOtoAudioProbe())
+		return err
+	}
+
 	deps := &cmd.Deps{
 		Assets: &cmd.AssetsDownloadDeps{
 			Cloner: &infra.GitCloner{},
@@ -68,6 +73,7 @@ func main() {
 			Reader:        reader,
 			ClientFactory: clientFactory,
 			Player:        player,
+			AudioProbe:    audioProbe,
 		},
 		Watch: &cmd.WatchDeps{
 			Reader:            reader,
@@ -75,6 +81,7 @@ func main() {
 			Player:            player,
 			Mover:             mover,
 			DirWatcherFactory: dirWatcherFactory,
+			AudioProbe:        audioProbe,
 		},
 		Viewer: &cmd.ViewerDeps{
 			ClientFactory:       clientFactory,
@@ -83,6 +90,7 @@ func main() {
 		Say: &cmd.SayDeps{
 			ClientFactory: clientFactory,
 			Player:        player,
+			AudioProbe:    audioProbe,
 		},
 		ScriptAppend: &cmd.ScriptAppendDeps{
 			WriterFactory: func(logger *slog.Logger) app.ScriptWriter {

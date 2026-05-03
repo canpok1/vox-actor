@@ -18,6 +18,9 @@ type SayDeps struct {
 	Player           app.AudioPlayer
 	LockPathResolver func() (string, error)
 	Logger           *slog.Logger
+	// AudioProbe はローカル再生前に音声デバイス可用性を検査する関数。
+	// nil の場合は検査をスキップする。--dry-run 時は呼ばれない。
+	AudioProbe func() error
 }
 
 func makeSayCmd(deps *SayDeps) *cobra.Command {
@@ -95,6 +98,10 @@ func runSay(cmd *cobra.Command, args []string, deps *SayDeps) error {
 		} else {
 			logger.Debug("viewer not running, using local player")
 		}
+	}
+
+	if err := runAudioProbe(deps.AudioProbe, dryRun); err != nil {
+		return err
 	}
 
 	params := app.SayParams{

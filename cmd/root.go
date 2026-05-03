@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"errors"
+	"fmt"
 
 	"github.com/spf13/cobra"
 )
@@ -11,6 +12,18 @@ var version = "dev"
 // ErrUsage はCLIの引数エラーを示すエラー。
 // 呼び出し元はこのエラーを検出して終了コード2で終了すべき。
 var ErrUsage = errors.New("usage error")
+
+// runAudioProbe は probe が nil でなく dryRun でない場合に probe を実行する。
+// 失敗時は "audio device unavailable: ..." エラーを返す。
+func runAudioProbe(probe func() error, dryRun bool) error {
+	if dryRun || probe == nil {
+		return nil
+	}
+	if err := probe(); err != nil {
+		return fmt.Errorf("audio device unavailable: %w", err)
+	}
+	return nil
+}
 
 // Deps はルートコマンドの依存を保持する。
 type Deps struct {

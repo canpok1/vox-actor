@@ -375,3 +375,108 @@ func (c *mockSayClient) Synthesize(_ context.Context, _ *entity.AudioQuery, _ in
 	return []byte("RIFFx"), nil
 }
 func (c *mockSayClient) GetSpeakers(_ context.Context) ([]entity.Speaker, error) { return nil, nil }
+
+// --- AudioProbe テスト (#468) ---
+// DONE: say でビューワー未起動・非dryRunの場合 AudioProbe が呼ばれる     → TestRunSay_AudioProbe_CalledOnLocalPlayerPath
+// DONE: say で dry-run の場合 AudioProbe がスキップされる               → TestRunSay_AudioProbe_SkippedOnDryRun
+// DONE: say でビューワー起動中は AudioProbe がスキップされる            → TestRunSay_AudioProbe_SkippedWhenViewerRunning
+// DONE: say で AudioProbe が失敗した場合エラーを返す                    → TestRunSay_AudioProbe_FailureCausesError
+
+func TestRunSay_AudioProbe_CalledOnLocalPlayerPath(t *testing.T) {
+	probeCalled := false
+
+	dir := t.TempDir()
+	lockPath := filepath.Join(dir, "viewer.lock")
+
+	cmd := newCmdWithContext(t)
+	registerCommonFlags(cmd)
+	_ = cmd.ParseFlags([]string{})
+
+	deps := &SayDeps{
+		ClientFactory:    func(_ string) app.VoicevoxClient { return &mockSayClient{} },
+		Player:           &trackingPlayer{},
+		LockPathResolver: func() (string, error) { return lockPath, nil },
+		AudioProbe:       func() error { probeCalled = true; return nil },
+	}
+
+	if err := runSay(cmd, []string{"テスト"}, deps); err != nil {
+		t.Fatalf("runSay: %v", err)
+	}
+	if !probeCalled {
+		t.Error("expected AudioProbe to be called on local player path, but it was not")
+	}
+}
+
+func TestRunSay_AudioProbe_SkippedOnDryRun(t *testing.T) {
+	probeCalled := false
+
+	cmd := newCmdWithContext(t)
+	registerCommonFlags(cmd)
+	_ = cmd.ParseFlags([]string{"--dry-run"})
+
+	deps := &SayDeps{
+		ClientFactory: func(_ string) app.VoicevoxClient { return &mockSayClient{} },
+		Player:        &trackingPlayer{},
+		AudioProbe:    func() error { probeCalled = true; return nil },
+	}
+
+	if err := runSay(cmd, []string{"テスト"}, deps); err != nil {
+		t.Fatalf("runSay: %v", err)
+	}
+	if probeCalled {
+		t.Error("expected AudioProbe to be skipped in dry-run, but it was called")
+	}
+}
+
+func TestRunSay_AudioProbe_SkippedWhenViewerRunning(t *testing.T) {
+	probeCalled := false
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/status", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) })
+	mux.HandleFunc("/api/play", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"silent": false})
+	})
+	lockPath, _ := setupFakeViewer(t, mux)
+
+	cmd := newCmdWithContext(t)
+	registerCommonFlags(cmd)
+	_ = cmd.ParseFlags([]string{})
+
+	deps := &SayDeps{
+		ClientFactory:    func(_ string) app.VoicevoxClient { return &noopClient{} },
+		Player:           &noopPlayer{},
+		LockPathResolver: func() (string, error) { return lockPath, nil },
+		AudioProbe:       func() error { probeCalled = true; return nil },
+	}
+
+	if err := runSay(cmd, []string{"テスト"}, deps); err != nil {
+		t.Fatalf("runSay: %v", err)
+	}
+	if probeCalled {
+		t.Error("expected AudioProbe to be skipped when viewer is running, but it was called")
+	}
+}
+
+func TestRunSay_AudioProbe_FailureCausesError(t *testing.T) {
+	dir := t.TempDir()
+	lockPath := filepath.Join(dir, "viewer.lock")
+
+	cmd := newCmdWithContext(t)
+	registerCommonFlags(cmd)
+	_ = cmd.ParseFlags([]string{})
+
+	deps := &SayDeps{
+		ClientFactory:    func(_ string) app.VoicevoxClient { return &mockSayClient{} },
+		Player:           &trackingPlayer{},
+		LockPathResolver: func() (string, error) { return lockPath, nil },
+		AudioProbe:       func() error { return errors.New("no audio device") },
+	}
+
+	err := runSay(cmd, []string{"テスト"}, deps)
+	if err == nil {
+		t.Fatal("expected error when AudioProbe fails, got nil")
+	}
+	if !strings.Contains(err.Error(), "audio") {
+		t.Errorf("expected error message to mention 'audio', got: %v", err)
+	}
+}
