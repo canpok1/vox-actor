@@ -58,14 +58,17 @@ make clean
 make dev
 ```
 
-個別に起動したい場合は、2 つのターミナルで以下を実行します。
+個別に起動したい場合は、3 つのターミナルで以下を実行します。
 
 ```bash
-# ターミナル1: Go バックエンド（ストリーム配信モード、127.0.0.1:8080 でリッスン）
-make dev-backend
+# ターミナル1: viewer（HTTP サーバー、127.0.0.1:8080 でリッスン）
+make dev-viewer
 
 # ターミナル2: Vite dev server（既定で http://localhost:5173）
 make dev-frontend
+
+# ターミナル3: watch（キュー監視）
+make dev-watch
 ```
 
 ブラウザで **Vite の URL（例: `http://localhost:5173`）** を開きます。`/events`（SSE）, `/speakers.json`, `/test-clip`, `/clips/*` は `frontend/vite.config.ts` の `server.proxy` 経由で Go バックエンド（`localhost:8080`）に中継されます。
@@ -140,7 +143,7 @@ make test-frontend-e2e
 cd frontend && npm run test:e2e
 ```
 
-`playwright.config.ts` の `webServer` がスタブ（既定 `127.0.0.1:8080`）と Vite dev server（既定 `127.0.0.1:5173`）を自動起動します。`8080` が既に使われている場合（例: `make dev-backend` を起動中）は、`VOX_STUB_PORT` と `PLAYWRIGHT_BASE_URL` で別ポートに振り分けてください。
+`playwright.config.ts` の `webServer` がスタブ（既定 `127.0.0.1:8080`）と Vite dev server（既定 `127.0.0.1:5173`）を自動起動します。`8080` が既に使われている場合（例: `make dev-viewer` を起動中）は、`VOX_STUB_PORT` と `PLAYWRIGHT_BASE_URL` で別ポートに振り分けてください。
 
 ```bash
 cd frontend
