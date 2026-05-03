@@ -205,9 +205,15 @@ func TestPollingDirWatcher_RecreatesMissingDirectory(t *testing.T) {
 		infra.WithPollingDirWatcherLogger(logger),
 	)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
 
 	fileCh, errCh := watcher.Watch(ctx, dir)
+	t.Cleanup(func() {
+		cancel()
+		for range fileCh {
+		}
+		for range errCh {
+		}
+	})
 
 	// 監視ディレクトリを削除
 	if err := os.RemoveAll(dir); err != nil {
@@ -334,10 +340,20 @@ func TestPollingDirWatcher_MultipleDirsIndependentOnOneDeleted(t *testing.T) {
 		infra.WithPollingDirWatcherLogger(logger),
 	)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
 
-	_, errCh1 := watcher.Watch(ctx, dir1)
+	fileCh1, errCh1 := watcher.Watch(ctx, dir1)
 	fileCh2, errCh2 := watcher.Watch(ctx, dir2)
+	t.Cleanup(func() {
+		cancel()
+		for range fileCh1 {
+		}
+		for range errCh1 {
+		}
+		for range fileCh2 {
+		}
+		for range errCh2 {
+		}
+	})
 
 	// dir1 のみ削除
 	if err := os.RemoveAll(dir1); err != nil {
