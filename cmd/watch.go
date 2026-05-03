@@ -133,10 +133,8 @@ func runWatch(cmd *cobra.Command, args []string, deps *WatchDeps) error {
 		return fmt.Errorf("watch command dependencies are not initialized")
 	}
 
-	if !dryRun && deps.AudioProbe != nil {
-		if err := deps.AudioProbe(); err != nil {
-			return fmt.Errorf("audio device unavailable: %w", err)
-		}
+	if err := runAudioProbe(deps.AudioProbe, dryRun); err != nil {
+		return err
 	}
 
 	ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)

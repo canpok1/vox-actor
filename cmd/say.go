@@ -100,10 +100,8 @@ func runSay(cmd *cobra.Command, args []string, deps *SayDeps) error {
 		}
 	}
 
-	if !dryRun && deps.AudioProbe != nil {
-		if err := deps.AudioProbe(); err != nil {
-			return fmt.Errorf("audio device unavailable: %w", err)
-		}
+	if err := runAudioProbe(deps.AudioProbe, dryRun); err != nil {
+		return err
 	}
 
 	params := app.SayParams{

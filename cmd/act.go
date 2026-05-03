@@ -135,10 +135,8 @@ func runAct(cmd *cobra.Command, args []string, deps *ActDeps) error {
 		}
 	}
 
-	if !dryRun && deps.AudioProbe != nil {
-		if err := deps.AudioProbe(); err != nil {
-			return fmt.Errorf("audio device unavailable: %w", err)
-		}
+	if err := runAudioProbe(deps.AudioProbe, dryRun); err != nil {
+		return err
 	}
 
 	uc := app.NewActUsecase(deps.Reader, client, deps.Player, app.WithLogger(logger))
