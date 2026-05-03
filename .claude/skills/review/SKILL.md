@@ -9,7 +9,7 @@ user-invocable: true
 
 ## 手順
 
-以下の4つのサブエージェントを同時並行で実行する。
+以下の5つのサブエージェントを同時並行で実行する。
 
 - `doc-validator` サブエージェントを呼び出して、ドキュメントの整合性をチェックする
   - `context: fork` + `agent: doc-validator` で呼び出す
@@ -19,5 +19,7 @@ user-invocable: true
   - `context: fork` + `agent: flaky-test-reviewer` で呼び出す
 - `plugin-version-reviewer` サブエージェントを呼び出して、`plugins/<name>/.claude-plugin/plugin.json` の version bump 漏れをチェックする
   - `context: fork` + `agent: plugin-version-reviewer` で呼び出す
+- `acceptance-doc-reviewer` サブエージェントを呼び出して、`docs/acceptance/**/*.feature` と e2e テスト / reference ドキュメントの同期漏れをチェックする
+  - `context: fork` + `agent: acceptance-doc-reviewer` で呼び出す
 
 全サブエージェントからの指摘を集約し、呼び出し元に報告する。修正が必要な場合は呼び出し元が精査して対応する。
