@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"os"
@@ -44,6 +45,18 @@ func makeSayCmd(deps *SayDeps) *cobra.Command {
 	return cmd
 }
 
+func sayViaViewer(ctx context.Context, cmd *cobra.Command, vc *infra.ViewerAPIClient, clip infra.ViewerClip, logger *slog.Logger) error {
+	resp, err := vc.Play(ctx, infra.ViewerPlayRequest{Clips: []infra.ViewerClip{clip}})
+	if err != nil {
+		return fmt.Errorf("say via viewer: %w", err)
+	}
+	if resp.Silent {
+		logger.Warn("viewer is in silent mode", "reason", resp.SilentReason)
+	}
+	_, _ = fmt.Fprintln(cmd.OutOrStdout(), resp.PlaybackID)
+	return nil
+}
+
 func resolveSayLockPath(deps *SayDeps) (string, error) {
 	if deps != nil {
 		return resolveViewerLockPathWith(deps.LockPathResolver)
@@ -75,27 +88,20 @@ func runSay(cmd *cobra.Command, args []string, deps *SayDeps) error {
 	pitch, _ := cmd.Flags().GetFloat64("pitch")
 	intonation, _ := cmd.Flags().GetFloat64("intonation")
 
+	clip := infra.ViewerClip{
+		Text:       args[0],
+		SpeakerID:  speakerID,
+		Speed:      &speed,
+		Pitch:      &pitch,
+		Intonation: &intonation,
+	}
+
 	if !dryRun {
 		if viewerURL != "" {
 			// 明示 URL: lockfile スキップ、AudioProbe スキップ、接続失敗時はエラー
 			logger.Info("using explicit viewer URL", "url", viewerURL)
 			vc := infra.NewViewerAPIClientFromURL(viewerURL)
-			resp, err := vc.Play(ctx, infra.ViewerPlayRequest{
-				Clips: []infra.ViewerClip{{
-					Text:       args[0],
-					SpeakerID:  speakerID,
-					Speed:      &speed,
-					Pitch:      &pitch,
-					Intonation: &intonation,
-				}},
-			})
-			if err != nil {
-				return err
-			}
-			if resp.Silent {
-				logger.Warn("viewer is in silent mode", "reason", resp.SilentReason)
-			}
-			return nil
+			return sayViaViewer(ctx, cmd, vc, clip, logger)
 		}
 
 		lockPath, lockErr := resolveSayLockPath(deps)
@@ -104,22 +110,7 @@ func runSay(cmd *cobra.Command, args []string, deps *SayDeps) error {
 		} else if addr, ok := infra.DetectViewer(lockPath); ok {
 			logger.Info("viewer detected, sending audio via /api/play", "addr", addr)
 			vc := infra.NewViewerAPIClient(addr)
-			resp, err := vc.Play(ctx, infra.ViewerPlayRequest{
-				Clips: []infra.ViewerClip{{
-					Text:       args[0],
-					SpeakerID:  speakerID,
-					Speed:      &speed,
-					Pitch:      &pitch,
-					Intonation: &intonation,
-				}},
-			})
-			if err != nil {
-				return err
-			}
-			if resp.Silent {
-				logger.Warn("viewer is in silent mode", "reason", resp.SilentReason)
-			}
-			return nil
+			return sayViaViewer(ctx, cmd, vc, clip, logger)
 		} else {
 			logger.Debug("viewer not running, using local player")
 		}
@@ -144,5 +135,9 @@ func runSay(cmd *cobra.Command, args []string, deps *SayDeps) error {
 	}
 
 	uc := app.NewSayUsecase(client, deps.Player, app.WithSayLogger(logger))
-	return uc.Run(ctx, params)
+	if err := uc.Run(ctx, params); err != nil {
+		return err
+	}
+	_, _ = fmt.Fprintln(cmd.OutOrStdout(), localPlaybackID)
+	return nil
 }

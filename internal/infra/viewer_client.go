@@ -77,6 +77,41 @@ func NewViewerAPIClientFromURL(rawURL string) *ViewerAPIClient {
 	}
 }
 
+// ViewerPlaybackResponse is the response from GET /api/playback/{id}.
+type ViewerPlaybackResponse struct {
+	ID             string `json:"id"`
+	Status         string `json:"status"`
+	ClipCount      int    `json:"clip_count"`
+	CompletedClips int    `json:"completed_clips"`
+	StartedAt      *int64 `json:"started_at"`
+	FinishedAt     *int64 `json:"finished_at"`
+	FailedReason   string `json:"failed_reason"`
+}
+
+// GetPlayback sends a GET /api/playback/{id} request and returns the playback state.
+func (c *ViewerAPIClient) GetPlayback(ctx context.Context, id string) (*ViewerPlaybackResponse, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/api/playback/"+id, nil)
+	if err != nil {
+		return nil, fmt.Errorf("create request: %w", err)
+	}
+
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("GET /api/playback/%s: %w", id, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("GET /api/playback/%s returned %d", id, resp.StatusCode)
+	}
+
+	var result ViewerPlaybackResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("decode playback response: %w", err)
+	}
+	return &result, nil
+}
+
 // Play sends a POST /api/play request to the viewer and returns the response.
 func (c *ViewerAPIClient) Play(ctx context.Context, req ViewerPlayRequest) (*ViewerPlayResponse, error) {
 	body, err := json.Marshal(req)

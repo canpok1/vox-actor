@@ -108,6 +108,7 @@ func main() {
 			},
 		},
 		ViewerCheck: cmd.NewViewerCheckDeps(),
+		Playback:    &cmd.PlaybackWaitDeps{},
 	}
 
 	if err := cmd.Execute(deps); err != nil {

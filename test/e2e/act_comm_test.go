@@ -9,7 +9,6 @@ import (
 	"os"
 	"os/exec"
 	"strings"
-	"sync/atomic"
 	"syscall"
 	"testing"
 	"time"
@@ -111,8 +110,9 @@ func TestActE2E_Viewer_POSTsAndExitsZero(t *testing.T) {
 	if exitCode != 0 {
 		t.Fatalf("expected exit 0 with viewer running, got %d\nstderr:\n%s", exitCode, stderr)
 	}
-	if *calls != 3 {
-		t.Errorf("expected 3 POSTs to /api/play (one per script line), got %d\nstderr:\n%s", *calls, stderr)
+	// 全クリップを 1 回のバッチ POST にまとめて送信する
+	if *calls != 1 {
+		t.Errorf("expected 1 batch POST to /api/play, got %d\nstderr:\n%s", *calls, stderr)
 	}
 }
 
@@ -126,19 +126,13 @@ func TestActE2E_Viewer_POSTFailure_EarlyExit(t *testing.T) {
 `
 	path := writeTempFile(t, dir, "script.jsonl", content)
 
-	var callCount atomic.Int32
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/status", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
 	mux.HandleFunc("/api/play", func(w http.ResponseWriter, _ *http.Request) {
-		n := callCount.Add(1)
-		if n >= 2 {
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"silent":false}`))
+		// 全クリップを 1 回の POST で送るため、常に失敗させる
+		w.WriteHeader(http.StatusInternalServerError)
 	})
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)

@@ -30,22 +30,22 @@ case "$MODE" in
     mkdir -p "$WORKSPACE_DIR"
     ERROR_LOG="${WORKSPACE_DIR}/play-script-errors.log"
     MAX_LOG_LINES=200
-    OUTPUT=$(vox-actor act "$JSONL_PATH" 2>&1)
+    ID=$(vox-actor act "$JSONL_PATH" 2>>"$ERROR_LOG")
     STATUS=$?
     if [ "$STATUS" -ne 0 ]; then
       TS=$(date '+%Y-%m-%d %H:%M:%S')
-      {
-        echo "[$TS] exit=$STATUS path=$JSONL_PATH"
-        printf '%s\n' "$OUTPUT" | sed 's/^/  /'
-      } >> "$ERROR_LOG"
+      echo "[$TS] act exit=$STATUS path=$JSONL_PATH" >> "$ERROR_LOG"
       LINES=$(wc -l < "$ERROR_LOG")
       if [ "$LINES" -gt "$MAX_LOG_LINES" ]; then
         TMP_LOG=$(mktemp "${ERROR_LOG}.XXXXXX")
         tail -n "$MAX_LOG_LINES" "$ERROR_LOG" > "$TMP_LOG"
         mv "$TMP_LOG" "$ERROR_LOG"
       fi
+      rm -f "$JSONL_PATH"
+      exit "$STATUS"
     fi
     rm -f "$JSONL_PATH"
+    vox-actor playback wait "$ID" 2>>"$ERROR_LOG"
     ;;
   file)
     mkdir -p "$QUEUE_DIR"
