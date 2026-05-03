@@ -1122,7 +1122,6 @@ func (p *HTTPStreamPlayer) processBatch(ctx context.Context, batch playBatch) {
 
 		var wav []byte
 		if prefetchedWAV != nil {
-			// 前イテレーションで既に Play() 済み。WAV だけ再利用する。
 			wav = prefetchedWAV
 			prefetchedWAV = nil
 		} else {
@@ -1214,7 +1213,6 @@ func (p *HTTPStreamPlayer) synthesizeAndPlay(ctx context.Context, playbackID str
 // タイムアウトで broadcast スキップ）。エラー時は playback を failed に遷移させて error を返す。
 // goroutine leak を防ぐため nextSynthCh は buffered channel (cap=1) であること。
 func (p *HTTPStreamPlayer) prefetchSleep(ctx context.Context, playbackID string, duration time.Duration, nextSynthCh chan synthResult, nextClip ViewerClip) ([]byte, error) {
-	// (duration - prefetchLeadTime) 待機後、前倒し broadcast を試みる。
 	timer1 := time.NewTimer(duration - p.prefetchLeadTime)
 	select {
 	case <-timer1.C:
@@ -1251,7 +1249,6 @@ func (p *HTTPStreamPlayer) prefetchSleep(ctx context.Context, playbackID string,
 			p.setPlaybackStatus(playbackID, playbackStatusFailed, pErr.Error())
 			return nil, pErr
 		}
-		// 残り time を消化してから次クリップへ進む。
 		select {
 		case <-remainTimer.C:
 		case <-ctx.Done():

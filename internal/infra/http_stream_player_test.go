@@ -3340,10 +3340,11 @@ func TestHTTPStreamPlayer_Prefetch_NextClipBroadcastedBeforeCurrentEnds(t *testi
 	time.Sleep(100 * time.Millisecond)
 
 	body := bytes.NewBufferString(`{"clips":[{"text":"first","speaker_id":2},{"text":"second","speaker_id":3}]}`)
-	_, err := http.Post("http://"+p.Addr()+"/api/play", "application/json", body)
+	resp, err := http.Post("http://"+p.Addr()+"/api/play", "application/json", body)
 	if err != nil {
 		t.Fatalf("POST: %v", err)
 	}
+	defer func() { _ = resp.Body.Close() }()
 
 	receivedAt := map[string]time.Time{}
 	timeout := time.After(5 * time.Second)
