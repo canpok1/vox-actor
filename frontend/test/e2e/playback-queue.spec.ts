@@ -125,10 +125,11 @@ test.describe("再生キュー", () => {
 
     await requestPromise;
 
-    // audio.src に clip の URL が設定されている
-    await expect(page.locator("audio")).toHaveJSProperty(
-      "src",
-      new URL(clipUrl, page.url()).toString(),
+    // 先読みにより fetch が完了し audio.src に blob URL が設定されている
+    const audioSrc = await page.locator("audio").evaluate(
+      (el: HTMLAudioElement) => el.src,
     );
+    expect(audioSrc).toMatch(/^blob:/);
+
   });
 });
