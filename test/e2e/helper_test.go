@@ -107,6 +107,16 @@ func mergeEnv(base []string, overrides map[string]string) []string {
 	return filtered
 }
 
+// skipIfNoAudioDevice は audio-check が失敗する環境（CI等、音声デバイス不在）でテストをスキップする。
+// watch の非dry-runテストのように、音声デバイスが必須な場合に使う。
+func skipIfNoAudioDevice(t *testing.T) {
+	t.Helper()
+	_, _, exitCode := runCLI(t, nil, "audio-check")
+	if exitCode != 0 {
+		t.Skip("skipping: audio device not available")
+	}
+}
+
 // countNonEmptyLines は s の空行を除いた行数を返す。
 func countNonEmptyLines(s string) int {
 	n := 0
