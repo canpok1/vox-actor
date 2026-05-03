@@ -101,14 +101,8 @@ func (w *FileWriter) Write(path string, script entity.Script) (string, error) {
 		}
 	}
 
-	// 親ディレクトリの存在確認
-	parent := filepath.Dir(path)
-	info, err := os.Stat(parent)
-	if err != nil {
-		return "", fmt.Errorf("parent directory does not exist: %s: %w", parent, err)
-	}
-	if !info.IsDir() {
-		return "", fmt.Errorf("parent path is not a directory: %s", parent)
+	if err := validateParentDir(path); err != nil {
+		return "", err
 	}
 
 	dest := path
@@ -180,15 +174,22 @@ func writeText(path string, text string) error {
 	return appendToFile(path, []byte(text))
 }
 
-// WriteAll は scripts を path に上書き書き出す。既存ファイルがある場合は上書きされる。
-func (w *FileWriter) WriteAll(path string, scripts []entity.Script) (string, error) {
+func validateParentDir(path string) error {
 	parent := filepath.Dir(path)
 	info, err := os.Stat(parent)
 	if err != nil {
-		return "", fmt.Errorf("parent directory does not exist: %s: %w", parent, err)
+		return fmt.Errorf("parent directory does not exist: %s: %w", parent, err)
 	}
 	if !info.IsDir() {
-		return "", fmt.Errorf("parent path is not a directory: %s", parent)
+		return fmt.Errorf("parent path is not a directory: %s", parent)
+	}
+	return nil
+}
+
+// WriteAll は scripts を path に上書き書き出す。既存ファイルがある場合は上書きされる。
+func (w *FileWriter) WriteAll(path string, scripts []entity.Script) (string, error) {
+	if err := validateParentDir(path); err != nil {
+		return "", err
 	}
 
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)

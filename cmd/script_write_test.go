@@ -52,7 +52,13 @@ func TestScriptWriteCmd_RegisteredUnderScript(t *testing.T) {
 }
 
 func TestScriptWriteCmd_NoJsonFlag_ReturnsUsageError(t *testing.T) {
-	rootCmd := makeRootCmd()
+	writer := &captureScriptBulkWriter{}
+	deps := &Deps{
+		ScriptWrite: &ScriptWriteDeps{
+			WriterFactory: func(_ *slog.Logger) app.ScriptBulkWriter { return writer },
+		},
+	}
+	rootCmd := makeRootCmd(deps)
 	buf := new(bytes.Buffer)
 	rootCmd.SetOut(buf)
 	rootCmd.SetErr(buf)

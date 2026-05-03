@@ -47,6 +47,10 @@ func makeScriptWriteCmd(deps *ScriptWriteDeps) *cobra.Command {
 }
 
 func runScriptWrite(cmd *cobra.Command, args []string, deps *ScriptWriteDeps) error {
+	if deps == nil || deps.WriterFactory == nil {
+		return fmt.Errorf("ScriptBulkWriter factory is not configured for script write")
+	}
+
 	file := args[0]
 	if !cmd.Flags().Changed("json") {
 		return fmt.Errorf("%w: required flag --json not set", ErrUsage)
@@ -68,10 +72,6 @@ func runScriptWrite(cmd *cobra.Command, args []string, deps *ScriptWriteDeps) er
 			PitchScale:      in.Pitch,
 			IntonationScale: in.Intonation,
 		}
-	}
-
-	if deps == nil || deps.WriterFactory == nil {
-		return fmt.Errorf("ScriptBulkWriter factory is not configured for script write")
 	}
 
 	logger := buildLoggerFromFlags(cmd)
