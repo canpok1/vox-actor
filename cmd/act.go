@@ -116,11 +116,13 @@ func runAct(cmd *cobra.Command, args []string, deps *ActDeps) error {
 				effectivePitch := script.ResolvePitch(&pitch)
 				effectiveIntonation := script.ResolveIntonation(&intonation)
 				resp, postErr := vc.Play(ctx, infra.ViewerPlayRequest{
-					Text:       script.Text,
-					SpeakerID:  effectiveSpeakerID,
-					Speed:      effectiveSpeed,
-					Pitch:      effectivePitch,
-					Intonation: effectiveIntonation,
+					Clips: []infra.ViewerClip{{
+						Text:       script.Text,
+						SpeakerID:  effectiveSpeakerID,
+						Speed:      effectiveSpeed,
+						Pitch:      effectivePitch,
+						Intonation: effectiveIntonation,
+					}},
 				})
 				if postErr != nil {
 					return fmt.Errorf("act via viewer: %w", postErr)
@@ -154,11 +156,13 @@ func runAct(cmd *cobra.Command, args []string, deps *ActDeps) error {
 				effectivePitch := script.ResolvePitch(&pitch)
 				effectiveIntonation := script.ResolveIntonation(&intonation)
 				resp, postErr := vc.Play(ctx, infra.ViewerPlayRequest{
-					Text:       script.Text,
-					SpeakerID:  effectiveSpeakerID,
-					Speed:      effectiveSpeed,
-					Pitch:      effectivePitch,
-					Intonation: effectiveIntonation,
+					Clips: []infra.ViewerClip{{
+						Text:       script.Text,
+						SpeakerID:  effectiveSpeakerID,
+						Speed:      effectiveSpeed,
+						Pitch:      effectivePitch,
+						Intonation: effectiveIntonation,
+					}},
 				})
 				if postErr != nil {
 					return fmt.Errorf("act via viewer: %w", postErr)

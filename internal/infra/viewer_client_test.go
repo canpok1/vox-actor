@@ -123,7 +123,13 @@ func TestViewerAPIClient_Play_Success(t *testing.T) {
 	pitch := 0.05
 	intonation := 1.3
 	client := infra.NewViewerAPIClient(srv.Listener.Addr().String())
-	req := infra.ViewerPlayRequest{Text: "こんにちは", SpeakerID: 2, Speed: &speed, Pitch: &pitch, Intonation: &intonation}
+	req := infra.ViewerPlayRequest{Clips: []infra.ViewerClip{{
+		Text:       "こんにちは",
+		SpeakerID:  2,
+		Speed:      &speed,
+		Pitch:      &pitch,
+		Intonation: &intonation,
+	}}}
 	resp, err := client.Play(t.Context(), req)
 	if err != nil {
 		t.Fatalf("Play: %v", err)
@@ -131,20 +137,24 @@ func TestViewerAPIClient_Play_Success(t *testing.T) {
 	if resp.Silent {
 		t.Errorf("expected silent=false, got true")
 	}
-	if capturedReq.Text != "こんにちは" {
-		t.Errorf("expected text=%q, got %q", "こんにちは", capturedReq.Text)
+	if len(capturedReq.Clips) == 0 {
+		t.Fatalf("expected clips to be captured")
 	}
-	if capturedReq.SpeakerID != 2 {
-		t.Errorf("expected speaker_id=2, got %d", capturedReq.SpeakerID)
+	clip := capturedReq.Clips[0]
+	if clip.Text != "こんにちは" {
+		t.Errorf("expected text=%q, got %q", "こんにちは", clip.Text)
 	}
-	if capturedReq.Speed == nil || *capturedReq.Speed != speed {
-		t.Errorf("expected speed=%v, got %v", speed, capturedReq.Speed)
+	if clip.SpeakerID != 2 {
+		t.Errorf("expected speaker_id=2, got %d", clip.SpeakerID)
 	}
-	if capturedReq.Pitch == nil || *capturedReq.Pitch != pitch {
-		t.Errorf("expected pitch=%v, got %v", pitch, capturedReq.Pitch)
+	if clip.Speed == nil || *clip.Speed != speed {
+		t.Errorf("expected speed=%v, got %v", speed, clip.Speed)
 	}
-	if capturedReq.Intonation == nil || *capturedReq.Intonation != intonation {
-		t.Errorf("expected intonation=%v, got %v", intonation, capturedReq.Intonation)
+	if clip.Pitch == nil || *clip.Pitch != pitch {
+		t.Errorf("expected pitch=%v, got %v", pitch, clip.Pitch)
+	}
+	if clip.Intonation == nil || *clip.Intonation != intonation {
+		t.Errorf("expected intonation=%v, got %v", intonation, clip.Intonation)
 	}
 }
 
@@ -159,7 +169,7 @@ func TestViewerAPIClient_Play_Silent(t *testing.T) {
 	defer srv.Close()
 
 	client := infra.NewViewerAPIClient(srv.Listener.Addr().String())
-	resp, err := client.Play(t.Context(), infra.ViewerPlayRequest{Text: "test", SpeakerID: 2})
+	resp, err := client.Play(t.Context(), infra.ViewerPlayRequest{Clips: []infra.ViewerClip{{Text: "test", SpeakerID: 2}}})
 	if err != nil {
 		t.Fatalf("Play: %v", err)
 	}
@@ -179,7 +189,7 @@ func TestViewerAPIClient_Play_Error(t *testing.T) {
 	defer srv.Close()
 
 	client := infra.NewViewerAPIClient(srv.Listener.Addr().String())
-	_, err := client.Play(t.Context(), infra.ViewerPlayRequest{Text: "test", SpeakerID: 2})
+	_, err := client.Play(t.Context(), infra.ViewerPlayRequest{Clips: []infra.ViewerClip{{Text: "test", SpeakerID: 2}}})
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -195,15 +205,20 @@ func TestViewerAPIClientFromURL_Play_Success(t *testing.T) {
 	defer srv.Close()
 
 	client := infra.NewViewerAPIClientFromURL("http://" + srv.Listener.Addr().String())
-	resp, err := client.Play(t.Context(), infra.ViewerPlayRequest{Text: "テスト", SpeakerID: 3})
+	resp, err := client.Play(t.Context(), infra.ViewerPlayRequest{Clips: []infra.ViewerClip{{Text: "テスト", SpeakerID: 3}}})
 	if err != nil {
 		t.Fatalf("Play: %v", err)
 	}
 	if resp.Silent {
 		t.Errorf("expected silent=false")
 	}
-	if capturedReq.Text != "テスト" {
-		t.Errorf("expected text=%q, got %q", "テスト", capturedReq.Text)
+	if len(capturedReq.Clips) == 0 || capturedReq.Clips[0].Text != "テスト" {
+		t.Errorf("expected text=%q, got %q", "テスト", func() string {
+			if len(capturedReq.Clips) > 0 {
+				return capturedReq.Clips[0].Text
+			}
+			return ""
+		}())
 	}
 }
 
@@ -217,7 +232,7 @@ func TestViewerAPIClientFromURL_Play_TrailingSlash(t *testing.T) {
 	defer srv.Close()
 
 	client := infra.NewViewerAPIClientFromURL("http://" + srv.Listener.Addr().String() + "/")
-	_, err := client.Play(t.Context(), infra.ViewerPlayRequest{Text: "テスト", SpeakerID: 3})
+	_, err := client.Play(t.Context(), infra.ViewerPlayRequest{Clips: []infra.ViewerClip{{Text: "テスト", SpeakerID: 3}}})
 	if err != nil {
 		t.Fatalf("Play: %v", err)
 	}

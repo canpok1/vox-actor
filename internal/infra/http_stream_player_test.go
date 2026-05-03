@@ -32,10 +32,10 @@ package infra
 // DONE: clipEvent の JSON に text フィールドが含まれる
 // DONE: PlayMeta.Text が空文字の場合も text フィールドが空文字で含まれる
 //
-// #226 backpressure:
-// DONE: Play() が WAV 推定再生時間ぶんブロックしてから return する
-// DONE: ctx キャンセル時は sleep を中断し ctx.Err() を返す
-// DONE: WAVヘッダ不正時は warning を出して sleep をスキップしつつ正常 return する
+// #226 backpressure (廃止: #487 で worker に移動):
+// DELETED: Play() が WAV 推定再生時間ぶんブロックしてから return する → worker が担当
+// DELETED: ctx キャンセル時は sleep を中断し ctx.Err() を返す → worker が担当
+// DONE: WAVヘッダ不正時は warning を出して正常 return する
 //
 // #228 話者名/スタイル名/timestamp:
 // DONE: clipEvent に speakerName / styleName / timestamp フィールドが含まれる
@@ -789,56 +789,9 @@ func TestHTTPStreamPlayer_Play_ClipEventNoLookup(t *testing.T) {
 	}
 }
 
-// --- #226 backpressure ---
+// --- #226 backpressure (backpressure は #487 で worker に移動) ---
 
-func TestHTTPStreamPlayer_Play_BlocksForEstimatedDuration(t *testing.T) {
-	t.Parallel()
-	p := newStartedPlayer(t)
-
-	// byteRate=48000, dataSize=4800 → 100ms
-	wavData := buildWAV(48000, 4800)
-
-	start := time.Now()
-	if err := p.Play(context.Background(), wavData, app.PlayMeta{}); err != nil {
-		t.Fatalf("Play: %v", err)
-	}
-	elapsed := time.Since(start)
-
-	const expected = 100 * time.Millisecond
-	if elapsed < expected {
-		t.Errorf("Play returned too quickly: elapsed=%v, expected at least %v", elapsed, expected)
-	}
-	if elapsed > expected+200*time.Millisecond {
-		t.Errorf("Play blocked too long: elapsed=%v, expected ~%v", elapsed, expected)
-	}
-}
-
-func TestHTTPStreamPlayer_Play_ContextCancelInterruptsSleep(t *testing.T) {
-	t.Parallel()
-	p := newStartedPlayer(t)
-
-	// byteRate=48000, dataSize=480000 → 10秒
-	wavData := buildWAV(48000, 480000)
-
-	ctx, cancel := context.WithCancel(context.Background())
-	go func() {
-		time.Sleep(50 * time.Millisecond)
-		cancel()
-	}()
-
-	start := time.Now()
-	err := p.Play(ctx, wavData, app.PlayMeta{})
-	elapsed := time.Since(start)
-
-	if err == nil {
-		t.Fatal("expected ctx.Err() to be returned, got nil")
-	}
-	if elapsed > 1*time.Second {
-		t.Errorf("Play should have been interrupted quickly: elapsed=%v", elapsed)
-	}
-}
-
-func TestHTTPStreamPlayer_Play_InvalidWAVHeaderReturnsWithoutSleep(t *testing.T) {
+func TestHTTPStreamPlayer_Play_InvalidWAVHeaderSucceeds(t *testing.T) {
 	t.Parallel()
 
 	var logBuf bytes.Buffer
@@ -857,35 +810,11 @@ func TestHTTPStreamPlayer_Play_InvalidWAVHeaderReturnsWithoutSleep(t *testing.T)
 	})
 
 	// 不正な WAV (RIFFヘッダなし) でも Play 自体はエラーにならず即 return する。
-	start := time.Now()
+	// (#487 以降 backpressure は worker に移動したため、Play() はログを出さず即 return)
 	if err := p.Play(context.Background(), []byte("not-a-valid-wav-data"), app.PlayMeta{}); err != nil {
 		t.Fatalf("Play: %v", err)
 	}
-	elapsed := time.Since(start)
-
-	if elapsed > 100*time.Millisecond {
-		t.Errorf("Play should return quickly when WAV header is invalid: elapsed=%v", elapsed)
-	}
-
-	// 警告ログが出ていることを確認する。
-	warnLine := findLogLine(logBuf.String(), "failed to estimate WAV duration")
-	if warnLine == "" {
-		t.Errorf("expected warning log for invalid WAV header, got: %s", logBuf.String())
-	}
-	if !strings.Contains(warnLine, "level=WARN") {
-		t.Errorf("expected WARN level log, got: %s", warnLine)
-	}
-}
-
-// findLogLine は logs に含まれる行のうち needle を含む最初の行を返す。
-// 見つからない場合は空文字を返す。
-func findLogLine(logs, needle string) string {
-	for line := range strings.SplitSeq(logs, "\n") {
-		if strings.Contains(line, needle) {
-			return line
-		}
-	}
-	return ""
+	_ = logBuf // logger は将来の WARN チェック追加のために保持
 }
 
 // --- #226 履歴サイズ固定値（20）の検証 ---
@@ -1311,20 +1240,28 @@ func TestHTTPStreamPlayer_PlayText_UnknownSpeakerFallback(t *testing.T) {
 
 // testVoicevoxClient is a minimal stub implementing app.VoicevoxClient for /test-clip tests.
 type testVoicevoxClient struct {
-	createQueryCall int
-	synthesizeCall  int
-	createQueryErr  error
-	synthesizeErr   error
-	wav             []byte
-	capturedText    string
-	capturedSpeaker int
+	createQueryCall  int
+	synthesizeCall   int
+	createQueryErr   error
+	synthesizeErr    error
+	wav              []byte
+	capturedText     string
+	capturedSpeaker  int
+	createQueryBlock chan struct{} // nil でなければ CreateQuery はこのチャネルが閉じるまでブロックする
 }
 
 func (c *testVoicevoxClient) HealthCheck(_ context.Context) error { return nil }
-func (c *testVoicevoxClient) CreateQuery(_ context.Context, text string, speakerID int) (*entity.AudioQuery, error) {
+func (c *testVoicevoxClient) CreateQuery(ctx context.Context, text string, speakerID int) (*entity.AudioQuery, error) {
 	c.createQueryCall++
 	c.capturedText = text
 	c.capturedSpeaker = speakerID
+	if c.createQueryBlock != nil {
+		select {
+		case <-c.createQueryBlock:
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
 	if c.createQueryErr != nil {
 		return nil, c.createQueryErr
 	}
@@ -2767,7 +2704,7 @@ func TestHTTPStreamPlayer_APIPlay_MethodNotAllowed(t *testing.T) {
 func TestHTTPStreamPlayer_APIPlay_NoClient(t *testing.T) {
 	t.Parallel()
 	p := newStartedPlayer(t)
-	body := bytes.NewBufferString(`{"text":"hello","speaker_id":2}`)
+	body := bytes.NewBufferString(`{"clips":[{"text":"hello","speaker_id":2}]}`)
 	resp, err := http.Post("http://"+p.Addr()+"/api/play", "application/json", body)
 	if err != nil {
 		t.Fatalf("POST: %v", err)
@@ -2797,7 +2734,11 @@ func TestHTTPStreamPlayer_APIPlay_Success(t *testing.T) {
 	t.Parallel()
 	stub := &testVoicevoxClient{wav: []byte("RIFFx")}
 	p := newStartedPlayerWithOpts(t, WithVoicevoxClient(stub))
-	body := bytes.NewBufferString(`{"text":"こんにちは","speaker_id":2}`)
+
+	events := subscribeSSE(t, "http://"+p.Addr())
+	time.Sleep(100 * time.Millisecond)
+
+	body := bytes.NewBufferString(`{"clips":[{"text":"こんにちは","speaker_id":2}]}`)
 	resp, err := http.Post("http://"+p.Addr()+"/api/play", "application/json", body)
 	if err != nil {
 		t.Fatalf("POST: %v", err)
@@ -2813,6 +2754,17 @@ func TestHTTPStreamPlayer_APIPlay_Success(t *testing.T) {
 	if result.Silent {
 		t.Errorf("expected silent=false, got true")
 	}
+	if result.PlaybackID == "" {
+		t.Errorf("expected non-empty playback_id")
+	}
+
+	// ワーカーが処理するのを待ってから stub の状態を確認
+	select {
+	case <-events:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timeout waiting for worker to process clip")
+	}
+
 	if stub.capturedText != "こんにちは" {
 		t.Errorf("expected capturedText=%q, got %q", "こんにちは", stub.capturedText)
 	}
@@ -2826,7 +2778,7 @@ func TestHTTPStreamPlayer_APIPlay_SilentMode(t *testing.T) {
 	stub := &testVoicevoxClient{wav: []byte("RIFFx")}
 	p := newStartedPlayerWithOpts(t, WithVoicevoxClient(stub))
 	p.SetSilent("VOICEVOX接続失敗")
-	body := bytes.NewBufferString(`{"text":"こんにちは","speaker_id":2}`)
+	body := bytes.NewBufferString(`{"clips":[{"text":"こんにちは","speaker_id":2}]}`)
 	resp, err := http.Post("http://"+p.Addr()+"/api/play", "application/json", body)
 	if err != nil {
 		t.Fatalf("POST: %v", err)
@@ -2854,13 +2806,257 @@ func TestHTTPStreamPlayer_APIPlay_SynthesisFails(t *testing.T) {
 	t.Parallel()
 	stub := &testVoicevoxClient{createQueryErr: errors.New("synthesis error")}
 	p := newStartedPlayerWithOpts(t, WithVoicevoxClient(stub))
-	body := bytes.NewBufferString(`{"text":"hello","speaker_id":2}`)
+	body := bytes.NewBufferString(`{"clips":[{"text":"hello","speaker_id":2}]}`)
 	resp, err := http.Post("http://"+p.Addr()+"/api/play", "application/json", body)
 	if err != nil {
 		t.Fatalf("POST: %v", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusBadGateway {
-		t.Errorf("expected 502, got %d", resp.StatusCode)
+	// 非同期 worker 化により、リクエストは即座に 200 で返る
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected 200 (async), got %d", resp.StatusCode)
+	}
+}
+
+// --- #487 /api/play 複数クリップ対応＋非同期 worker ---
+//
+// DONE: clips 形式で UUID v4 playback_id が即時返る               → TestHTTPStreamPlayer_APIPlay_ClipsFormatReturnsPlaybackID
+// DONE: 旧形式 (text/speaker_id) で 400 Bad Request               → TestHTTPStreamPlayer_APIPlay_OldFormatRejected
+// DONE: clips 空配列で 400 Bad Request                            → TestHTTPStreamPlayer_APIPlay_EmptyClipsRejected
+// DONE: キュー満杯（64 pending）で 503 Service Unavailable        → TestHTTPStreamPlayer_APIPlay_QueueFull
+// DONE: worker が clips を順次 SSE broadcast する                  → TestHTTPStreamPlayer_Worker_BroadcastsClipsInOrder
+// DONE: 1 件目 synthesize 失敗で残りクリップが broadcast されない → TestHTTPStreamPlayer_Worker_SynthesizeFailureStopsProcessing
+// DONE: silent モード時は SSE broadcast されず即 completed 状態   → TestHTTPStreamPlayer_APIPlay_SilentModeSkipsBroadcast
+
+func TestHTTPStreamPlayer_APIPlay_ClipsFormatReturnsPlaybackID(t *testing.T) {
+	t.Parallel()
+	stub := &testVoicevoxClient{wav: []byte("RIFFx")}
+	p := newStartedPlayerWithOpts(t, WithVoicevoxClient(stub))
+	body := bytes.NewBufferString(`{"clips":[{"text":"こんにちは","speaker_id":2}]}`)
+	resp, err := http.Post("http://"+p.Addr()+"/api/play", "application/json", body)
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+	var result ViewerPlayResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if result.PlaybackID == "" {
+		t.Error("expected non-empty playback_id")
+	}
+	uuidPattern := regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`)
+	if !uuidPattern.MatchString(result.PlaybackID) {
+		t.Errorf("expected UUID v4 format, got: %s", result.PlaybackID)
+	}
+	if result.ClipCount != 1 {
+		t.Errorf("expected clip_count=1, got %d", result.ClipCount)
+	}
+	if result.Silent {
+		t.Error("expected silent=false")
+	}
+}
+
+func TestHTTPStreamPlayer_APIPlay_OldFormatRejected(t *testing.T) {
+	t.Parallel()
+	stub := &testVoicevoxClient{wav: []byte("RIFFx")}
+	p := newStartedPlayerWithOpts(t, WithVoicevoxClient(stub))
+	body := bytes.NewBufferString(`{"text":"こんにちは","speaker_id":2}`)
+	resp, err := http.Post("http://"+p.Addr()+"/api/play", "application/json", body)
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("expected 400 for old format, got %d", resp.StatusCode)
+	}
+}
+
+func TestHTTPStreamPlayer_APIPlay_EmptyClipsRejected(t *testing.T) {
+	t.Parallel()
+	stub := &testVoicevoxClient{wav: []byte("RIFFx")}
+	p := newStartedPlayerWithOpts(t, WithVoicevoxClient(stub))
+	body := bytes.NewBufferString(`{"clips":[]}`)
+	resp, err := http.Post("http://"+p.Addr()+"/api/play", "application/json", body)
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("expected 400 for empty clips, got %d", resp.StatusCode)
+	}
+}
+
+func TestHTTPStreamPlayer_APIPlay_QueueFull(t *testing.T) {
+	t.Parallel()
+	block := make(chan struct{})
+	t.Cleanup(func() { close(block) })
+	stub := &testVoicevoxClient{createQueryBlock: block}
+	p := newStartedPlayerWithOpts(t, WithVoicevoxClient(stub))
+	url := "http://" + p.Addr() + "/api/play"
+
+	// 1件目を送ってワーカーに取らせてからキューを埋める
+	body1 := bytes.NewBufferString(`{"clips":[{"text":"x","speaker_id":2}]}`)
+	resp1, err := http.Post(url, "application/json", body1)
+	if err != nil {
+		t.Fatalf("POST 1: %v", err)
+	}
+	_ = resp1.Body.Close()
+	time.Sleep(50 * time.Millisecond) // ワーカーが取り出すのを待つ
+
+	for i := 0; i < batchQueueCapacity; i++ {
+		body := bytes.NewBufferString(`{"clips":[{"text":"x","speaker_id":2}]}`)
+		resp, err := http.Post(url, "application/json", body)
+		if err != nil {
+			t.Fatalf("POST %d: %v", i+2, err)
+		}
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("expected 200 filling queue (batch %d), got %d", i+2, resp.StatusCode)
+		}
+		_ = resp.Body.Close()
+	}
+
+	// キュー満杯で 503 になるはず
+	bodyFull := bytes.NewBufferString(`{"clips":[{"text":"x","speaker_id":2}]}`)
+	respFull, err := http.Post(url, "application/json", bodyFull)
+	if err != nil {
+		t.Fatalf("POST full: %v", err)
+	}
+	defer func() { _ = respFull.Body.Close() }()
+	if respFull.StatusCode != http.StatusServiceUnavailable {
+		t.Errorf("expected 503 when queue is full, got %d", respFull.StatusCode)
+	}
+}
+
+func TestHTTPStreamPlayer_Worker_BroadcastsClipsInOrder(t *testing.T) {
+	t.Parallel()
+	stub := &testVoicevoxClient{wav: []byte("RIFFx")}
+	p := newStartedPlayerWithOpts(t, WithVoicevoxClient(stub))
+
+	events := subscribeSSE(t, "http://"+p.Addr())
+	time.Sleep(100 * time.Millisecond)
+
+	body := bytes.NewBufferString(`{"clips":[{"text":"first","speaker_id":2},{"text":"second","speaker_id":3}]}`)
+	resp, err := http.Post("http://"+p.Addr()+"/api/play", "application/json", body)
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var receivedTexts []string
+	timeout := time.After(3 * time.Second)
+	for len(receivedTexts) < 2 {
+		select {
+		case data := <-events:
+			var ev clipEvent
+			if err := json.Unmarshal([]byte(data), &ev); err == nil {
+				receivedTexts = append(receivedTexts, ev.Text)
+			}
+		case <-timeout:
+			t.Fatalf("timeout waiting for clip events, received: %v", receivedTexts)
+		}
+	}
+
+	if len(receivedTexts) < 2 || receivedTexts[0] != "first" || receivedTexts[1] != "second" {
+		t.Errorf("expected clips in order [first, second], got %v", receivedTexts)
+	}
+}
+
+func TestHTTPStreamPlayer_Worker_SynthesizeFailureStopsProcessing(t *testing.T) {
+	t.Parallel()
+	stub := &testVoicevoxClient{createQueryErr: errors.New("synth failed")}
+	p := newStartedPlayerWithOpts(t, WithVoicevoxClient(stub))
+
+	events := subscribeSSE(t, "http://"+p.Addr())
+	time.Sleep(100 * time.Millisecond)
+
+	body := bytes.NewBufferString(`{"clips":[{"text":"first","speaker_id":2},{"text":"second","speaker_id":3}]}`)
+	resp, err := http.Post("http://"+p.Addr()+"/api/play", "application/json", body)
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var result ViewerPlayResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+
+	// ワーカーが処理を終えるのを少し待つ
+	time.Sleep(200 * time.Millisecond)
+
+	// SSE clip イベントは受信されていないはず
+	select {
+	case data := <-events:
+		t.Errorf("expected no clip events after synthesis failure, got: %s", data)
+	default:
+		// OK
+	}
+
+	// playback state は failed のはず
+	status, ok := p.PlaybackStatus(result.PlaybackID)
+	if !ok {
+		t.Fatalf("playback state not found for id=%s", result.PlaybackID)
+	}
+	if status != "failed" {
+		t.Errorf("expected playback status=failed, got %s", status)
+	}
+}
+
+func TestHTTPStreamPlayer_APIPlay_SilentModeSkipsBroadcast(t *testing.T) {
+	t.Parallel()
+	stub := &testVoicevoxClient{wav: []byte("RIFFx")}
+	p := newStartedPlayerWithOpts(t, WithVoicevoxClient(stub))
+	p.SetSilent("VOICEVOX接続失敗")
+
+	events := subscribeSSE(t, "http://"+p.Addr())
+	time.Sleep(100 * time.Millisecond)
+
+	body := bytes.NewBufferString(`{"clips":[{"text":"hello","speaker_id":2}]}`)
+	resp, err := http.Post("http://"+p.Addr()+"/api/play", "application/json", body)
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var result ViewerPlayResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if !result.Silent {
+		t.Error("expected silent=true")
+	}
+	if result.SilentReason == "" {
+		t.Error("expected non-empty silent_reason")
+	}
+
+	// ワーカーが何も処理しないことを確認
+	time.Sleep(100 * time.Millisecond)
+	select {
+	case data := <-events:
+		t.Errorf("expected no clip events in silent mode, got: %s", data)
+	default:
+		// OK
+	}
+
+	// playback state は completed のはず
+	status, ok := p.PlaybackStatus(result.PlaybackID)
+	if !ok {
+		t.Fatalf("playback state not found for id=%s", result.PlaybackID)
+	}
+	if status != "completed" {
+		t.Errorf("expected playback status=completed, got %s", status)
 	}
 }

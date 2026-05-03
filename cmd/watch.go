@@ -91,11 +91,13 @@ func (p *viewerWatchPlayer) PlayText(ctx context.Context, meta app.PlayMeta) err
 
 func (p *viewerWatchPlayer) playViaViewer(ctx context.Context, meta app.PlayMeta) error {
 	_, err := p.vc.Play(ctx, infra.ViewerPlayRequest{
-		Text:       meta.Text,
-		SpeakerID:  meta.SpeakerID,
-		Speed:      p.speed,
-		Pitch:      p.pitch,
-		Intonation: p.intonation,
+		Clips: []infra.ViewerClip{{
+			Text:       meta.Text,
+			SpeakerID:  meta.SpeakerID,
+			Speed:      p.speed,
+			Pitch:      p.pitch,
+			Intonation: p.intonation,
+		}},
 	})
 	return err
 }

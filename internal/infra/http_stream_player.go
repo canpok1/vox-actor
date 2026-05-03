@@ -2,6 +2,7 @@ package infra
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -83,6 +84,16 @@ type HTTPStreamPlayer struct {
 	nextErrorID atomic.Uint64
 	clips       *clipRingBuffer
 	subscribers *subscriberRegistry
+
+	// batchQueue は非同期 worker へのバッチ送信チャネル。容量 batchQueueCapacity。
+	batchQueue chan playBatch
+	// workerCancel は worker goroutine と GC goroutine を停止するためのキャンセル関数。
+	workerCancel context.CancelFunc
+
+	// playbackMu は playbacks マップの排他制御。
+	playbackMu sync.Mutex
+	// playbacks は playback_id → state の in-memory store。TTL 1 時間で GC される。
+	playbacks map[string]*playbackStateRecord
 }
 
 var (
@@ -110,7 +121,39 @@ const (
 	historyLoadSize = 50
 	// historyRetentionDays は履歴ファイルの保持日数。
 	historyRetentionDays = 30
+
+	// maxClipsPerBatch は 1 リクエストで受け付けるクリップ数の上限。
+	maxClipsPerBatch = 100
+	// batchQueueCapacity は pending バッチ数の上限。超過時は 503 を返す。
+	batchQueueCapacity = 64
+	// playbackTTL は playback state を in-memory に保持する期間。
+	playbackTTL = time.Hour
+	// playbackGCInterval は GC goroutine の実行間隔。
+	playbackGCInterval = 5 * time.Minute
 )
+
+// playbackStatus は playback の処理状態。
+type playbackStatus string
+
+const (
+	playbackStatusPending   playbackStatus = "pending"
+	playbackStatusPlaying   playbackStatus = "playing"
+	playbackStatusCompleted playbackStatus = "completed"
+	playbackStatusFailed    playbackStatus = "failed"
+)
+
+// playbackStateRecord は 1 バッチの処理状態を保持する。
+type playbackStateRecord struct {
+	status    playbackStatus
+	reason    string
+	createdAt time.Time
+}
+
+// playBatch は worker への投入単位。
+type playBatch struct {
+	playbackID string
+	clips      []ViewerClip
+}
 
 var (
 	// pathSegmentPattern はファイルパスのセグメント検証に使う正規表現。
@@ -269,6 +312,8 @@ func NewHTTPStreamPlayer(addr string, staticFS fs.FS, opts ...HTTPStreamOption) 
 		silentInterval: defaultSilentInterval,
 		testPhrase:     defaultTestPhrase,
 		testClipCache:  make(map[int][]byte),
+		batchQueue:     make(chan playBatch, batchQueueCapacity),
+		playbacks:      make(map[string]*playbackStateRecord),
 	}
 	for _, opt := range opts {
 		opt(p)
@@ -326,6 +371,11 @@ func (p *HTTPStreamPlayer) Start(_ context.Context) error {
 		}
 	}()
 
+	workerCtx, cancel := context.WithCancel(context.Background())
+	p.workerCancel = cancel
+	go p.runWorker(workerCtx)
+	go p.runPlaybackGC(workerCtx)
+
 	p.logger.Info("stream server started", "addr", lis.Addr().String())
 	return nil
 }
@@ -353,9 +403,13 @@ func (p *HTTPStreamPlayer) Shutdown(ctx context.Context) error {
 		return nil
 	}
 	p.shutdown = true
+	workerCancel := p.workerCancel
 	server := p.server
 	p.mu.Unlock()
 
+	if workerCancel != nil {
+		workerCancel()
+	}
 	p.subscribers.closeAll()
 	if server == nil {
 		return nil
@@ -495,23 +549,7 @@ func (p *HTTPStreamPlayer) Play(ctx context.Context, wavData []byte, meta app.Pl
 	}
 	p.logger.Info("stream clip delivered", "clipTimestamp", ts, "subscribers", n)
 	p.appendHistory(ev)
-
-	duration, err := estimateWAVDuration(wavData)
-	if err != nil {
-		p.logger.Warn("failed to estimate WAV duration, skipping playback backpressure", "clipTimestamp", ts, "error", err)
-		return nil
-	}
-	if duration <= 0 {
-		return nil
-	}
-	timer := time.NewTimer(duration)
-	defer timer.Stop()
-	select {
-	case <-timer.C:
-		return nil
-	case <-ctx.Done():
-		return ctx.Err()
-	}
+	return nil
 }
 
 // BroadcastError はサーバー側エラーを SSE "error" イベントとして購読者に配信する。
@@ -886,46 +924,173 @@ func (p *HTTPStreamPlayer) handleAPIPlay(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	if len(req.Clips) == 0 {
+		http.Error(w, "clips must not be empty", http.StatusBadRequest)
+		return
+	}
+	if len(req.Clips) > maxClipsPerBatch {
+		http.Error(w, fmt.Sprintf("clips count exceeds limit %d", maxClipsPerBatch), http.StatusBadRequest)
+		return
+	}
+
+	playbackID, err := newUUIDv4()
+	if err != nil {
+		p.logger.Error("/api/play failed to generate playback_id", "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+
 	p.mu.Lock()
 	silent := p.silent
 	silentReason := p.silentReason
 	p.mu.Unlock()
 
 	if silent {
-		resp := ViewerPlayResponse{Silent: true, SilentReason: silentReason}
+		p.setPlaybackStatus(playbackID, playbackStatusCompleted, "")
+		resp := ViewerPlayResponse{
+			PlaybackID:   playbackID,
+			ClipCount:    len(req.Clips),
+			Silent:       true,
+			SilentReason: silentReason,
+		}
 		payload, _ := json.Marshal(resp)
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		_, _ = w.Write(payload)
 		return
 	}
 
-	ctx := r.Context()
-	query, err := p.voicevoxClient.CreateQuery(ctx, req.Text, req.SpeakerID)
-	if err != nil {
-		p.logger.Error("/api/play CreateQuery failed", "speakerID", req.SpeakerID, "error", err)
-		http.Error(w, "failed to create audio query", http.StatusBadGateway)
+	batch := playBatch{playbackID: playbackID, clips: req.Clips}
+	select {
+	case p.batchQueue <- batch:
+	default:
+		w.Header().Set("Retry-After", "1")
+		http.Error(w, "queue is full, retry later", http.StatusServiceUnavailable)
 		return
 	}
+	p.setPlaybackStatus(playbackID, playbackStatusPending, "")
 
-	q := query.WithOverrides(req.Speed, req.Pitch, req.Intonation)
-	wav, err := p.voicevoxClient.Synthesize(ctx, &q, req.SpeakerID)
-	if err != nil {
-		p.logger.Error("/api/play Synthesize failed", "speakerID", req.SpeakerID, "error", err)
-		http.Error(w, "failed to synthesize", http.StatusBadGateway)
-		return
+	resp := ViewerPlayResponse{
+		PlaybackID: playbackID,
+		ClipCount:  len(req.Clips),
+		Silent:     false,
 	}
-
-	meta := app.PlayMeta{Text: req.Text, SpeakerID: req.SpeakerID}
-	if err := p.Play(ctx, wav, meta); err != nil {
-		p.logger.Error("/api/play Play failed", "speakerID", req.SpeakerID, "error", err)
-		http.Error(w, "failed to play", http.StatusInternalServerError)
-		return
-	}
-
-	resp := ViewerPlayResponse{Silent: false}
 	payload, _ := json.Marshal(resp)
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	_, _ = w.Write(payload)
+}
+
+// setPlaybackStatus は playback_id の状態を更新する。
+func (p *HTTPStreamPlayer) setPlaybackStatus(id string, status playbackStatus, reason string) {
+	p.playbackMu.Lock()
+	defer p.playbackMu.Unlock()
+	if _, ok := p.playbacks[id]; !ok {
+		p.playbacks[id] = &playbackStateRecord{createdAt: p.nowFunc()}
+	}
+	p.playbacks[id].status = status
+	p.playbacks[id].reason = reason
+}
+
+// runWorker はバッチキューからバッチを取り出して順次処理する goroutine。
+func (p *HTTPStreamPlayer) runWorker(ctx context.Context) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case batch, ok := <-p.batchQueue:
+			if !ok {
+				return
+			}
+			p.processBatch(ctx, batch)
+		}
+	}
+}
+
+// processBatch は 1 バッチ内のクリップを順次 synthesize → SSE broadcast → duration sleep する。
+// synthesize 失敗時はバッチ全体を中断して status=failed にする（all-or-nothing）。
+func (p *HTTPStreamPlayer) processBatch(ctx context.Context, batch playBatch) {
+	p.setPlaybackStatus(batch.playbackID, playbackStatusPlaying, "")
+
+	for _, clip := range batch.clips {
+		if ctx.Err() != nil {
+			return
+		}
+
+		query, err := p.voicevoxClient.CreateQuery(ctx, clip.Text, clip.SpeakerID)
+		if err != nil {
+			p.logger.Error("worker CreateQuery failed", "playbackID", batch.playbackID, "speakerID", clip.SpeakerID, "error", err)
+			p.setPlaybackStatus(batch.playbackID, playbackStatusFailed, err.Error())
+			return
+		}
+
+		q := query.WithOverrides(clip.Speed, clip.Pitch, clip.Intonation)
+		wav, err := p.voicevoxClient.Synthesize(ctx, &q, clip.SpeakerID)
+		if err != nil {
+			p.logger.Error("worker Synthesize failed", "playbackID", batch.playbackID, "speakerID", clip.SpeakerID, "error", err)
+			p.setPlaybackStatus(batch.playbackID, playbackStatusFailed, err.Error())
+			return
+		}
+
+		meta := app.PlayMeta{Text: clip.Text, SpeakerID: clip.SpeakerID}
+		if err := p.Play(ctx, wav, meta); err != nil {
+			if ctx.Err() != nil {
+				return
+			}
+			p.logger.Error("worker Play failed", "playbackID", batch.playbackID, "speakerID", clip.SpeakerID, "error", err)
+			p.setPlaybackStatus(batch.playbackID, playbackStatusFailed, err.Error())
+			return
+		}
+
+		duration, dErr := estimateWAVDuration(wav)
+		if dErr == nil && duration > 0 {
+			timer := time.NewTimer(duration)
+			select {
+			case <-timer.C:
+			case <-ctx.Done():
+				timer.Stop()
+				return
+			}
+		}
+	}
+
+	p.setPlaybackStatus(batch.playbackID, playbackStatusCompleted, "")
+}
+
+// runPlaybackGC は TTL を超えた playback state を定期的に削除する goroutine。
+func (p *HTTPStreamPlayer) runPlaybackGC(ctx context.Context) {
+	ticker := time.NewTicker(playbackGCInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			p.prunePlaybacks()
+		}
+	}
+}
+
+// prunePlaybacks は TTL を超えた playback state を削除する。
+func (p *HTTPStreamPlayer) prunePlaybacks() {
+	cutoff := p.nowFunc().Add(-playbackTTL)
+	p.playbackMu.Lock()
+	defer p.playbackMu.Unlock()
+	for id, state := range p.playbacks {
+		if state.createdAt.Before(cutoff) {
+			delete(p.playbacks, id)
+		}
+	}
+}
+
+// newUUIDv4 は UUID v4 を生成して返す。
+func newUUIDv4() (string, error) {
+	var uuid [16]byte
+	if _, err := rand.Read(uuid[:]); err != nil {
+		return "", err
+	}
+	uuid[6] = (uuid[6] & 0x0f) | 0x40 // version 4
+	uuid[8] = (uuid[8] & 0x3f) | 0x80 // variant bits
+	return fmt.Sprintf("%08x-%04x-%04x-%04x-%012x",
+		uuid[0:4], uuid[4:6], uuid[6:8], uuid[8:10], uuid[10:16]), nil
 }
 
 // loadHistory は今日の履歴ファイルから末尾 n 件を読み込む。

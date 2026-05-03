@@ -6,3 +6,14 @@ import "time"
 func (c *VoicevoxClient) ClientTimeout() time.Duration {
 	return c.httpClient.Timeout
 }
+
+// PlaybackStatus はテスト用に playback state の状態文字列と存在可否を返す。
+func (p *HTTPStreamPlayer) PlaybackStatus(id string) (string, bool) {
+	p.playbackMu.Lock()
+	defer p.playbackMu.Unlock()
+	state, ok := p.playbacks[id]
+	if !ok {
+		return "", false
+	}
+	return string(state.status), true
+}
