@@ -341,7 +341,7 @@ supported keys:
 vox-actor audio-check [-v|--verbose]
 ```
 
-音声出力デバイスを **open → 即 close** のみ行い、実再生を伴わずに可用性を**終了コード**で返す診断用サブコマンド。シェルスクリプトから `VOX_ACTOR_MONOLOGUE_MODE` 未指定時のモード判定（direct / file）に利用できる。
+音声出力デバイスを **open → 即 close** のみ行い、実再生を伴わずに可用性を**終了コード**で返す診断用サブコマンド。シェルスクリプトからのモード判定（direct / file）に利用できる。
 
 | オプション | 環境変数 | デフォルト値 | 説明 |
 |---|---|---|---|
@@ -389,17 +389,47 @@ $ echo $?
 1
 ```
 
-**シェルスクリプトからのモード判定例:**
+## `viewer-check` サブコマンド
+
+```
+vox-actor viewer-check [-v|--verbose]
+```
+
+viewer のロックファイルと `/api/status` への疎通確認を行い、起動有無を**終了コード**で返す診断用サブコマンド。シェルスクリプトからのモード判定（direct / file）に利用できる。
+
+| オプション | 環境変数 | デフォルト値 | 説明 |
+|---|---|---|---|
+| `--verbose` / `-v` | — | `false` | 診断メッセージを標準出力に出力する |
+
+**出力と終了コード:**
+
+| 状況 | 終了コード | stdout | stderr |
+|---|---|---|---|
+| viewer 起動中（ロックファイルあり＋ `/api/status` 応答 200） | `0` | 空 | 空 |
+| viewer 未起動 or 応答なし | `1` | 空 | 空 |
+
+- `--verbose` 指定時は起動中の場合のみ `viewer addr: <addr>` を stdout に出力する。
+- 機械可読な判定は**終了コード**で行う。
+- `/api/status` への HTTP プローブが入るため、呼び出しごとに数十〜数百ms のオーバーヘッドが発生する。
+
+**使用例:**
 
 ```bash
-MODE="${VOX_ACTOR_MONOLOGUE_MODE:-}"
-if [ -z "$MODE" ]; then
-  if vox-actor audio-check >/dev/null 2>&1; then
-    MODE="direct"
-  else
-    MODE="file"
-  fi
-fi
+# 直接実行（viewer 起動中）
+$ vox-actor viewer-check
+$ echo $?
+0
+
+# verbose 出力
+$ vox-actor viewer-check -v
+viewer addr: 127.0.0.1:8080
+$ echo $?
+0
+
+# viewer 未起動時
+$ vox-actor viewer-check
+$ echo $?
+1
 ```
 
 ## ストリーム配信モード
