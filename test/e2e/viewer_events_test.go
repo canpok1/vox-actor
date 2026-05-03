@@ -113,11 +113,14 @@ func startFakeVoicevox(t *testing.T) *httptest.Server {
 // postAPIPlay は addr の /api/play に POST してレスポンスを返す。
 func postAPIPlay(t *testing.T, addr, text string, speakerID int) *http.Response {
 	t.Helper()
-	type playRequest struct {
+	type clip struct {
 		Text      string `json:"text"`
 		SpeakerID int    `json:"speaker_id"`
 	}
-	body, err := json.Marshal(playRequest{Text: text, SpeakerID: speakerID})
+	type playRequest struct {
+		Clips []clip `json:"clips"`
+	}
+	body, err := json.Marshal(playRequest{Clips: []clip{{Text: text, SpeakerID: speakerID}}})
 	if err != nil {
 		t.Fatalf("marshal play request: %v", err)
 	}

@@ -246,8 +246,13 @@ func TestRunAct_ViewerRunning_POSTsPerLine(t *testing.T) {
 		postCount++
 		var req map[string]interface{}
 		_ = json.NewDecoder(r.Body).Decode(&req)
-		if text, ok := req["text"].(string); ok {
-			capturedTexts = append(capturedTexts, text)
+		// clips 形式: {"clips":[{"text":"...","speaker_id":...}]}
+		if clips, ok := req["clips"].([]interface{}); ok && len(clips) > 0 {
+			if clip, ok := clips[0].(map[string]interface{}); ok {
+				if text, ok := clip["text"].(string); ok {
+					capturedTexts = append(capturedTexts, text)
+				}
+			}
 		}
 		_ = json.NewEncoder(w).Encode(map[string]interface{}{"silent": false})
 	})
@@ -615,8 +620,13 @@ func TestRunAct_ExplicitViewerURL_POSTsToViewer(t *testing.T) {
 		postCount++
 		var req map[string]interface{}
 		_ = json.NewDecoder(r.Body).Decode(&req)
-		if v, ok := req["text"].(string); ok {
-			capturedText = v
+		// clips 形式: {"clips":[{"text":"...","speaker_id":...}]}
+		if clips, ok := req["clips"].([]interface{}); ok && len(clips) > 0 {
+			if clip, ok := clips[0].(map[string]interface{}); ok {
+				if v, ok := clip["text"].(string); ok {
+					capturedText = v
+				}
+			}
 		}
 		_ = json.NewEncoder(w).Encode(map[string]interface{}{"silent": false})
 	})

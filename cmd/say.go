@@ -81,11 +81,13 @@ func runSay(cmd *cobra.Command, args []string, deps *SayDeps) error {
 			logger.Info("using explicit viewer URL", "url", viewerURL)
 			vc := infra.NewViewerAPIClientFromURL(viewerURL)
 			resp, err := vc.Play(ctx, infra.ViewerPlayRequest{
-				Text:       args[0],
-				SpeakerID:  speakerID,
-				Speed:      &speed,
-				Pitch:      &pitch,
-				Intonation: &intonation,
+				Clips: []infra.ViewerClip{{
+					Text:       args[0],
+					SpeakerID:  speakerID,
+					Speed:      &speed,
+					Pitch:      &pitch,
+					Intonation: &intonation,
+				}},
 			})
 			if err != nil {
 				return err
@@ -103,11 +105,13 @@ func runSay(cmd *cobra.Command, args []string, deps *SayDeps) error {
 			logger.Info("viewer detected, sending audio via /api/play", "addr", addr)
 			vc := infra.NewViewerAPIClient(addr)
 			resp, err := vc.Play(ctx, infra.ViewerPlayRequest{
-				Text:       args[0],
-				SpeakerID:  speakerID,
-				Speed:      &speed,
-				Pitch:      &pitch,
-				Intonation: &intonation,
+				Clips: []infra.ViewerClip{{
+					Text:       args[0],
+					SpeakerID:  speakerID,
+					Speed:      &speed,
+					Pitch:      &pitch,
+					Intonation: &intonation,
+				}},
 			})
 			if err != nil {
 				return err

@@ -32,8 +32,8 @@ func DetectViewer(lockPath string) (string, bool) {
 	return info.Addr, true
 }
 
-// ViewerPlayRequest is the request payload for POST /api/play.
-type ViewerPlayRequest struct {
+// ViewerClip is a single clip in a play request.
+type ViewerClip struct {
 	Text       string   `json:"text"`
 	SpeakerID  int      `json:"speaker_id"`
 	Speed      *float64 `json:"speed,omitempty"`
@@ -41,8 +41,15 @@ type ViewerPlayRequest struct {
 	Intonation *float64 `json:"intonation,omitempty"`
 }
 
+// ViewerPlayRequest is the request payload for POST /api/play.
+type ViewerPlayRequest struct {
+	Clips []ViewerClip `json:"clips"`
+}
+
 // ViewerPlayResponse is the response from POST /api/play.
 type ViewerPlayResponse struct {
+	PlaybackID   string `json:"playback_id"`
+	ClipCount    int    `json:"clip_count"`
 	Silent       bool   `json:"silent"`
 	SilentReason string `json:"silent_reason,omitempty"`
 }
