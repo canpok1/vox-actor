@@ -28,6 +28,7 @@ type FileWriter struct {
 }
 
 var _ app.ScriptWriter = (*FileWriter)(nil)
+var _ app.ScriptBulkWriter = (*FileWriter)(nil)
 
 // FileWriterOption は FileWriter の生成時に指定するオプション。
 type FileWriterOption func(*FileWriter)
@@ -100,14 +101,8 @@ func (w *FileWriter) Write(path string, script entity.Script) (string, error) {
 		}
 	}
 
-	// 親ディレクトリの存在確認
-	parent := filepath.Dir(path)
-	info, err := os.Stat(parent)
-	if err != nil {
-		return "", fmt.Errorf("parent directory does not exist: %s: %w", parent, err)
-	}
-	if !info.IsDir() {
-		return "", fmt.Errorf("parent path is not a directory: %s", parent)
+	if err := validateParentDir(path); err != nil {
+		return "", err
 	}
 
 	dest := path
@@ -177,6 +172,43 @@ func writeJSONLine(path string, script entity.Script) error {
 
 func writeText(path string, text string) error {
 	return appendToFile(path, []byte(text))
+}
+
+func validateParentDir(path string) error {
+	parent := filepath.Dir(path)
+	info, err := os.Stat(parent)
+	if err != nil {
+		return fmt.Errorf("parent directory does not exist: %s: %w", parent, err)
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("parent path is not a directory: %s", parent)
+	}
+	return nil
+}
+
+// WriteAll は scripts を path に上書き書き出す。既存ファイルがある場合は上書きされる。
+func (w *FileWriter) WriteAll(path string, scripts []entity.Script) (string, error) {
+	if err := validateParentDir(path); err != nil {
+		return "", err
+	}
+
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
+	if err != nil {
+		return "", fmt.Errorf("failed to open %s: %w", path, err)
+	}
+	defer func() { _ = f.Close() }()
+
+	for _, script := range scripts {
+		data, err := json.Marshal(toJSONScript(script))
+		if err != nil {
+			return "", fmt.Errorf("failed to marshal JSON: %w", err)
+		}
+		data = append(data, '\n')
+		if _, err := f.Write(data); err != nil {
+			return "", fmt.Errorf("failed to write %s: %w", path, err)
+		}
+	}
+	return path, nil
 }
 
 func appendToFile(path string, data []byte) error {

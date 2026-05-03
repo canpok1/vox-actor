@@ -97,6 +97,11 @@ func main() {
 				return infra.NewFileWriter(infra.WithFileWriterLogger(logger))
 			},
 		},
+		ScriptWrite: &cmd.ScriptWriteDeps{
+			WriterFactory: func(logger *slog.Logger) app.ScriptBulkWriter {
+				return infra.NewFileWriter(infra.WithFileWriterLogger(logger))
+			},
+		},
 		AudioCheck: &cmd.AudioCheckDeps{
 			CheckFunc: func() (string, error) {
 				return infra.CheckAudioDevice(infra.NewOtoAudioProbe())

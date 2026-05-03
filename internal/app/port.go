@@ -23,6 +23,14 @@ type ScriptWriter interface {
 	Write(path string, script entity.Script) (string, error)
 }
 
+// ScriptBulkWriter は複数の entity.Script をファイルへ一括書き出すインターフェース。
+type ScriptBulkWriter interface {
+	// WriteAll は scripts を path に上書き書き出す。
+	// 既存ファイルがある場合は上書きされる。
+	// 戻り値は実際の書き出し先パス。
+	WriteAll(path string, scripts []entity.Script) (string, error)
+}
+
 // FileMover はファイルを処理済みディレクトリに移動または削除するインターフェース。
 type FileMover interface {
 	// MoveToDone はファイルを親ディレクトリのdone/サブディレクトリに移動する。
