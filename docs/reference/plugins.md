@@ -73,7 +73,11 @@ claude code に `vox-actor-plugin` を導入すると、以下のスラッシュ
 >
 > git 管理外ディレクトリで `VOX_ACTOR_WORKSPACE` を明示しないまま実行すると CLI が非0終了し、そのエラーがユーザーに表示されてスクリプトも終了します。git 外で利用する場合は `VOX_ACTOR_WORKSPACE` を明示してください。`file` モードでホストとLLM実行環境を分ける場合も、双方から参照可能な共有パスを明示的に指定します。
 
-モードは `VOX_ACTOR_MONOLOGUE_MODE` 環境変数で明示するか、未設定時は `vox-actor audio-check` の終了コードで自動判定されます（0 → `direct`、非0 → `file`）。
+モードは `vox-actor audio-check` と `vox-actor viewer-check` の終了コードで自動判定されます。どちらか一方でも成功（終了コード 0）であれば `direct` モードで動作します。両方失敗した場合のみ `file` モードに切り替わります。
+
+- `audio-check` 成功: 音声デバイスが利用可能 → `direct`（ローカル再生）
+- `viewer-check` 成功: viewer が起動中 → `direct`（`act` が viewer を検出してブラウザ再生に切替）
+- 両方失敗: `file` モード（queue に滞留）
 
 ### `file` モードのセットアップ（音声デバイス利用不可環境での利用）
 
@@ -87,11 +91,9 @@ claude code をコンテナ／リモートで動かし、音声デバイスは�
    vox-actor watch "$(vox-actor config path.queue)"
    ```
 
-2. **claude code 側で `file` モードを明示し、共有ディレクトリを指定する**
+2. **claude code 側で共有ディレクトリを指定する**
    ```bash
    export VOX_ACTOR_WORKSPACE=/path/to/shared/directory
-   # vox-actorコマンドがある環境で file モードを強制したい場合は以下も指定
-   export VOX_ACTOR_MONOLOGUE_MODE=file
    ```
 
 3. **claude code にプラグインを導入する**（README のクイックスタートと同じ手順）

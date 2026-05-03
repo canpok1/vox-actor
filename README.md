@@ -112,7 +112,6 @@ vox-actor watch "$(vox-actor config path.queue)"
 ```bash
 # claude code 側: 同じ共有ディレクトリを指定
 export VOX_ACTOR_WORKSPACE=/path/to/shared/directory
-export VOX_ACTOR_MONOLOGUE_MODE=file
 ```
 
 詳細なセットアップ手順は [プラグイン／スキルリファレンス](./docs/reference/plugins.md) を参照してください。

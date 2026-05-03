@@ -102,6 +102,7 @@ func main() {
 				return infra.CheckAudioDevice(infra.NewOtoAudioProbe())
 			},
 		},
+		ViewerCheck: cmd.NewViewerCheckDeps(),
 	}
 
 	if err := cmd.Execute(deps); err != nil {

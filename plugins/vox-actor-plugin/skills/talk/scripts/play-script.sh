@@ -19,13 +19,10 @@ fi
 QUEUE_DIR=$(vox-actor config path.queue) || exit 1
 WORKSPACE_DIR=$(vox-actor config path.workspace) || exit 1
 
-MODE="${VOX_ACTOR_MONOLOGUE_MODE:-}"
-if [ -z "$MODE" ]; then
-  if vox-actor audio-check >/dev/null 2>&1; then
-    MODE="direct"
-  else
-    MODE="file"
-  fi
+if vox-actor audio-check >/dev/null 2>&1 || vox-actor viewer-check >/dev/null 2>&1; then
+  MODE="direct"
+else
+  MODE="file"
 fi
 
 case "$MODE" in
@@ -54,9 +51,5 @@ case "$MODE" in
     mkdir -p "$QUEUE_DIR"
     DEST="${QUEUE_DIR}/$(basename "$JSONL_PATH")"
     mv "$JSONL_PATH" "$DEST"
-    ;;
-  *)
-    echo "[ERROR] VOX_ACTOR_MONOLOGUE_MODE は 'direct' または 'file' で指定してください: '$MODE'"
-    exit 1
     ;;
 esac
