@@ -504,6 +504,176 @@ func TestFileWriter_Write_UnsupportedExtension_ReturnsError(t *testing.T) {
 	}
 }
 
+// ─────────────────────────────────────────
+// FileWriter.WriteAll テスト
+// ─────────────────────────────────────────
+//
+// テストリスト:
+// - 複数要素を一括書き込みし既存 JSONL フォーマットと一致する → TestFileWriter_WriteAll_MultipleScripts
+// - 空配列を渡すと空ファイルが作成される                  → TestFileWriter_WriteAll_EmptySlice
+// - 既存ファイルを上書きする                            → TestFileWriter_WriteAll_OverwritesExisting
+// - 各要素の IsEmpty=true が text="" のとき伝わる         → TestFileWriter_WriteAll_EmptyTextIsEmpty
+// - 親ディレクトリ未存在時はエラー                       → TestFileWriter_WriteAll_MissingParentDir
+
+func TestFileWriter_WriteAll_MultipleScripts(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	dest := filepath.Join(dir, "out.jsonl")
+
+	w := infra.NewFileWriter()
+	scripts := []entity.Script{
+		{Text: "おはようなのだ", SpeakerID: ptrInt(3), IntonationScale: ptrFloat64(1.1)},
+		{Text: "今日もがんばるのだ", SpeakerID: ptrInt(3), SpeedScale: ptrFloat64(1.0)},
+	}
+	written, err := w.WriteAll(dest, scripts)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if written != dest {
+		t.Errorf("expected written=%q, got %q", dest, written)
+	}
+
+	data, err := os.ReadFile(dest)
+	if err != nil {
+		t.Fatalf("read failed: %v", err)
+	}
+	lines := strings.Split(strings.TrimRight(string(data), "\n"), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("expected 2 lines, got %d: %q", len(lines), string(data))
+	}
+
+	var got0 map[string]any
+	if err := json.Unmarshal([]byte(lines[0]), &got0); err != nil {
+		t.Fatalf("invalid JSON line 0: %v", err)
+	}
+	if got0["text"] != "おはようなのだ" {
+		t.Errorf("line0 text: %v", got0["text"])
+	}
+	if got0["speaker"].(float64) != 3 {
+		t.Errorf("line0 speaker: %v", got0["speaker"])
+	}
+	if got0["intonation"].(float64) != 1.1 {
+		t.Errorf("line0 intonation: %v", got0["intonation"])
+	}
+	if _, exists := got0["speed"]; exists {
+		t.Errorf("line0: speed should be omitted")
+	}
+
+	var got1 map[string]any
+	if err := json.Unmarshal([]byte(lines[1]), &got1); err != nil {
+		t.Fatalf("invalid JSON line 1: %v", err)
+	}
+	if got1["text"] != "今日もがんばるのだ" {
+		t.Errorf("line1 text: %v", got1["text"])
+	}
+	if got1["speed"].(float64) != 1.0 {
+		t.Errorf("line1 speed: %v", got1["speed"])
+	}
+	if _, exists := got1["intonation"]; exists {
+		t.Errorf("line1: intonation should be omitted")
+	}
+}
+
+func TestFileWriter_WriteAll_EmptySlice(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	dest := filepath.Join(dir, "out.jsonl")
+
+	w := infra.NewFileWriter()
+	written, err := w.WriteAll(dest, []entity.Script{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if written != dest {
+		t.Errorf("expected written=%q, got %q", dest, written)
+	}
+
+	data, err := os.ReadFile(dest)
+	if err != nil {
+		t.Fatalf("read failed: %v", err)
+	}
+	if len(data) != 0 {
+		t.Errorf("expected empty file, got: %q", string(data))
+	}
+}
+
+func TestFileWriter_WriteAll_OverwritesExisting(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	dest := filepath.Join(dir, "out.jsonl")
+
+	// 既存ファイルを作成
+	if err := os.WriteFile(dest, []byte(`{"text":"old"}`+"\n"), 0o644); err != nil {
+		t.Fatalf("failed to create existing file: %v", err)
+	}
+
+	w := infra.NewFileWriter()
+	scripts := []entity.Script{{Text: "new"}}
+	if _, err := w.WriteAll(dest, scripts); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	data, err := os.ReadFile(dest)
+	if err != nil {
+		t.Fatalf("read failed: %v", err)
+	}
+	lines := strings.Split(strings.TrimRight(string(data), "\n"), "\n")
+	if len(lines) != 1 {
+		t.Fatalf("expected 1 line after overwrite, got %d: %q", len(lines), string(data))
+	}
+	var got map[string]any
+	if err := json.Unmarshal([]byte(lines[0]), &got); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if got["text"] != "new" {
+		t.Errorf("expected 'new', got %v", got["text"])
+	}
+}
+
+func TestFileWriter_WriteAll_EmptyTextIsEmpty(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	dest := filepath.Join(dir, "out.jsonl")
+
+	w := infra.NewFileWriter()
+	scripts := []entity.Script{{Text: ""}}
+	if _, err := w.WriteAll(dest, scripts); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	data, err := os.ReadFile(dest)
+	if err != nil {
+		t.Fatalf("read failed: %v", err)
+	}
+	lines := strings.Split(strings.TrimRight(string(data), "\n"), "\n")
+	if len(lines) != 1 {
+		t.Fatalf("expected 1 line, got %d", len(lines))
+	}
+	var got map[string]any
+	if err := json.Unmarshal([]byte(lines[0]), &got); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if got["text"] != "" {
+		t.Errorf("expected empty text, got %v", got["text"])
+	}
+}
+
+func TestFileWriter_WriteAll_MissingParentDir(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	dest := filepath.Join(dir, "missing", "out.jsonl")
+
+	w := infra.NewFileWriter()
+	if _, err := w.WriteAll(dest, []entity.Script{{Text: "本文"}}); err == nil {
+		t.Fatal("expected error for missing parent directory, got nil")
+	}
+}
+
 func TestFileWriter_Write_SupportedExtensions_AllWork(t *testing.T) {
 	t.Parallel()
 

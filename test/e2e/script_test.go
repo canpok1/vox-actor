@@ -513,3 +513,113 @@ func TestScriptAppendE2E_Encoding_EmptyText(t *testing.T) {
 		t.Errorf("expected empty text, got %q", s.Text)
 	}
 }
+
+// ─────────────────────────────────────────
+// script write E2E テスト
+// ─────────────────────────────────────────
+
+func TestScriptWriteE2E_Basic(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	dest := filepath.Join(dir, "out.jsonl")
+	jsonInput := `[{"text":"おはようなのだ","speaker":3,"intonation":1.1},{"text":"今日もがんばるのだ","speaker":3,"speed":1.0}]`
+
+	_, stderr, exitCode := runCLI(t, nil, "script", "write", "--json", jsonInput, dest)
+	if exitCode != 0 {
+		t.Fatalf("expected exit 0, got %d\nstderr:\n%s", exitCode, stderr)
+	}
+
+	data, err := os.ReadFile(dest)
+	if err != nil {
+		t.Fatalf("failed to read file: %v", err)
+	}
+	lines := strings.Split(strings.TrimRight(string(data), "\n"), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("expected 2 lines, got %d\ncontent:\n%s", len(lines), string(data))
+	}
+
+	var s0, s1 scriptJSON
+	if err := json.Unmarshal([]byte(lines[0]), &s0); err != nil {
+		t.Fatalf("parse line 0: %v", err)
+	}
+	if err := json.Unmarshal([]byte(lines[1]), &s1); err != nil {
+		t.Fatalf("parse line 1: %v", err)
+	}
+
+	if s0.Text != "おはようなのだ" {
+		t.Errorf("line0 text: expected 'おはようなのだ', got %q", s0.Text)
+	}
+	if s0.Speaker == nil || *s0.Speaker != 3 {
+		t.Errorf("line0 speaker: expected 3, got %v", s0.Speaker)
+	}
+	if s0.IntonationScale == nil || *s0.IntonationScale != 1.1 {
+		t.Errorf("line0 intonation: expected 1.1, got %v", s0.IntonationScale)
+	}
+	if s0.SpeedScale != nil {
+		t.Errorf("line0 speed: expected omitted, got %v", *s0.SpeedScale)
+	}
+
+	if s1.Text != "今日もがんばるのだ" {
+		t.Errorf("line1 text: expected '今日もがんばるのだ', got %q", s1.Text)
+	}
+	if s1.SpeedScale == nil || *s1.SpeedScale != 1.0 {
+		t.Errorf("line1 speed: expected 1.0, got %v", s1.SpeedScale)
+	}
+}
+
+func TestScriptWriteE2E_OverwritesExisting(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	dest := filepath.Join(dir, "out.jsonl")
+
+	// 既存ファイルに追記しておく
+	_, _, exitCode := runCLI(t, nil, "script", "append", dest, "古いセリフ")
+	if exitCode != 0 {
+		t.Fatalf("append failed with exit %d", exitCode)
+	}
+
+	// write で上書き
+	_, stderr, exitCode := runCLI(t, nil, "script", "write", "--json", `[{"text":"新しいセリフ"}]`, dest)
+	if exitCode != 0 {
+		t.Fatalf("expected exit 0, got %d\nstderr:\n%s", exitCode, stderr)
+	}
+
+	data, err := os.ReadFile(dest)
+	if err != nil {
+		t.Fatalf("failed to read file: %v", err)
+	}
+	lines := strings.Split(strings.TrimRight(string(data), "\n"), "\n")
+	if len(lines) != 1 {
+		t.Fatalf("expected 1 line after overwrite, got %d\ncontent:\n%s", len(lines), string(data))
+	}
+	s := readScriptJSON(t, dest)
+	if s.Text != "新しいセリフ" {
+		t.Errorf("expected '新しいセリフ', got %q", s.Text)
+	}
+}
+
+func TestScriptWriteE2E_InvalidJson_ExitCode2(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	dest := filepath.Join(dir, "out.jsonl")
+
+	_, _, exitCode := runCLI(t, nil, "script", "write", "--json", "not-json", dest)
+	if exitCode != 2 {
+		t.Fatalf("expected exit 2 for invalid JSON, got %d", exitCode)
+	}
+}
+
+func TestScriptE2E_Help_ContainsWrite(t *testing.T) {
+	t.Parallel()
+
+	stdout, _, exitCode := runCLI(t, nil, "script")
+	if exitCode != 0 {
+		t.Fatalf("expected exit 0, got %d", exitCode)
+	}
+	if !strings.Contains(stdout, "write") {
+		t.Errorf("expected help output to contain 'write'\nstdout:\n%s", stdout)
+	}
+}

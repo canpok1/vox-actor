@@ -124,6 +124,47 @@ vox-actor script append "$(vox-actor config path.queue)/01.txt" "こんにちは
 vox-actor script append "$(vox-actor config path.queue)/01.json" --speaker 5 --speed 1.2 "こんにちは"
 ```
 
+### `script write` サブコマンド
+
+```
+vox-actor script write <file> --json '<JSON配列>'
+```
+
+JSON 配列で渡した複数のセリフを指定ファイルへ一括書き込みする（上書き）。VOICEVOX接続・音声再生は行わない。`talk` スキルなど複数セリフを 1 回で書き出したいユースケースに利用できる。
+
+| オプション | 環境変数 | デフォルト値 | 説明 |
+|---|---|---|---|
+| `--json` | — | （必須） | セリフの JSON 配列 |
+| `--verbose` | — | `false` | 詳細ログを出力 |
+
+`--json` の各オブジェクトのキー:
+
+| キー | 型 | 必須 | 説明 |
+|---|---|---|---|
+| `text` | string | ✓ | セリフ本文 |
+| `speaker` | int | | キャラクターID |
+| `speed` | float | | 話速 |
+| `pitch` | float | | 音高 |
+| `intonation` | float | | 抑揚 |
+
+- 出力先ファイルを**新規作成または上書き**します（`append` と異なり既存内容は削除されます）。
+- 省略したキーは出力 JSONL に含まれません（既存の JSONL フォーマットと同一）。
+- `--json` の JSON パースエラー時は終了コード 2 で失敗します。
+
+```bash
+vox-actor script write sample.jsonl --json '[
+  {"text":"おはようなのだ","speaker":3,"intonation":1.1},
+  {"text":"今日もがんばるのだ","speaker":3,"speed":1.0}
+]'
+```
+
+出力（`sample.jsonl`）:
+
+```jsonl
+{"text":"おはようなのだ","speaker":3,"intonation":1.1}
+{"text":"今日もがんばるのだ","speaker":3,"speed":1.0}
+```
+
 ## `act` サブコマンド
 
 ```

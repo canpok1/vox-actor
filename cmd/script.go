@@ -2,7 +2,7 @@ package cmd
 
 import "github.com/spf13/cobra"
 
-func makeScriptCmd(appendDeps *ScriptAppendDeps) *cobra.Command {
+func makeScriptCmd(appendDeps *ScriptAppendDeps, writeDeps *ScriptWriteDeps) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "script",
 		Short: "セリフファイルを操作する",
@@ -13,6 +13,7 @@ func makeScriptCmd(appendDeps *ScriptAppendDeps) *cobra.Command {
 	}
 
 	cmd.AddCommand(makeScriptAppendCmd(appendDeps))
+	cmd.AddCommand(makeScriptWriteCmd(writeDeps))
 
 	return cmd
 }
