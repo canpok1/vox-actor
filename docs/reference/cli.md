@@ -567,6 +567,108 @@ Vite でビルドされたハッシュ付きアセットを配信します。フ
 
 優先順位はプロジェクト assets（`VOX_ACTOR_WORKSPACE/assets/`）> HOME assets（`~/.vox-actor/assets/`）です。
 
+### フロントエンド UI 仕様
+
+viewer が配信するブラウザ UI の仕様です。
+
+#### タブ構成
+
+| タブ名 | 表示条件 |
+|---|---|
+| 配信 | 常時表示 |
+| 音声テスト | 通常モード時のみ。無音モード（`GET /api/status` の `silent=true`）時は非表示 |
+
+初期表示は「配信」タブです。選択中のタブは `localStorage["vox-actor.stream.activeTab"]` に保存され、リロード後も復元されます。
+
+無音モード時は画面上部に無音モードバッジが表示されます。
+
+#### 配信タブ
+
+##### SSE 接続ステータス
+
+`GET /events` に接続した後、ページ上部にステータス表示が更新されます。
+
+| 状態 | 表示 |
+|---|---|
+| 接続中 | 「接続中」 |
+| 切断 | 「切断」（その後自動再接続） |
+
+##### タイムライン
+
+`clip` / `error` イベントを受信するたびにタイムラインへ追加されます。ページロード時は `GET /api/history` の履歴をタイムラインに表示し、リスト末尾（最新エントリ）にスクロールします（履歴エントリは再生キューに積まれません）。
+
+**clip アイテムの表示内容**
+
+| 項目 | デフォルト | localStorage キー |
+|---|---|---|
+| テキスト | 常時表示 | — |
+| キャラ名（話者名） | ON | `vox-actor.stream.showSpeakerName` |
+| スタイル名 | ON | `vox-actor.stream.showStyleName` |
+| 時刻（HH:MM:SS） | ON | `vox-actor.stream.showTimestamp` |
+
+**error アイテムのラベル**
+
+| `category` | ラベル |
+|---|---|
+| `synthesis` | 合成エラー |
+| `file` | ファイルエラー |
+| `connection` | 接続エラー |
+
+`speakerName` / `text` が含まれる場合はラベルと合わせて表示されます。
+
+**履歴件数上限**
+
+| 設定 | デフォルト | localStorage キー | 備考 |
+|---|---|---|---|
+| 履歴件数上限 | 20 | `vox-actor.stream.historySize` | 上限を超えると古いエントリから削除される |
+
+##### 音量・消音コントロール
+
+| コントロール | 初期値 | localStorage キー |
+|---|---|---|
+| 消音チェックボックス | ON（ミュート） | — |
+| 音量スライダー（0〜100） | 50 | `vox-actor.stream.volume` |
+
+消音チェックボックスのオン/オフは `audio.muted` と連動します。muted 状態でも clip はタイムラインに追加されます。音量スライダーの値はリロード後も復元されます。
+
+##### キャラクター画像（口パク）
+
+`GET /api/characters` のレスポンスに応じて「キャラ画像」チェックボックスの表示/非表示が切り替わります。
+
+| `enabled` | チェックボックス | 口パク画像エリア |
+|---|---|---|
+| `true` | 表示 | チェックON時に clip 受信後表示 |
+| `false` | 非表示 | 非表示 |
+
+「キャラ画像」チェックボックスの状態は `vox-actor.stream.showCharacters` に保存されリロード後も復元されます（デフォルト ON）。チェックをオンにした状態で、受信した `clip` の `speakerName` に対応するキャラクターが登録されている場合、`mouthClosed` / `mouthOpen` 画像が口パク表示されます。対応キャラクターがない場合は画像エリアが表示されません（タイムラインへの追加は通常どおり行われます）。チェックをオフにすると画像エリアが非表示になります。
+
+##### 再生キュー
+
+URL 付きの `clip` を受信すると、ブラウザが WAV を先読み（fetch）してから `audio.src` に blob URL を設定します。URL が空の `clip` はタイムラインに表示されますが `audio.src` は更新されません。表示順は受信順（timestamp 昇順）です。
+
+#### 音声テストタブ
+
+話者セレクタで話者を選択して「テスト再生」ボタンを押すと、`GET /test-clip?speaker=<id>` を呼び出して WAV を取得し `audio.src` を更新します。同一話者の 2 回目以降の再生はサーバー側キャッシュが返るため合成は実行されません。
+
+| 設定 | localStorage キー |
+|---|---|
+| 選択中の話者ID | `vox-actor.stream.testSpeakerId` |
+
+話者IDの選択状態はリロード後も復元されます。
+
+#### localStorage 永続化キー一覧
+
+| キー | 型 | デフォルト | 用途 |
+|---|---|---|---|
+| `vox-actor.stream.activeTab` | string | `"stream"` | アクティブタブ（`"stream"` / `"test"`） |
+| `vox-actor.stream.volume` | number | `50` | 音量スライダー値（0〜100） |
+| `vox-actor.stream.historySize` | number | `20` | タイムライン履歴件数上限 |
+| `vox-actor.stream.showSpeakerName` | boolean | `true` | キャラ名表示トグル |
+| `vox-actor.stream.showStyleName` | boolean | `true` | スタイル名表示トグル |
+| `vox-actor.stream.showTimestamp` | boolean | `true` | 時刻表示トグル |
+| `vox-actor.stream.showCharacters` | boolean | `true` | キャラ画像表示トグル |
+| `vox-actor.stream.testSpeakerId` | string | `""` | 音声テストタブの選択話者ID |
+
 ## `config` サブコマンド
 
 ```
