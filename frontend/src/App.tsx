@@ -111,7 +111,7 @@ export function App() {
   );
   const [showCharacters, setShowCharacters] = usePersistedState(
     STORAGE_KEYS.showCharacters,
-    false,
+    true,
     parseBool,
     String,
   );
