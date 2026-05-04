@@ -75,9 +75,9 @@ describe("LipSyncImage", () => {
     // ヒステリシス前は口開
     expect(openImg).toHaveStyle({ display: "block" });
 
-    // ヒステリシス時間進める（デフォルト 80ms）
+    // ヒステリシス時間進める（デフォルト 40ms）
     act(() => {
-      vi.advanceTimersByTime(80);
+      vi.advanceTimersByTime(40);
     });
 
     // ヒステリシス後は口閉
@@ -123,8 +123,8 @@ describe("LipSyncImage", () => {
       />,
     );
 
-    // 40ms進める（ヒステリシス80msの途中）
-    vi.advanceTimersByTime(40);
+    // 20ms進める（ヒステリシス40msの途中）
+    vi.advanceTimersByTime(20);
 
     // 音量を高く戻す
     rerender(
@@ -202,8 +202,8 @@ describe("LipSyncImage", () => {
     expect(openImg).toHaveStyle({ display: "block" });
 
     // 音量が少し低下（音節間の振幅低下をシミュレート）
-    // 動的閾値は recentMax * 0.5 = 0.1 * 0.5 = 0.05
-    // 0.02 < 0.05 なのでタイマーが開始
+    // 動的閾値は recentMax * 0.7 = 0.1 * 0.7 = 0.07
+    // 0.02 < 0.07 なのでタイマーが開始
     rerender(
       <LipSyncImage
         mouthClosedUrl="/closed.png"
@@ -216,7 +216,7 @@ describe("LipSyncImage", () => {
 
     // ヒステリシス後に口が閉じる
     act(() => {
-      vi.advanceTimersByTime(80);
+      vi.advanceTimersByTime(40);
     });
 
     const closedImg = screen.getByAltText("character mouth closed");
