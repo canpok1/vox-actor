@@ -13,7 +13,7 @@ import (
 	"testing"
 )
 
-// playScriptPath は play-script.sh の絶対パスを返す。
+// findPlayScriptPath は play-script.sh の絶対パスを返す。
 // テストは test/e2e/ から実行されるため ../../ がリポジトリルートになる。
 func findPlayScriptPath(t *testing.T) string {
 	t.Helper()
@@ -50,7 +50,7 @@ func runPlayScript(t *testing.T, scriptPath string, env []string, args ...string
 	return stdoutBuf.String(), stderrBuf.String(), exitCode
 }
 
-// makeFakeVoxActor は fake vox-actor シェルスクリプトを binDir に作成してそのパスを返す。
+// makeFakeVoxActor は fake vox-actor シェルスクリプトを binDir に作成する。
 // 各サブコマンドの挙動は以下の環境変数で制御する:
 //   - FAKE_AUDIO_CHECK_EXIT: audio-check の終了コード（省略時 0）
 //   - FAKE_VIEWER_CHECK_EXIT: viewer-check の終了コード（省略時 1）
@@ -58,7 +58,7 @@ func runPlayScript(t *testing.T, scriptPath string, env []string, args ...string
 //   - FAKE_WORKSPACE_DIR: config path.workspace の返り値
 //   - FAKE_ACT_EXIT: act の終了コード（省略時 0）
 //   - FAKE_ACT_CALLS_LOG: act 呼び出し引数の記録ファイルパス
-func makeFakeVoxActor(t *testing.T, binDir string) string {
+func makeFakeVoxActor(t *testing.T, binDir string) {
 	t.Helper()
 	script := `#!/bin/bash
 SUBCOMMAND="$1"
@@ -91,7 +91,6 @@ esac
 	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
 		t.Fatalf("write fake vox-actor: %v", err)
 	}
-	return scriptPath
 }
 
 // makePlayScriptEnv はテスト用環境変数スライスを構築する。
@@ -208,7 +207,6 @@ func TestPlayScriptE2E_AudioCheckOK_DirectMode(t *testing.T) {
 		t.Fatalf("expected exit 0, got %d\nstdout:\n%s\nstderr:\n%s", exitCode, stdout, stderr)
 	}
 
-	// act が1回呼び出されたことを確認
 	logData, err := os.ReadFile(actCallsLog)
 	if err != nil {
 		t.Fatalf("failed to read act calls log: %v", err)
@@ -218,7 +216,6 @@ func TestPlayScriptE2E_AudioCheckOK_DirectMode(t *testing.T) {
 		t.Errorf("expected act to be called once, got %d calls\nlog:\n%s", len(lines), string(logData))
 	}
 
-	// JSONL ファイルが削除されたことを確認
 	if _, err := os.Stat(jsonlPath); !os.IsNotExist(err) {
 		t.Errorf("expected JSONL file to be deleted, but it still exists: %s", jsonlPath)
 	}
@@ -250,7 +247,6 @@ func TestPlayScriptE2E_ViewerCheckOK_DirectMode(t *testing.T) {
 		t.Fatalf("expected exit 0, got %d\nstdout:\n%s\nstderr:\n%s", exitCode, stdout, stderr)
 	}
 
-	// act が1回呼び出されたことを確認
 	logData, err := os.ReadFile(actCallsLog)
 	if err != nil {
 		t.Fatalf("failed to read act calls log: %v", err)
@@ -260,7 +256,6 @@ func TestPlayScriptE2E_ViewerCheckOK_DirectMode(t *testing.T) {
 		t.Errorf("expected act to be called once, got %d calls\nlog:\n%s", len(lines), string(logData))
 	}
 
-	// JSONL ファイルが削除されたことを確認
 	if _, err := os.Stat(jsonlPath); !os.IsNotExist(err) {
 		t.Errorf("expected JSONL file to be deleted, but it still exists: %s", jsonlPath)
 	}
@@ -293,13 +288,11 @@ func TestPlayScriptE2E_NoDevice_FileMode(t *testing.T) {
 		t.Fatalf("expected exit 0, got %d\nstdout:\n%s\nstderr:\n%s", exitCode, stdout, stderr)
 	}
 
-	// JSONL がキューディレクトリに移動したことを確認
 	destPath := filepath.Join(queueDir, jsonlBase)
 	if _, err := os.Stat(destPath); err != nil {
 		t.Errorf("expected JSONL to be moved to queue dir %s: %v", destPath, err)
 	}
 
-	// act が呼び出されていないことを確認
 	if _, err := os.Stat(actCallsLog); !os.IsNotExist(err) {
 		t.Errorf("expected act NOT to be called in file mode, but calls log exists: %s", actCallsLog)
 	}
@@ -343,7 +336,6 @@ func TestPlayScriptE2E_LogRotation(t *testing.T) {
 		t.Errorf("expected non-zero exit (act failed), got 0\nstdout:\n%s\nstderr:\n%s", stdout, stderr)
 	}
 
-	// エラーログが 200 行以内に切り詰められたことを確認
 	logData, err := os.ReadFile(errorLogPath)
 	if err != nil {
 		t.Fatalf("failed to read error log: %v", err)
