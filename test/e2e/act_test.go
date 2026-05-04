@@ -373,3 +373,37 @@ func TestActE2E_Dir_ScriptsLoadedLog(t *testing.T) {
 		t.Errorf("expected 'scripts loaded' log in stderr\nstderr:\n%s", stderr)
 	}
 }
+
+func TestActE2E_DryRun_PitchFlag(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	path := writeTempFile(t, dir, "script.txt", "テスト")
+
+	_, stderr, exitCode := runCLI(t, nil, "act", "--dry-run", "--pitch", "0.05", path)
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d\nstderr:\n%s", exitCode, stderr)
+	}
+
+	playbackLine := extractLineContaining(t, stderr, "[dry run] playback completed")
+	if !strings.Contains(playbackLine, "pitch=0.05") {
+		t.Errorf("expected playback line to contain 'pitch=0.05'\nline: %s", playbackLine)
+	}
+}
+
+func TestActE2E_DryRun_IntonationFlag(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	path := writeTempFile(t, dir, "script.txt", "テスト")
+
+	_, stderr, exitCode := runCLI(t, nil, "act", "--dry-run", "--intonation", "1.5", path)
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d\nstderr:\n%s", exitCode, stderr)
+	}
+
+	playbackLine := extractLineContaining(t, stderr, "[dry run] playback completed")
+	if !strings.Contains(playbackLine, "intonation=1.5") {
+		t.Errorf("expected playback line to contain 'intonation=1.5'\nline: %s", playbackLine)
+	}
+}

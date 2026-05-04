@@ -330,3 +330,23 @@ func TestActE2E_SIGINT_DuringVoicevox_Exits(t *testing.T) {
 		t.Fatal("act did not exit within 5s after SIGINT")
 	}
 }
+
+// TestActE2E_ViewerURL_ConnFailed_NoFallback は --viewer-url で到達不能な URL を指定した場合に
+// ローカル再生へのフォールバックなしでエラー終了することを検証する。
+func TestActE2E_ViewerURL_ConnFailed_NoFallback(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	path := writeTempFile(t, dir, "script.txt", "テスト")
+	homeDir := t.TempDir()
+
+	_, stderr, exitCode := runCLI(t, map[string]string{"HOME": homeDir},
+		"act", "--viewer-url", "http://127.0.0.1:1", path)
+
+	if exitCode == 0 {
+		t.Fatalf("expected non-zero exit when --viewer-url target is unreachable, got 0\nstderr:\n%s", stderr)
+	}
+	if strings.TrimSpace(stderr) == "" {
+		t.Error("expected non-empty stderr when viewer connection failed")
+	}
+}

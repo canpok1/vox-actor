@@ -793,3 +793,39 @@ func TestWatchE2E_Queue_Delete_Combination(t *testing.T) {
 
 	wp.assertCleanExit(3 * time.Second)
 }
+
+func TestWatchE2E_DryRun_PitchFlag(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	wp := startWatch(t, nil, "--dry-run", "--pitch", "0.05", dir)
+
+	wp.waitForStderr("watching directory", 10*time.Second)
+
+	writeTempFile(t, dir, "script.txt", "テスト")
+
+	line := wp.waitForStderr("playback completed", 10*time.Second)
+	if !strings.Contains(line, "pitch=0.05") {
+		t.Errorf("expected playback line to contain 'pitch=0.05'\nline: %s", line)
+	}
+
+	wp.assertCleanExit(3 * time.Second)
+}
+
+func TestWatchE2E_DryRun_IntonationFlag(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	wp := startWatch(t, nil, "--dry-run", "--intonation", "1.5", dir)
+
+	wp.waitForStderr("watching directory", 10*time.Second)
+
+	writeTempFile(t, dir, "script.txt", "テスト")
+
+	line := wp.waitForStderr("playback completed", 10*time.Second)
+	if !strings.Contains(line, "intonation=1.5") {
+		t.Errorf("expected playback line to contain 'intonation=1.5'\nline: %s", line)
+	}
+
+	wp.assertCleanExit(3 * time.Second)
+}

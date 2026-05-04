@@ -250,3 +250,28 @@ Feature: vox-actor act コマンド
     When 150ms 後に SIGINT を送る
     Then 5 秒以内にプロセスが終了する
     # test: test/e2e/act_comm_test.go::TestActE2E_SIGINT_DuringVoicevox_Exits
+
+  # ===== --viewer-url フォールバック禁止 =====
+
+  Scenario: --viewer-url 明示時、viewer 接続失敗でローカルにフォールバックせずエラー終了する
+    Given テンポラリディレクトリに .txt ファイルを作成する
+    When "vox-actor act --viewer-url http://127.0.0.1:1 <path>" を実行する
+    Then 終了コードが非ゼロである
+    And stderr が空でない
+    # test: test/e2e/act_comm_test.go::TestActE2E_ViewerURL_ConnFailed_NoFallback
+
+  # ===== --pitch / --intonation 単独反映 =====
+
+  Scenario: --pitch フラグ単独指定でプレイバックログに反映される
+    Given テンポラリディレクトリに .txt ファイルを作成する
+    When "vox-actor act --dry-run --pitch 0.05 <path>" を実行する
+    Then 終了コード 0 で完了する
+    And "[dry run] playback completed" の行に "pitch=0.05" が含まれる
+    # test: test/e2e/act_test.go::TestActE2E_DryRun_PitchFlag
+
+  Scenario: --intonation フラグ単独指定でプレイバックログに反映される
+    Given テンポラリディレクトリに .txt ファイルを作成する
+    When "vox-actor act --dry-run --intonation 1.5 <path>" を実行する
+    Then 終了コード 0 で完了する
+    And "[dry run] playback completed" の行に "intonation=1.5" が含まれる
+    # test: test/e2e/act_test.go::TestActE2E_DryRun_IntonationFlag

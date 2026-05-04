@@ -27,3 +27,20 @@ Feature: viewer 起動フラグ・環境変数
     Then HTTP ステータス 200 が返る
     And viewer は正常終了（exit code 0）する
     # test: test/e2e/viewer_flags_test.go::TestViewerE2E_Host_0000_Binds
+
+  # ===== --engine-url / --speed / --pitch / --intonation フラグ正常系 =====
+
+  Scenario: --engine-url フラグで指定した VOICEVOX サーバーに接続する
+    Given フェイク VOICEVOX サーバーが起動している
+    When --engine-url フラグを使ってフェイクサーバーを指定して viewer を起動する
+    Then stderr に "speakers loaded" ログが出力される
+    And viewer は正常終了（exit code 0）する
+    # test: test/e2e/viewer_flags_test.go::TestViewerE2E_Flag_EngineURL_Applied
+
+  Scenario: --speed / --pitch / --intonation フラグを指定しても viewer が正常起動する
+    Given VOICEVOX エンジンが到達不能なURL（http://127.0.0.1:1）として設定されている
+    When "--speed 1.2 --pitch 0.05 --intonation 1.5" を指定して viewer を起動する
+    And "stream server listening" ログを確認する
+    Then HTTP ステータス 200 が "api/status" から返る
+    And viewer は正常終了（exit code 0）する
+    # test: test/e2e/viewer_flags_test.go::TestViewerE2E_Flags_SpeedPitchIntonation_Accepted
