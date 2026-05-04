@@ -299,7 +299,273 @@ viewer は端末内で `127.0.0.1:8080` にバインドする前提のため、�
 | HTTPサーバー起動失敗（ポート占有等） | 1 | `Error: failed to start stream server: ...` |
 | 同一ユーザーで viewer が既に起動中 | 1 | `Error: viewer は既に起動中です...` |
 
-ブラウザUI・SSE・`/api/status`・無音モードの挙動は[ストリーム配信モード](#ストリーム配信モード)と同一です。
+### HTTP API
+
+viewer が起動する HTTP サーバーが提供するエンドポイントの仕様一覧です。
+
+#### POST /api/play
+
+再生リクエストを受け付ける非同期エンドポイントです。リクエスト受付後すぐに 200 を返し、音声合成・配信はバックグラウンド worker が処理します。
+
+**リクエスト**
+
+```json
+{
+  "clips": [
+    {
+      "text": "読み上げテキスト",
+      "speaker_id": 3,
+      "speed": 1.0,
+      "pitch": 0.0,
+      "intonation": 1.0
+    }
+  ]
+}
+```
+
+`speed` / `pitch` / `intonation` は省略可能です。省略時は viewer 起動時のデフォルト値が使用されます。
+
+**レスポンス**
+
+| ステータスコード | 条件 |
+|---|---|
+| 200 | 正常受付（無音モード時も 200） |
+| 400 | リクエストボディが不正な JSON |
+| 405 | GET など POST 以外のメソッド |
+
+200 レスポンスの JSON:
+
+```json
+{
+  "playback_id": "1746316414387",
+  "clip_count": 1,
+  "silent": false,
+  "silent_reason": ""
+}
+```
+
+- `silent` が `true` の場合、音声合成は行われず SSE `clip` イベントも配信されません。`silent_reason` に理由文面が入ります。
+- VOICEVOX 合成エラーは非同期 worker が処理するため、合成失敗時もレスポンスは 200 です。
+
+#### GET /api/status
+
+サーバーの現在状態（無音フラグ・理由文面・話者一覧）を返します。レスポンスは起動時に一度だけ生成されキャッシュされます。
+
+**レスポンス**
+
+| ステータスコード | 条件 |
+|---|---|
+| 200 | 常時 |
+
+```json
+{
+  "silent": false,
+  "silentReason": "",
+  "speakers": [
+    { "id": 3, "speakerName": "ずんだもん", "styleName": "ノーマル" }
+  ]
+}
+```
+
+無音モード時は `silent=true`・`silentReason` に理由文面・`speakers=[]` になります。
+
+> **廃止**: `/speakers.json` は廃止されました。`GET /api/status` を使用してください。
+
+#### GET /api/history
+
+再生履歴（`~/.vox-actor/viewer/history/YYYY-MM-DD.jsonl`）を返します。
+
+**レスポンス**
+
+| ステータスコード | 条件 |
+|---|---|
+| 200 | 常時（履歴がない場合は空配列） |
+
+```json
+{
+  "entries": [
+    {
+      "text": "読み上げテキスト",
+      "speakerName": "ずんだもん",
+      "styleName": "ノーマル",
+      "timestamp": 1746316414387
+    }
+  ]
+}
+```
+
+`timestamp` は配信時刻の Unix ms（UTC）です。WAV URL は viewer 再起動で失効するため履歴には含まれません。
+
+#### GET /api/playback/{id}
+
+`POST /api/play` が返した `playback_id` を指定して、再生の完了状態をポーリングするエンドポイントです。`vox-actor playback wait` コマンドが内部で使用します。
+
+**レスポンス**
+
+| ステータスコード | 条件 |
+|---|---|
+| 200 | 常時 |
+
+```json
+{
+  "id": "1746316414387",
+  "status": "completed",
+  "clip_count": 1,
+  "completed_clips": 1,
+  "started_at": 1746316414387,
+  "finished_at": 1746316415000,
+  "failed_reason": ""
+}
+```
+
+`status` は `pending` / `playing` / `completed` / `failed` のいずれかです。
+
+#### GET /api/characters
+
+キャラクター設定（`speaker.json` + 画像）の一覧を返します。レスポンスは起動時に一度だけ生成されキャッシュされます。
+
+**レスポンス**
+
+| ステータスコード | 条件 |
+|---|---|
+| 200 | 常時 |
+| Content-Type | `application/json; charset=utf-8` |
+
+```json
+{
+  "enabled": true,
+  "characters": [
+    {
+      "speakerName": "ずんだもん",
+      "styleName": "ノーマル",
+      "mouthClosed": "/assets/images/zundamon/mouth_closed.png",
+      "mouthOpen": "/assets/images/zundamon/mouth_open.png"
+    }
+  ]
+}
+```
+
+- `enabled` はキャラクター設定が1件以上ある場合のみ `true` になります。assets ディレクトリが存在しない場合は `enabled=false` で `characters=[]` を返します。
+- 複数スタイルを持つキャラクターはスタイルごとにエントリが展開されます。
+- 不正な `speaker.json` を持つキャラクターはスキップされ、有効なキャラクターのみ返します。
+- キャラクター設定の優先順位はプロジェクト assets（`VOX_ACTOR_WORKSPACE/assets/`）> HOME assets（`~/.vox-actor/assets/`）です。
+
+#### GET /test-clip
+
+指定した話者 ID でテスト用 WAV を合成して返します。初回合成結果は viewer 終了まで話者ごとにキャッシュされ、2 回目以降は同一バイト列を返します（冪等）。
+
+**クエリパラメーター**
+
+| パラメーター | 必須 | 説明 |
+|---|---|---|
+| `speaker` | 必須 | 話者 ID（整数） |
+
+**レスポンス**
+
+| ステータスコード | 条件 |
+|---|---|
+| 200 | 正常（WAV バイナリ） |
+| 400 | 無音モード時（話者情報が空のため `speaker not found`） |
+
+正常時のヘッダー:
+
+| ヘッダー | 値 |
+|---|---|
+| `Content-Type` | `audio/wav` |
+| `Content-Length` | WAV のバイト数 |
+
+デフォルトの合成フレーズは「音量テストです」です。
+
+#### GET /clips/{id}.wav
+
+`POST /api/play` の結果として SSE `clip` イベントで通知される URL から WAV を取得するエンドポイントです。
+
+**パスパラメーター**
+
+| パラメーター | 説明 |
+|---|---|
+| `id` | Unix ミリ秒タイムスタンプ（SSE `clip` イベントの `url` フィールドから取得） |
+
+**レスポンス**
+
+| ステータスコード | 条件 |
+|---|---|
+| 200 | WAV が存在する |
+| 404 | ID がタイムスタンプ形式でない / 対応 WAV が存在しない / 無音モード |
+
+正常時のヘッダー:
+
+| ヘッダー | 値 |
+|---|---|
+| `Content-Type` | `audio/wav` |
+| `Cache-Control` | `public, max-age=31536000, immutable` |
+
+WAV はサーバー内メモリにリングバッファ（固定 20 件）で保持されます。上限を超えた古いものから破棄されるため、古い URL は 404 になります。無音モード時は WAV が生成されないため常に 404 を返します。
+
+#### GET /events（SSE）
+
+Server-Sent Events ストリームです。ブラウザが接続し、再生クリップや合成エラーのイベントをリアルタイムで受信します。複数クライアントが同時に接続可能で、全クライアントに同一イベントが配信されます。
+
+**レスポンスヘッダー**
+
+| ヘッダー | 値 |
+|---|---|
+| `Content-Type` | `text/event-stream` |
+| `Cache-Control` | `no-cache` |
+| `Connection` | `keep-alive` |
+
+**イベント種別**
+
+`clip` イベント（音声クリップ配信時）:
+
+```
+event: clip
+data: {"url":"/clips/1746316414387.wav","text":"読み上げテキスト","speakerName":"ずんだもん","styleName":"ノーマル","timestamp":1746316414387}
+```
+
+| フィールド | 説明 |
+|---|---|
+| `url` | WAV の取得 URL（無音モード時は空文字） |
+| `text` | 読み上げテキスト |
+| `speakerName` | 話者名（エンジン未登録 ID は `話者#<ID>`） |
+| `styleName` | スタイル名（無音モード時は空文字） |
+| `timestamp` | 配信時刻の Unix ms（UTC） |
+
+`error` イベント（合成エラー等発生時）:
+
+```
+event: error
+data: {"id":1,"category":"synthesis","message":"...","timestamp":1746316414387,"path":"","text":"読み上げテキスト"}
+```
+
+サーバーシャットダウン時は接続中のすべての SSE クライアントが切断されます。無音モードでは `clip` イベントは配信されません。
+
+#### GET /assets/...（静的アセット・キャラクター画像）
+
+**フロントエンドアセット** (`/assets/<hash>.js`, `/assets/<hash>.css` 等):
+
+Vite でビルドされたハッシュ付きアセットを配信します。ファイルが存在する場合は長期キャッシュヘッダーが付与されます。
+
+| ヘッダー | 値 |
+|---|---|
+| `Cache-Control` | `public, max-age=31536000, immutable` |
+
+| ステータスコード | 条件 |
+|---|---|
+| 200 | ファイルが存在する |
+| 404 | ファイルが存在しない |
+
+**キャラクター画像** (`/assets/images/<charId>/<filename>`):
+
+`GET /api/characters` のレスポンスに含まれる `mouthClosed` / `mouthOpen` パスで参照される画像を配信します。
+
+| ステータスコード | 条件 |
+|---|---|
+| 200 | 画像が存在する |
+| 404 | キャラクターが存在しない・assets ディレクトリがない |
+| 4xx | パストラバーサル（`../` を含むパス）は拒否される |
+
+優先順位はプロジェクト assets（`VOX_ACTOR_WORKSPACE/assets/`）> HOME assets（`~/.vox-actor/assets/`）です。
 
 ## `config` サブコマンド
 
