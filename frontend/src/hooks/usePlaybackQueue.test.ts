@@ -22,6 +22,27 @@ function makeFetchMock() {
   });
 }
 
+function setAudioEnded(audio: HTMLAudioElement, value: boolean): void {
+  Object.defineProperty(audio, "ended", {
+    get: () => value,
+    configurable: true,
+  });
+}
+
+function setAudioDuration(audio: HTMLAudioElement, value: number): void {
+  Object.defineProperty(audio, "duration", {
+    get: () => value,
+    configurable: true,
+  });
+}
+
+function setAudioCurrentTime(audio: HTMLAudioElement, value: number): void {
+  Object.defineProperty(audio, "currentTime", {
+    get: () => value,
+    configurable: true,
+  });
+}
+
 describe("usePlaybackQueue", () => {
   let audio: HTMLAudioElement;
   let audioRef: { current: HTMLAudioElement };
@@ -51,6 +72,7 @@ describe("usePlaybackQueue", () => {
   afterEach(() => {
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
+    vi.useRealTimers();
   });
 
   it("enqueue で audio.play が呼ばれ playingClipTimestamp が更新される", async () => {
@@ -76,24 +98,60 @@ describe("usePlaybackQueue", () => {
     expect(audio.src).toMatch(/^blob:/);
   });
 
-  it("ended イベント発火で次クリップが再生されキューが空なら null", async () => {
+  it("timeupdate で audio.ended=true のとき次クリップが再生されキューが空なら null", async () => {
     const { result } = renderHook(() => usePlaybackQueue(audioRef, true));
     await act(async () => {
       result.current.enqueue(makeClip(1));
       result.current.enqueue(makeClip(2));
     });
     expect(result.current.playingClipTimestamp).toBe(1000);
+
+    setAudioEnded(audio, true);
     await act(async () => {
-      audio.dispatchEvent(new Event("ended"));
+      audio.dispatchEvent(new Event("timeupdate"));
     });
     expect(result.current.playingClipTimestamp).toBe(2000);
+
+    setAudioEnded(audio, true);
     await act(async () => {
-      audio.dispatchEvent(new Event("ended"));
+      audio.dispatchEvent(new Event("timeupdate"));
     });
     expect(result.current.playingClipTimestamp).toBeNull();
   });
 
-  it("ended イベント発火時に先読み済みクリップが即再生される", async () => {
+  it("duration/currentTime 判定でウォッチドッグが発火して次クリップが再生される", async () => {
+    const { result } = renderHook(() => usePlaybackQueue(audioRef, true));
+    await act(async () => {
+      result.current.enqueue(makeClip(1));
+      result.current.enqueue(makeClip(2));
+    });
+    expect(result.current.playingClipTimestamp).toBe(1000);
+
+    // currentTime が duration - EPSILON に到達した状態を作る
+    setAudioDuration(audio, 3.0);
+    setAudioCurrentTime(audio, 2.96);
+    await act(async () => {
+      audio.dispatchEvent(new Event("timeupdate"));
+    });
+    expect(result.current.playingClipTimestamp).toBe(2000);
+  });
+
+  it("setInterval でウォッチドッグが発火する", async () => {
+    vi.useFakeTimers();
+    const { result } = renderHook(() => usePlaybackQueue(audioRef, true));
+    await act(async () => {
+      result.current.enqueue(makeClip(1));
+    });
+    expect(result.current.playingClipTimestamp).toBe(1000);
+
+    setAudioEnded(audio, true);
+    await act(async () => {
+      vi.advanceTimersByTime(250);
+    });
+    expect(result.current.playingClipTimestamp).toBeNull();
+  });
+
+  it("ウォッチドッグ発火時に先読み済みクリップが即再生される", async () => {
     const { result } = renderHook(() => usePlaybackQueue(audioRef, true));
     await act(async () => {
       result.current.enqueue(makeClip(1));
@@ -102,10 +160,12 @@ describe("usePlaybackQueue", () => {
     // clip1 再生中、clip2 が先読み済み
     expect(result.current.playingClipTimestamp).toBe(1000);
     const playCallsBefore = mockPlay.mock.calls.length;
+
+    setAudioEnded(audio, true);
     await act(async () => {
-      audio.dispatchEvent(new Event("ended"));
+      audio.dispatchEvent(new Event("timeupdate"));
     });
-    // ended 直後に fetch を待たず即 play() が追加呼び出しされる
+    // ウォッチドッグ発火直後に fetch を待たず即 play() が追加呼び出しされる
     expect(mockPlay.mock.calls.length).toBeGreaterThan(playCallsBefore);
     expect(result.current.playingClipTimestamp).toBe(2000);
   });
@@ -188,13 +248,15 @@ describe("usePlaybackQueue", () => {
     expect((capturedSignal as unknown as AbortSignal).aborted).toBe(true);
   });
 
-  it("アンマウントで ended リスナーが解除される", () => {
-    const removeEventListenerSpy = vi.spyOn(audio, "removeEventListener");
-    const { unmount } = renderHook(() => usePlaybackQueue(audioRef, true));
-    unmount();
-    expect(removeEventListenerSpy).toHaveBeenCalledWith(
-      "ended",
-      expect.any(Function),
+  it("アンマウントでウォッチドッグがクリアされる", async () => {
+    const clearIntervalSpy = vi.spyOn(global, "clearInterval");
+    const { result, unmount } = renderHook(() =>
+      usePlaybackQueue(audioRef, true),
     );
+    await act(async () => {
+      result.current.enqueue(makeClip(1));
+    });
+    unmount();
+    expect(clearIntervalSpy).toHaveBeenCalled();
   });
 });
