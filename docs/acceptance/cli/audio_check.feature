@@ -38,7 +38,7 @@ Feature: vox-actor audio-check コマンド
     When "vox-actor audio-check" を実行する
     Then 終了コード 1 で完了する
     And 標準出力が空である
-    And 標準エラー出力が空である
+    # （stderr は ALSA 等のライブラリが独自にメッセージを書き込む場合がある）
     # test: test/e2e/audio_check_test.go::TestAudioCheckE2E_DeviceUnavailable_ExitOne
 
   Scenario: 音声デバイス open 失敗時に --verbose で stderr に失敗理由が出力される
