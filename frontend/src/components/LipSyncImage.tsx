@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 
 // Dynamic threshold parameters
 const WINDOW_MS = 500;
-const THRESHOLD_RATIO = 0.5;
+const THRESHOLD_RATIO = 0.7;
 const MIN_THRESHOLD = 0.01;
 
 interface LipSyncImageProps {
@@ -15,13 +15,13 @@ interface LipSyncImageProps {
 /**
  * LipSyncImage は音量に応じて口閉/口開の2枚の画像を切り替える。
  * 動的閾値（envelope follower）を使用して、音節単位での開閉を実現する。
- * - hysteresisMs: 開→閉切替時のヒステリシス時間（デフォルト 80ms）
+ * - hysteresisMs: 開→閉切替時のヒステリシス時間（デフォルト 40ms）
  */
 export function LipSyncImage({
   mouthClosedUrl,
   mouthOpenUrl,
   volume,
-  hysteresisMs = 80,
+  hysteresisMs = 40,
 }: LipSyncImageProps) {
   const [isOpen, setIsOpen] = useState(false);
   const closeTimerRef = useRef<NodeJS.Timeout | null>(null);
