@@ -174,3 +174,23 @@ func TestWatchE2E_RealComm_SynthPipeline_Invoked(t *testing.T) {
 
 	wp.assertCleanExit(3 * time.Second)
 }
+
+// TestWatchE2E_ViewerURL_ConnFailed_LogsError は --viewer-url で到達不能な URL を指定した場合に
+// ローカル再生へのフォールバックなしで "silent play error" がログ出力されることを検証する。
+func TestWatchE2E_ViewerURL_ConnFailed_LogsError(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	wp := startWatch(t, nil, "--viewer-url", "http://127.0.0.1:1", dir)
+
+	wp.waitForStderr("watching directory", 10*time.Second)
+
+	writeTempFile(t, dir, "script.txt", "テスト")
+
+	wp.waitForStderr("silent play error", 10*time.Second)
+
+	doneDir := dir + "/done"
+	waitForFileInDir(t, doneDir, "script", 5*time.Second)
+
+	wp.assertCleanExit(3 * time.Second)
+}

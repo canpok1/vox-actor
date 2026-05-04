@@ -102,6 +102,32 @@ func TestSayE2E_ArgValidation_ExitCode2(t *testing.T) {
 	}
 }
 
+func TestSayE2E_DryRun_PitchFlag(t *testing.T) {
+	_, stderr, exitCode := runCLI(t, nil, "say", "--dry-run", "--pitch", "0.05", "テスト")
+
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d\nstderr:\n%s", exitCode, stderr)
+	}
+
+	playbackLine := extractLineContaining(t, stderr, "[dry run] playback completed")
+	if !strings.Contains(playbackLine, "pitch=0.05") {
+		t.Errorf("expected playback line to contain 'pitch=0.05'\nline: %s", playbackLine)
+	}
+}
+
+func TestSayE2E_DryRun_IntonationFlag(t *testing.T) {
+	_, stderr, exitCode := runCLI(t, nil, "say", "--dry-run", "--intonation", "1.5", "テスト")
+
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d\nstderr:\n%s", exitCode, stderr)
+	}
+
+	playbackLine := extractLineContaining(t, stderr, "[dry run] playback completed")
+	if !strings.Contains(playbackLine, "intonation=1.5") {
+		t.Errorf("expected playback line to contain 'intonation=1.5'\nline: %s", playbackLine)
+	}
+}
+
 func TestSayE2E_Verbose_IncreasesLogs(t *testing.T) {
 	_, baseStderr, baseExit := runCLI(t, nil, "say", "--dry-run", "詳細ログ")
 	if baseExit != 0 {

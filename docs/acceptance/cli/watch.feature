@@ -305,3 +305,32 @@ Feature: vox-actor watch コマンド
     And stderr に "create query error" や "synthesize error" が含まれない
     And SIGTERM 送信後に終了コード 0 で完了する
     # test: test/e2e/watch_comm_test.go::TestWatchE2E_RealComm_SynthPipeline_Invoked
+
+  # ===== --viewer-url フォールバック禁止 =====
+
+  Scenario: --viewer-url 明示時、viewer 接続失敗でローカル再生にフォールバックせず "silent play error" が記録される
+    Given テンポラリディレクトリで watch を "--viewer-url http://127.0.0.1:1" で起動する
+    And "watching directory" ログが出るまで待機する
+    When ディレクトリに .txt ファイルを書き込む
+    Then stderr に "silent play error" が含まれる
+    And ファイルが done/ サブディレクトリに移動する
+    And SIGTERM 送信後に終了コード 0 で完了する
+    # test: test/e2e/watch_comm_test.go::TestWatchE2E_ViewerURL_ConnFailed_LogsError
+
+  # ===== --pitch / --intonation 単独反映 =====
+
+  Scenario: --pitch フラグ単独指定でプレイバックログに反映される（ドライラン）
+    Given テンポラリディレクトリで watch を "--dry-run --pitch 0.05" で起動する
+    And "watching directory" ログが出るまで待機する
+    When ディレクトリに .txt ファイルを書き込む
+    Then "playback completed" ログの行に "pitch=0.05" が含まれる
+    And SIGTERM 送信後に終了コード 0 で完了する
+    # test: test/e2e/watch_test.go::TestWatchE2E_DryRun_PitchFlag
+
+  Scenario: --intonation フラグ単独指定でプレイバックログに反映される（ドライラン）
+    Given テンポラリディレクトリで watch を "--dry-run --intonation 1.5" で起動する
+    And "watching directory" ログが出るまで待機する
+    When ディレクトリに .txt ファイルを書き込む
+    Then "playback completed" ログの行に "intonation=1.5" が含まれる
+    And SIGTERM 送信後に終了コード 0 で完了する
+    # test: test/e2e/watch_test.go::TestWatchE2E_DryRun_IntonationFlag

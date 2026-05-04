@@ -59,6 +59,56 @@ func TestViewerE2E_Env_VOXEngineURL_Applied(t *testing.T) {
 	vp.assertCleanExit(3 * time.Second)
 }
 
+// TestViewerE2E_Flag_EngineURL_Applied は --engine-url フラグで指定したサーバーに
+// viewer が接続することを検証する（speakers loaded ログで確認）。
+func TestViewerE2E_Flag_EngineURL_Applied(t *testing.T) {
+	t.Parallel()
+
+	fakeVox := startFakeVoicevox(t)
+	port := freePort(t)
+	homeDir := t.TempDir()
+	workspace := t.TempDir()
+
+	// --engine-url フラグで指定（VOX_ENGINE_URL 環境変数は使わない）
+	vp := startViewer(t, map[string]string{
+		"HOME":                homeDir,
+		"VOX_ACTOR_WORKSPACE": workspace,
+	}, "--port", fmt.Sprintf("%d", port), "--engine-url", fakeVox.URL)
+
+	vp.waitForStderr("speakers loaded", 10*time.Second)
+
+	vp.assertCleanExit(3 * time.Second)
+}
+
+// TestViewerE2E_Flags_SpeedPitchIntonation_Accepted は --speed / --pitch / --intonation フラグを
+// 指定しても viewer が正常起動することを検証する。
+func TestViewerE2E_Flags_SpeedPitchIntonation_Accepted(t *testing.T) {
+	t.Parallel()
+
+	port := freePort(t)
+	homeDir := t.TempDir()
+	workspace := t.TempDir()
+
+	vp := startViewer(t, map[string]string{
+		"HOME":                homeDir,
+		"VOX_ACTOR_WORKSPACE": workspace,
+		"VOX_ENGINE_URL":      "http://127.0.0.1:1",
+	}, "--port", fmt.Sprintf("%d", port),
+		"--speed", "1.2", "--pitch", "0.05", "--intonation", "1.5")
+
+	vp.waitForStderr("stream server listening", 10*time.Second)
+
+	url := fmt.Sprintf("http://127.0.0.1:%d/api/status", port)
+	resp := getURLWithRetry(t, url)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected 200 from /api/status with speed/pitch/intonation flags, got %d", resp.StatusCode)
+	}
+
+	vp.assertCleanExit(3 * time.Second)
+}
+
 // TestViewerE2E_Host_0000_Binds は --host 0.0.0.0 を指定したとき
 // 127.0.0.1 でも接続できることを検証する。
 // Go の net.Listen("tcp", "0.0.0.0:N") は IPv6 dual-stack では [::] として表示されるため

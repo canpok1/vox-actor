@@ -178,3 +178,25 @@ Feature: vox-actor say コマンド
     Then 終了コード 0 で完了する
     And stderr の "say starting" 行に "text=テスト内容" が含まれる
     # test: test/e2e/say_comm_test.go::TestSayE2E_Verbose_ShowsSpecificDebugLogs
+
+  # ===== --viewer-url フォールバック禁止 =====
+
+  Scenario: --viewer-url 明示時、viewer 接続失敗でローカルにフォールバックせずエラー終了する
+    When "vox-actor say --viewer-url http://127.0.0.1:1 テスト" を実行する
+    Then 終了コードが非ゼロである
+    And stderr が空でない
+    # test: test/e2e/say_comm_test.go::TestSayE2E_ViewerURL_ConnFailed_NoFallback
+
+  # ===== --pitch / --intonation 単独反映 =====
+
+  Scenario: --pitch フラグ単独指定でプレイバックログに反映される
+    When "vox-actor say --dry-run --pitch 0.05 テスト" を実行する
+    Then 終了コード 0 で完了する
+    And "[dry run] playback completed" の行に "pitch=0.05" が含まれる
+    # test: test/e2e/say_test.go::TestSayE2E_DryRun_PitchFlag
+
+  Scenario: --intonation フラグ単独指定でプレイバックログに反映される
+    When "vox-actor say --dry-run --intonation 1.5 テスト" を実行する
+    Then 終了コード 0 で完了する
+    And "[dry run] playback completed" の行に "intonation=1.5" が含まれる
+    # test: test/e2e/say_test.go::TestSayE2E_DryRun_IntonationFlag
