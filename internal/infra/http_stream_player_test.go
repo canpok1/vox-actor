@@ -3412,6 +3412,30 @@ func TestHTTPStreamPlayer_Prefetch_SynthesizeFailureDuringPrefetchFails(t *testi
 	}
 }
 
+// waitForPlaybackTerminal polls GET /api/playback/<id> until status is "completed" or "failed",
+// or until the timeout is reached (test fails on timeout).
+func waitForPlaybackTerminal(t *testing.T, baseURL, playbackID string, timeout time.Duration) {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		resp, err := http.Get(baseURL + "/api/playback/" + playbackID)
+		if err != nil {
+			t.Fatalf("polling GET /api/playback: %v", err)
+		}
+		var result ViewerPlaybackResponse
+		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+			_ = resp.Body.Close()
+			t.Fatalf("decode polling response: %v", err)
+		}
+		_ = resp.Body.Close()
+		if result.Status == "completed" || result.Status == "failed" {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("timeout waiting for playback %s to reach terminal status", playbackID)
+}
+
 func TestHTTPStreamPlayer_APIPlayback_TTLExpiry(t *testing.T) {
 	t.Parallel()
 	stub := &testVoicevoxClient{wav: []byte("RIFFx")}
@@ -3433,6 +3457,10 @@ func TestHTTPStreamPlayer_APIPlayback_TTLExpiry(t *testing.T) {
 		t.Fatalf("decode POST response: %v", err)
 	}
 	_ = postResp.Body.Close()
+
+	// ワーカーが completed/failed に遷移するまで待機してから prune する。
+	// これにより、prune 後のワーカーによる自動再生成（修正前の挙動）が起きないことを保証する。
+	waitForPlaybackTerminal(t, "http://"+p.Addr(), playResult.PlaybackID, 2*time.Second)
 
 	// 現在時刻を "今" に進め、GC を走らせる（createdAt = 2h前 < cutoff = now - 1h）
 	fixedTime = time.Now()

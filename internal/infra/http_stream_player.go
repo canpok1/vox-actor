@@ -1024,10 +1024,11 @@ func (p *HTTPStreamPlayer) initPlayback(id string, clipCount int) {
 func (p *HTTPStreamPlayer) setPlaybackStatus(id string, status playbackStatus, reason string) {
 	p.playbackMu.Lock()
 	defer p.playbackMu.Unlock()
-	if _, ok := p.playbacks[id]; !ok {
-		p.playbacks[id] = &playbackStateRecord{createdAt: p.nowFunc()}
+	state, ok := p.playbacks[id]
+	if !ok {
+		// pruned or unregistered; ignore late updates from workers.
+		return
 	}
-	state := p.playbacks[id]
 	state.status = status
 	state.reason = reason
 	now := p.nowFunc().UnixMilli()
