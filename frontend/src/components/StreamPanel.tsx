@@ -1,4 +1,4 @@
-import type { CharacterEntry, TimelineEntry } from "../types/api";
+import type { CharacterEntry, ClipEvent, TimelineEntry } from "../types/api";
 import type { CharacterStageSlot } from "../hooks/useCharacterStage";
 import { useCharacterStage } from "../hooks/useCharacterStage";
 import { LipSyncImage } from "./LipSyncImage";
@@ -23,6 +23,7 @@ interface StreamPanelProps {
   showCharacters: boolean;
   onShowCharactersChange: (value: boolean) => void;
   volume: number;
+  onReplay?: (entry: ClipEvent & { kind: "clip" }) => void;
 }
 
 const MULTI_SLOT_LAYOUT = [
@@ -68,6 +69,7 @@ export function StreamPanel(props: StreamPanelProps) {
     showCharacters,
     onShowCharactersChange,
     volume,
+    onReplay,
   } = props;
 
   const { slots, isMultiSlot, lastClipTimestamp } = useCharacterStage(
@@ -216,6 +218,7 @@ export function StreamPanel(props: StreamPanelProps) {
         showStyleName={showStyleName}
         showTimestamp={showTimestamp}
         isCharacterMode={isCharacterMode}
+        onReplay={onReplay}
       />
     </section>
   );

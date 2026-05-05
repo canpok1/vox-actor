@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { TimelineEntry } from "../types/api";
 import { TimelineItem } from "./TimelineItem";
@@ -198,5 +199,38 @@ describe("TimelineItem - scrollIntoView", () => {
   it("マウント時点で playing=false のとき scrollIntoView は呼ばれない", () => {
     render(<TimelineItem {...defaultProps} playing={false} />);
     expect(scrollIntoViewMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("TimelineItem - replay button", () => {
+  it("onReplay が渡されたとき「再生」ボタンが表示される", () => {
+    const onReplay = vi.fn();
+    render(<TimelineItem {...defaultProps} onReplay={onReplay} />);
+    expect(screen.getByRole("button", { name: "再生" })).toBeInTheDocument();
+  });
+
+  it("onReplay が渡されていないとき「再生」ボタンが表示されない", () => {
+    render(<TimelineItem {...defaultProps} />);
+    expect(screen.queryByRole("button", { name: "再生" })).not.toBeInTheDocument();
+  });
+
+  it("「再生」ボタンをクリックすると onReplay が呼ばれる", async () => {
+    const onReplay = vi.fn();
+    render(<TimelineItem {...defaultProps} onReplay={onReplay} />);
+    await userEvent.click(screen.getByRole("button", { name: "再生" }));
+    expect(onReplay).toHaveBeenCalledTimes(1);
+  });
+
+  it("error エントリでは onReplay が渡されていても「再生」ボタンが表示されない", () => {
+    const errorEntry: TimelineEntry = {
+      kind: "error",
+      id: 1,
+      category: "synthesis",
+      message: "エラー",
+      timestamp: 1700000000000,
+    };
+    const onReplay = vi.fn();
+    render(<TimelineItem {...defaultProps} entry={errorEntry} onReplay={onReplay} />);
+    expect(screen.queryByRole("button", { name: "再生" })).not.toBeInTheDocument();
   });
 });

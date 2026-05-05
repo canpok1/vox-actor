@@ -8,6 +8,7 @@ interface TimelineItemProps {
   showStyleName: boolean;
   showTimestamp: boolean;
   highlightPlaying?: boolean;
+  onReplay?: () => void;
 }
 
 function formatTimestamp(ms: number): string {
@@ -28,6 +29,7 @@ export function TimelineItem({
   showStyleName,
   showTimestamp,
   highlightPlaying = true,
+  onReplay,
 }: TimelineItemProps) {
   const ref = useRef<HTMLLIElement>(null);
   // 初期値は false 固定。マウント時点で playing=true のケース（SSE で
@@ -119,6 +121,15 @@ export function TimelineItem({
           {playing && highlightPlaying ? "▶" : ""}
         </span>
         <span>{entry.text}</span>
+        {onReplay && (
+          <button
+            type="button"
+            onClick={onReplay}
+            className="ml-auto shrink-0 cursor-pointer rounded border-0 bg-ctp-surface px-2 py-0.5 text-[0.75rem] text-ctp-blue hover:bg-ctp-overlay"
+          >
+            再生
+          </button>
+        )}
       </div>
     </li>
   );

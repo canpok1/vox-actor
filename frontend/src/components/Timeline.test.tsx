@@ -1,5 +1,6 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import userEvent from "@testing-library/user-event";
+import { describe, expect, it, vi } from "vitest";
 import type { TimelineEntry } from "../types/api";
 import { Timeline } from "./Timeline";
 
@@ -203,6 +204,29 @@ describe("Timeline", () => {
         />,
       );
       expect(screen.getByText("話者A")).toBeInTheDocument();
+    });
+  });
+
+  describe("onReplay", () => {
+    it("onReplay が渡されたとき clip アイテムに「再生」ボタンが表示される", () => {
+      const entries: TimelineEntry[] = [clipEntry(1000, "テキスト1")];
+      render(<Timeline {...defaultProps} entries={entries} onReplay={vi.fn()} />);
+      expect(screen.getByRole("button", { name: "再生" })).toBeInTheDocument();
+    });
+
+    it("onReplay が渡されていないとき「再生」ボタンが表示されない", () => {
+      const entries: TimelineEntry[] = [clipEntry(1000, "テキスト1")];
+      render(<Timeline {...defaultProps} entries={entries} />);
+      expect(screen.queryByRole("button", { name: "再生" })).not.toBeInTheDocument();
+    });
+
+    it("「再生」ボタンをクリックすると対応するエントリで onReplay が呼ばれる", async () => {
+      const onReplay = vi.fn();
+      const entry = clipEntry(1000, "テキスト1");
+      render(<Timeline {...defaultProps} entries={[entry]} onReplay={onReplay} />);
+      await userEvent.click(screen.getByRole("button", { name: "再生" }));
+      expect(onReplay).toHaveBeenCalledTimes(1);
+      expect(onReplay).toHaveBeenCalledWith(entry);
     });
   });
 });
