@@ -68,15 +68,9 @@ type HTTPStreamPlayer struct {
 	// silentInterval は PlayText で使う固定待機時間（backpressure の暫定値）。
 	silentInterval time.Duration
 
-	// voicevoxClient はテスト再生 (/test-clip) で合成に使うクライアント。
-	// 未注入時は /test-clip が 503 を返す。
+	// voicevoxClient は /api/play で音声合成に使うクライアント。
+	// 未注入時は /api/play が 503 を返す。
 	voicevoxClient app.VoicevoxClient
-	// testPhrase はテスト再生で合成するフレーズ。既定は defaultTestPhrase。
-	testPhrase string
-
-	// testClipCache は SpeakerID → WAV のキャッシュ。初回合成時に書き込まれ Shutdown まで保持される。
-	testClipCacheMu sync.Mutex
-	testClipCache   map[int][]byte
 
 	mu          sync.Mutex
 	started     bool
@@ -118,8 +112,6 @@ const (
 	sseEventClip        = "clip"
 	sseEventError       = "error"
 	sseSubscriberBuffer = 16
-	// defaultTestPhrase は /test-clip で合成するデフォルトフレーズ。
-	defaultTestPhrase = "音量テストです"
 	// defaultSilentInterval は無音モードで PlayText が固定的に待機する時間。
 	// タイムラインが一瞬で流れ去らないようにするための暫定値。
 	defaultSilentInterval = 500 * time.Millisecond
@@ -165,8 +157,9 @@ type playbackStateRecord struct {
 
 // playBatch は worker への投入単位。
 type playBatch struct {
-	playbackID string
-	clips      []ViewerClip
+	playbackID  string
+	clips       []ViewerClip
+	skipHistory bool
 }
 
 var (
@@ -259,22 +252,12 @@ func WithOrderedSpeakerIDs(ids []int) HTTPStreamOption {
 	}
 }
 
-// WithVoicevoxClient は /test-clip エンドポイントで使う音声合成クライアントを設定するオプション。
-// 未注入時は /test-clip が 503 を返す。
+// WithVoicevoxClient は /api/play で使う音声合成クライアントを設定するオプション。
+// 未注入時は /api/play が 503 を返す。
 func WithVoicevoxClient(client app.VoicevoxClient) HTTPStreamOption {
 	return func(p *HTTPStreamPlayer) {
 		if client != nil {
 			p.voicevoxClient = client
-		}
-	}
-}
-
-// WithTestPhrase は /test-clip でテスト合成に使うフレーズを設定するオプション。
-// 既定は defaultTestPhrase。
-func WithTestPhrase(phrase string) HTTPStreamOption {
-	return func(p *HTTPStreamPlayer) {
-		if phrase != "" {
-			p.testPhrase = phrase
 		}
 	}
 }
@@ -357,8 +340,6 @@ func NewHTTPStreamPlayer(addr string, staticFS fs.FS, opts ...HTTPStreamOption) 
 		subscribers:      newSubscriberRegistry(),
 		nowFunc:          time.Now,
 		silentInterval:   defaultSilentInterval,
-		testPhrase:       defaultTestPhrase,
-		testClipCache:    make(map[int][]byte),
 		batchQueue:       make(chan playBatch, batchQueueCapacity),
 		playbacks:        make(map[string]*playbackStateRecord),
 		prefetchLeadTime: defaultPrefetchLeadTime,
@@ -404,7 +385,7 @@ func (p *HTTPStreamPlayer) Start(_ context.Context) error {
 	mux.HandleFunc("/api/playback/", p.handleAPIPlayback)
 	mux.HandleFunc("/api/characters", p.handleAPICharacters)
 	mux.HandleFunc("/assets/images/", p.handleCharacterImage)
-	mux.HandleFunc("/test-clip", p.handleTestClip)
+
 	mux.HandleFunc(clipPathPrefix, p.handleClip)
 
 	p.server = &http.Server{
@@ -501,13 +482,14 @@ func (p *HTTPStreamPlayer) SetSilent(reason string) {
 }
 
 // clipToPlayMeta は ViewerClip を app.PlayMeta に変換する。
-func clipToPlayMeta(clip ViewerClip) app.PlayMeta {
+func clipToPlayMeta(clip ViewerClip, skipHistory bool) app.PlayMeta {
 	return app.PlayMeta{
-		Text:       clip.Text,
-		SpeakerID:  clip.SpeakerID,
-		Speed:      clip.Speed,
-		Pitch:      clip.Pitch,
-		Intonation: clip.Intonation,
+		Text:        clip.Text,
+		SpeakerID:   clip.SpeakerID,
+		Speed:       clip.Speed,
+		Pitch:       clip.Pitch,
+		Intonation:  clip.Intonation,
+		SkipHistory: skipHistory,
 	}
 }
 
@@ -556,7 +538,9 @@ func (p *HTTPStreamPlayer) PlayText(ctx context.Context, meta app.PlayMeta) erro
 		p.logger.Warn("stream clip dropped for slow subscribers", "clipTimestamp", ts, "dropped", dropped)
 	}
 	p.logger.Info("stream clip delivered (silent)", "clipTimestamp", ts, "subscribers", n)
-	p.appendHistory(ev)
+	if !meta.SkipHistory {
+		p.appendHistory(ev)
+	}
 
 	if p.silentInterval <= 0 {
 		return nil
@@ -617,7 +601,9 @@ func (p *HTTPStreamPlayer) Play(ctx context.Context, wavData []byte, meta app.Pl
 		p.logger.Warn("stream clip dropped for slow subscribers", "clipTimestamp", ts, "dropped", dropped)
 	}
 	p.logger.Info("stream clip delivered", "clipTimestamp", ts, "subscribers", n)
-	p.appendHistory(ev)
+	if !meta.SkipHistory {
+		p.appendHistory(ev)
+	}
 	return nil
 }
 
@@ -1036,7 +1022,7 @@ func (p *HTTPStreamPlayer) handleAPIPlay(w http.ResponseWriter, r *http.Request)
 		_, _ = w.Write(payload)
 		return
 	}
-	batch := playBatch{playbackID: playbackID, clips: req.Clips}
+	batch := playBatch{playbackID: playbackID, clips: req.Clips, skipHistory: req.SkipHistory}
 	select {
 	case p.batchQueue <- batch:
 	default:
@@ -1171,7 +1157,7 @@ func (p *HTTPStreamPlayer) processBatch(ctx context.Context, batch playBatch) {
 			prefetchedWAV = nil
 		} else {
 			var err error
-			wav, err = p.synthesizeAndPlay(ctx, batch.playbackID, clip)
+			wav, err = p.synthesizeAndPlay(ctx, batch.playbackID, clip, batch.skipHistory)
 			if err != nil {
 				return
 			}
@@ -1200,7 +1186,7 @@ func (p *HTTPStreamPlayer) processBatch(ctx context.Context, batch playBatch) {
 		if dErr == nil && duration > 0 {
 			if nextSynthCh != nil {
 				var err error
-				prefetchedWAV, err = p.prefetchSleep(ctx, batch.playbackID, duration, nextSynthCh, batch.clips[i+1])
+				prefetchedWAV, err = p.prefetchSleep(ctx, batch.playbackID, duration, nextSynthCh, batch.clips[i+1], batch.skipHistory)
 				if err != nil {
 					return
 				}
@@ -1225,7 +1211,7 @@ func (p *HTTPStreamPlayer) processBatch(ctx context.Context, batch playBatch) {
 
 // synthesizeAndPlay は clip を合成して Play() でブロードキャストする。
 // エラー時は playback を failed に遷移させて error を返す。
-func (p *HTTPStreamPlayer) synthesizeAndPlay(ctx context.Context, playbackID string, clip ViewerClip) ([]byte, error) {
+func (p *HTTPStreamPlayer) synthesizeAndPlay(ctx context.Context, playbackID string, clip ViewerClip, skipHistory bool) ([]byte, error) {
 	query, err := p.voicevoxClient.CreateQuery(ctx, clip.Text, clip.SpeakerID)
 	if err != nil {
 		p.logger.Error("worker CreateQuery failed", "playbackID", playbackID, "speakerID", clip.SpeakerID, "error", err)
@@ -1241,7 +1227,7 @@ func (p *HTTPStreamPlayer) synthesizeAndPlay(ctx context.Context, playbackID str
 		return nil, err
 	}
 
-	if pErr := p.Play(ctx, wav, clipToPlayMeta(clip)); pErr != nil {
+	if pErr := p.Play(ctx, wav, clipToPlayMeta(clip, skipHistory)); pErr != nil {
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
 		}
@@ -1256,7 +1242,7 @@ func (p *HTTPStreamPlayer) synthesizeAndPlay(ctx context.Context, playbackID str
 // nextClip を前倒し broadcast する。broadcast に成功した場合は nextClip の WAV を返す（nil なら
 // タイムアウトで broadcast スキップ）。エラー時は playback を failed に遷移させて error を返す。
 // goroutine leak を防ぐため nextSynthCh は buffered channel (cap=1) であること。
-func (p *HTTPStreamPlayer) prefetchSleep(ctx context.Context, playbackID string, duration time.Duration, nextSynthCh chan synthResult, nextClip ViewerClip) ([]byte, error) {
+func (p *HTTPStreamPlayer) prefetchSleep(ctx context.Context, playbackID string, duration time.Duration, nextSynthCh chan synthResult, nextClip ViewerClip, skipHistory bool) ([]byte, error) {
 	timer1 := time.NewTimer(duration - p.prefetchLeadTime)
 	select {
 	case <-timer1.C:
@@ -1281,7 +1267,7 @@ func (p *HTTPStreamPlayer) prefetchSleep(ctx context.Context, playbackID string,
 			p.setPlaybackStatus(playbackID, playbackStatusFailed, result.err.Error())
 			return nil, result.err
 		}
-		if pErr := p.Play(ctx, result.wav, clipToPlayMeta(nextClip)); pErr != nil {
+		if pErr := p.Play(ctx, result.wav, clipToPlayMeta(nextClip, skipHistory)); pErr != nil {
 			if !remainTimer.Stop() {
 				<-remainTimer.C
 			}
@@ -1485,55 +1471,6 @@ func (p *HTTPStreamPlayer) handleCharacterImage(w http.ResponseWriter, r *http.R
 	}
 
 	http.NotFound(w, r)
-}
-
-func (p *HTTPStreamPlayer) handleTestClip(w http.ResponseWriter, r *http.Request) {
-	if p.voicevoxClient == nil {
-		http.Error(w, "voicevox client is not configured", http.StatusServiceUnavailable)
-		return
-	}
-	speakerStr := r.URL.Query().Get("speaker")
-	if speakerStr == "" {
-		http.Error(w, "speaker parameter is required", http.StatusBadRequest)
-		return
-	}
-	speakerID, err := strconv.Atoi(speakerStr)
-	if err != nil {
-		http.Error(w, "speaker parameter must be an integer", http.StatusBadRequest)
-		return
-	}
-	if _, ok := p.speakerLookup[speakerID]; !ok {
-		http.Error(w, "speaker not found", http.StatusBadRequest)
-		return
-	}
-
-	p.testClipCacheMu.Lock()
-	cached, ok := p.testClipCache[speakerID]
-	p.testClipCacheMu.Unlock()
-	if ok {
-		writeWAV(w, cached)
-		return
-	}
-
-	ctx := r.Context()
-	query, err := p.voicevoxClient.CreateQuery(ctx, p.testPhrase, speakerID)
-	if err != nil {
-		p.logger.Error("test-clip CreateQuery failed", "speakerID", speakerID, "error", err)
-		http.Error(w, "failed to create audio query", http.StatusBadGateway)
-		return
-	}
-	wav, err := p.voicevoxClient.Synthesize(ctx, query, speakerID)
-	if err != nil {
-		p.logger.Error("test-clip Synthesize failed", "speakerID", speakerID, "error", err)
-		http.Error(w, "failed to synthesize", http.StatusBadGateway)
-		return
-	}
-
-	p.testClipCacheMu.Lock()
-	p.testClipCache[speakerID] = wav
-	p.testClipCacheMu.Unlock()
-
-	writeWAV(w, wav)
 }
 
 func writeWAV(w http.ResponseWriter, data []byte) {

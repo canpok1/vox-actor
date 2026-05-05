@@ -46,15 +46,9 @@ package infra
 // #229 音量localStorage保存 / 消音チェックボックス:
 // DONE: index.html に音量スライダー初期値 50 と消音チェックボックス(checked) が含まれる
 //
-// #237 音声テストタブ / 接続バッジ / speakers.json / test-clip:
+// #237 音声テストタブ / 接続バッジ / speakers.json:
 // DONE: index.html に配信/音声テストのタブ要素と接続バッジ要素が含まれる
 // DONE: index.html から `.status` 行が削除されている
-// DONE: /test-clip が VoicevoxClient 未注入時に 503 を返す
-// DONE: /test-clip が speaker パラメータ欠落・不正・未登録IDで 400 を返す
-// DONE: /test-clip が成功時に 200 WAV を返す
-// DONE: /test-clip が 2 回目の呼び出しで VoicevoxClient を呼ばずキャッシュから返す
-// DONE: /test-clip が VOICEVOX 合成失敗時に 502 を返す
-// DONE: /test-clip は WithTestPhrase のフレーズを CreateQuery に渡す
 //
 // #284 無音モードフォールバック / /api/status:
 // DONE: /speakers.json は 404 (エンドポイント廃止)
@@ -84,6 +78,11 @@ package infra
 // #408 再生履歴ファイル保存・起動時復元:
 // TODO: Play() で clip が YYYY-MM-DD.jsonl に追記される          → TestHTTPStreamPlayer_History_WritesClipOnPlay
 // TODO: PlayText() で clip が YYYY-MM-DD.jsonl に追記される      → TestHTTPStreamPlayer_History_WritesClipOnPlayText
+//
+// #544 /api/play skip_history フラグ・/test-clip 廃止:
+// DONE: Play() に SkipHistory=true を渡すと履歴ファイルへ追記しない → TestHTTPStreamPlayer_History_SkipHistoryOnPlay
+// DONE: PlayText() に SkipHistory=true を渡すと履歴ファイルへ追記しない → TestHTTPStreamPlayer_History_SkipHistoryOnPlayText
+// DONE: /api/play の skip_history:true リクエストで履歴ファイルへ追記しない → TestHTTPStreamPlayer_APIPlay_SkipHistoryFlagNotWrittenToHistory
 // TODO: 日付変更時に新ファイルへ切り替わる                       → TestHTTPStreamPlayer_History_RotatesOnDateChange
 // TODO: viewer 起動時に 30日より古い *.jsonl が削除される        → TestHTTPStreamPlayer_History_PrunesOldFiles
 // TODO: 当日ファイルなし時も正常起動                             → TestHTTPStreamPlayer_Start_NoHistoryFile
@@ -890,7 +889,7 @@ func TestHTTPStreamPlayer_RingBuffer_FixedSize(t *testing.T) {
 	}
 }
 
-// --- #237 音声テストタブ / 接続バッジ / speakers.json / test-clip ---
+// --- #237 音声テストタブ / 接続バッジ / speakers.json ---
 
 func TestHTTPStreamPlayer_Index_ContainsTabElements(t *testing.T) {
 	t.Parallel()
@@ -1243,7 +1242,7 @@ func TestHTTPStreamPlayer_PlayText_UnknownSpeakerFallback(t *testing.T) {
 	}
 }
 
-// testVoicevoxClient is a minimal stub implementing app.VoicevoxClient for /test-clip tests.
+// testVoicevoxClient is a minimal stub implementing app.VoicevoxClient for /api/play tests.
 type testVoicevoxClient struct {
 	mu              sync.Mutex
 	createQueryCall int
@@ -1297,141 +1296,6 @@ func (c *testVoicevoxClient) Synthesize(_ context.Context, _ *entity.AudioQuery,
 }
 func (c *testVoicevoxClient) GetSpeakers(_ context.Context) ([]entity.Speaker, error) {
 	return nil, nil
-}
-
-func TestHTTPStreamPlayer_TestClip_NoClientReturns503(t *testing.T) {
-	t.Parallel()
-	lookup := map[int]entity.SpeakerStyleInfo{3: {SpeakerName: "ずんだもん", StyleName: "ノーマル"}}
-	p := newStartedPlayerWithOpts(t, WithSpeakerLookup(lookup))
-	resp, err := http.Get("http://" + p.Addr() + "/test-clip?speaker=3")
-	if err != nil {
-		t.Fatalf("GET: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusServiceUnavailable {
-		t.Fatalf("expected 503, got %d", resp.StatusCode)
-	}
-}
-
-func TestHTTPStreamPlayer_TestClip_BadRequest(t *testing.T) {
-	t.Parallel()
-	lookup := map[int]entity.SpeakerStyleInfo{3: {SpeakerName: "ずんだもん", StyleName: "ノーマル"}}
-	stub := &testVoicevoxClient{wav: []byte("RIFFxxx")}
-	p := newStartedPlayerWithOpts(t, WithSpeakerLookup(lookup), WithVoicevoxClient(stub))
-	baseURL := "http://" + p.Addr()
-
-	cases := []struct {
-		name string
-		url  string
-	}{
-		{"missing", baseURL + "/test-clip"},
-		{"empty", baseURL + "/test-clip?speaker="},
-		{"non-numeric", baseURL + "/test-clip?speaker=abc"},
-		{"unknown-id", baseURL + "/test-clip?speaker=999"},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			resp, err := http.Get(tc.url)
-			if err != nil {
-				t.Fatalf("GET: %v", err)
-			}
-			_ = resp.Body.Close()
-			if resp.StatusCode != http.StatusBadRequest {
-				t.Errorf("expected 400, got %d", resp.StatusCode)
-			}
-		})
-	}
-	if stub.createQueryCall != 0 || stub.synthesizeCall != 0 {
-		t.Errorf("expected VoicevoxClient not called on bad requests, got createQuery=%d synth=%d",
-			stub.createQueryCall, stub.synthesizeCall)
-	}
-}
-
-func TestHTTPStreamPlayer_TestClip_SuccessAndCached(t *testing.T) {
-	t.Parallel()
-	lookup := map[int]entity.SpeakerStyleInfo{3: {SpeakerName: "ずんだもん", StyleName: "ノーマル"}}
-	stub := &testVoicevoxClient{wav: []byte("RIFFtestwav")}
-	p := newStartedPlayerWithOpts(t,
-		WithSpeakerLookup(lookup),
-		WithVoicevoxClient(stub),
-		WithTestPhrase("テスト発話"),
-	)
-	baseURL := "http://" + p.Addr()
-
-	// 1回目: VoicevoxClient を呼び WAV を返す
-	resp1, err := http.Get(baseURL + "/test-clip?speaker=3")
-	if err != nil {
-		t.Fatalf("first GET: %v", err)
-	}
-	body1, _ := io.ReadAll(resp1.Body)
-	_ = resp1.Body.Close()
-	if resp1.StatusCode != http.StatusOK {
-		t.Fatalf("expected 200, got %d", resp1.StatusCode)
-	}
-	if ct := resp1.Header.Get("Content-Type"); !strings.Contains(ct, "audio/wav") {
-		t.Errorf("unexpected Content-Type: %s", ct)
-	}
-	if !bytes.Equal(body1, []byte("RIFFtestwav")) {
-		t.Errorf("unexpected body: %q", body1)
-	}
-	if stub.capturedText != "テスト発話" {
-		t.Errorf("expected captured text=テスト発話, got %q", stub.capturedText)
-	}
-	if stub.capturedSpeaker != 3 {
-		t.Errorf("expected captured speaker=3, got %d", stub.capturedSpeaker)
-	}
-	if stub.createQueryCall != 1 || stub.synthesizeCall != 1 {
-		t.Errorf("expected single synth on first call: createQuery=%d synth=%d",
-			stub.createQueryCall, stub.synthesizeCall)
-	}
-
-	// 2回目: キャッシュから返る
-	resp2, err := http.Get(baseURL + "/test-clip?speaker=3")
-	if err != nil {
-		t.Fatalf("second GET: %v", err)
-	}
-	body2, _ := io.ReadAll(resp2.Body)
-	_ = resp2.Body.Close()
-	if resp2.StatusCode != http.StatusOK {
-		t.Fatalf("expected 200, got %d", resp2.StatusCode)
-	}
-	if !bytes.Equal(body2, []byte("RIFFtestwav")) {
-		t.Errorf("cached body mismatch: %q", body2)
-	}
-	if stub.createQueryCall != 1 || stub.synthesizeCall != 1 {
-		t.Errorf("expected cache hit, VoicevoxClient should not be called again: createQuery=%d synth=%d",
-			stub.createQueryCall, stub.synthesizeCall)
-	}
-}
-
-func TestHTTPStreamPlayer_TestClip_SynthesizeFailureReturns502(t *testing.T) {
-	t.Parallel()
-	lookup := map[int]entity.SpeakerStyleInfo{3: {SpeakerName: "ずんだもん", StyleName: "ノーマル"}}
-	stub := &testVoicevoxClient{synthesizeErr: errors.New("engine down")}
-	p := newStartedPlayerWithOpts(t, WithSpeakerLookup(lookup), WithVoicevoxClient(stub))
-	resp, err := http.Get("http://" + p.Addr() + "/test-clip?speaker=3")
-	if err != nil {
-		t.Fatalf("GET: %v", err)
-	}
-	_ = resp.Body.Close()
-	if resp.StatusCode != http.StatusBadGateway {
-		t.Errorf("expected 502, got %d", resp.StatusCode)
-	}
-}
-
-func TestHTTPStreamPlayer_TestClip_CreateQueryFailureReturns502(t *testing.T) {
-	t.Parallel()
-	lookup := map[int]entity.SpeakerStyleInfo{3: {SpeakerName: "ずんだもん", StyleName: "ノーマル"}}
-	stub := &testVoicevoxClient{createQueryErr: errors.New("bad")}
-	p := newStartedPlayerWithOpts(t, WithSpeakerLookup(lookup), WithVoicevoxClient(stub))
-	resp, err := http.Get("http://" + p.Addr() + "/test-clip?speaker=3")
-	if err != nil {
-		t.Fatalf("GET: %v", err)
-	}
-	_ = resp.Body.Close()
-	if resp.StatusCode != http.StatusBadGateway {
-		t.Errorf("expected 502, got %d", resp.StatusCode)
-	}
 }
 
 // --- #285 サーバー側エラー配信 ---
@@ -3781,5 +3645,126 @@ func TestHTTPStreamPlayer_APIHistory_IncludesParams(t *testing.T) {
 	}
 	if entry.Intonation == nil || *entry.Intonation != intonation {
 		t.Errorf("expected Intonation=%v, got %v", intonation, entry.Intonation)
+	}
+}
+
+func TestHTTPStreamPlayer_History_SkipHistoryOnPlay(t *testing.T) {
+	historyDir := t.TempDir()
+	fixedNow := time.Date(2026, 4, 28, 10, 0, 0, 0, time.Local)
+	lookup := map[int]entity.SpeakerStyleInfo{
+		3: {SpeakerName: "ずんだもん", StyleName: "ノーマル"},
+	}
+	p, err := NewHTTPStreamPlayer("127.0.0.1:0", newTestStreamAssets(),
+		WithHistoryDir(historyDir),
+		withNowFunc(func() time.Time { return fixedNow }),
+		WithSpeakerLookup(lookup),
+	)
+	if err != nil {
+		t.Fatalf("NewHTTPStreamPlayer: %v", err)
+	}
+	if err := p.Start(context.Background()); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		_ = p.Shutdown(ctx)
+	})
+
+	if err := p.Play(context.Background(), []byte("RIFFwavdata"), app.PlayMeta{
+		Text: "スキップテスト", SpeakerID: 3, SkipHistory: true,
+	}); err != nil {
+		t.Fatalf("Play: %v", err)
+	}
+
+	filePath := filepath.Join(historyDir, "2026-04-28.jsonl")
+	if _, err := os.Stat(filePath); !os.IsNotExist(err) {
+		t.Errorf("expected history file not to exist when SkipHistory=true, but it exists (err=%v)", err)
+	}
+}
+
+func TestHTTPStreamPlayer_History_SkipHistoryOnPlayText(t *testing.T) {
+	historyDir := t.TempDir()
+	fixedNow := time.Date(2026, 4, 28, 10, 0, 0, 0, time.Local)
+	lookup := map[int]entity.SpeakerStyleInfo{
+		3: {SpeakerName: "ずんだもん", StyleName: "ノーマル"},
+	}
+	p, err := NewHTTPStreamPlayer("127.0.0.1:0", newTestStreamAssets(),
+		WithHistoryDir(historyDir),
+		withNowFunc(func() time.Time { return fixedNow }),
+		WithSpeakerLookup(lookup),
+	)
+	if err != nil {
+		t.Fatalf("NewHTTPStreamPlayer: %v", err)
+	}
+	if err := p.Start(context.Background()); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		_ = p.Shutdown(ctx)
+	})
+	p.silentInterval = 1 * time.Millisecond
+
+	if err := p.PlayText(context.Background(), app.PlayMeta{
+		Text: "サイレントスキップ", SpeakerID: 3, SkipHistory: true,
+	}); err != nil {
+		t.Fatalf("PlayText: %v", err)
+	}
+
+	filePath := filepath.Join(historyDir, "2026-04-28.jsonl")
+	if _, err := os.Stat(filePath); !os.IsNotExist(err) {
+		t.Errorf("expected history file not to exist when SkipHistory=true, but it exists (err=%v)", err)
+	}
+}
+
+func TestHTTPStreamPlayer_APIPlay_SkipHistoryFlagNotWrittenToHistory(t *testing.T) {
+	historyDir := t.TempDir()
+	fixedNow := time.Date(2026, 4, 28, 10, 0, 0, 0, time.Local)
+	stub := &testVoicevoxClient{wav: []byte("RIFFx")}
+	lookup := map[int]entity.SpeakerStyleInfo{
+		3: {SpeakerName: "ずんだもん", StyleName: "ノーマル"},
+	}
+	p, err := NewHTTPStreamPlayer("127.0.0.1:0", newTestStreamAssets(),
+		WithHistoryDir(historyDir),
+		withNowFunc(func() time.Time { return fixedNow }),
+		WithSpeakerLookup(lookup),
+		WithVoicevoxClient(stub),
+	)
+	if err != nil {
+		t.Fatalf("NewHTTPStreamPlayer: %v", err)
+	}
+	if err := p.Start(context.Background()); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		_ = p.Shutdown(ctx)
+	})
+
+	events := subscribeSSE(t, "http://"+p.Addr())
+	time.Sleep(100 * time.Millisecond)
+
+	body := bytes.NewBufferString(`{"clips":[{"text":"テスト","speaker_id":3}],"skip_history":true}`)
+	resp, err := http.Post("http://"+p.Addr()+"/api/play", "application/json", body)
+	if err != nil {
+		t.Fatalf("POST /api/play: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	select {
+	case <-events:
+	case <-time.After(3 * time.Second):
+		t.Fatal("timeout waiting for SSE clip event")
+	}
+
+	filePath := filepath.Join(historyDir, "2026-04-28.jsonl")
+	if _, err := os.Stat(filePath); !os.IsNotExist(err) {
+		t.Errorf("expected history file not to exist when skip_history=true, but it exists (err=%v)", err)
 	}
 }

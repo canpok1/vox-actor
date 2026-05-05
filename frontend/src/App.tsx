@@ -338,11 +338,14 @@ export function App() {
       return;
     }
     setTestError("");
-    const audio = audioRef.current;
-    if (!audio) return;
-    audio.pause();
-    audio.src = `/test-clip?speaker=${encodeURIComponent(testSpeakerId)}`;
-    audio.play().catch((err: unknown) => {
+    fetch("/api/play", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        clips: [{ text: "音量テストです", speaker_id: Number(testSpeakerId) }],
+        skip_history: true,
+      }),
+    }).catch((err: unknown) => {
       console.error("test play failed", err);
       showTestError("合成に失敗しました");
     });

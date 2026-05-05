@@ -11,26 +11,12 @@ Feature: 音声テストタブ
     Then 話者セレクタが話者ID=1 のままである
     # test: frontend/test/e2e/test-panel.spec.ts::"話者選択は localStorage に保存され、リロード後も復元される"
 
-  Scenario: テスト再生ボタンで /test-clip にリクエストが飛び、audio.src も更新される
+  Scenario: テスト再生ボタンで POST /api/play に skip_history:true でリクエストが飛ぶ
     Given viewer フロントエンドが起動している
     When ページを開く
     And 「音声テスト」タブに切り替える
     And 話者セレクタで話者ID=3 を選択する
     And 「テスト再生」ボタンをクリックする
-    Then /test-clip?speaker=3 へのリクエストが発生する
-    And audio.src が /test-clip?speaker=3 の URL になる
-    # test: frontend/test/e2e/test-panel.spec.ts::"テスト再生ボタンで /test-clip にリクエストが飛び、audio.src も更新される"
-
-  # ===== キャッシュ再生 =====
-
-  Scenario: 話者ごとに初回合成のみ実行され、以降は音声がキャッシュされて再生される
-    Given viewer フロントエンドが起動している
-    When ページを開く
-    And 「音声テスト」タブに切り替える
-    And 話者セレクタで話者ID=3 を選択する
-    And 「テスト再生」ボタンを1回目クリックする
-    Then /test-clip?speaker=3 へのリクエストが発生する
-    And audio.src が /test-clip?speaker=3 の URL になる
-    When 「テスト再生」ボタンを2回目クリックする
-    Then audio.src は引き続き /test-clip?speaker=3 の URL のままである
-    # test: frontend/test/e2e/test-panel.spec.ts::"話者ごとに初回合成のみ実行され、以降は音声がキャッシュされて再生される"
+    Then POST /api/play に skip_history=true のリクエストが発生する
+    And リクエストボディの clips[0].speaker_id が 3 である
+    # test: frontend/test/e2e/test-panel.spec.ts::"テスト再生ボタンで POST /api/play に skip_history:true でリクエストが飛ぶ"

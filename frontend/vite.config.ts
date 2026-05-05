@@ -29,10 +29,6 @@ export default defineConfig({
         target: backendTarget,
         changeOrigin: true,
       },
-      "/test-clip": {
-        target: backendTarget,
-        changeOrigin: true,
-      },
       "/clips": {
         target: backendTarget,
         changeOrigin: true,
