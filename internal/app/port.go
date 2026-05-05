@@ -52,6 +52,14 @@ type GitCloner interface {
 	Clone(ctx context.Context, repoURL string, destDir string) error
 }
 
+// WavSaver は WAV データをファイルに保存するインターフェース。
+type WavSaver interface {
+	// Save は wavData を path に保存する。
+	// 親ディレクトリが存在しない場合は自動作成する。
+	// 既存ファイルがある場合は上書きする。
+	Save(path string, wavData []byte) error
+}
+
 // VoicevoxClient はVOICEVOXエンジンとの通信を抽象化するインターフェース。
 type VoicevoxClient interface {
 	// HealthCheck はエンジンの疎通確認を行う。

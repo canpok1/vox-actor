@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 )
 
@@ -14,6 +15,9 @@ type SayParams struct {
 	Intonation *float64
 	// DryRun が true の場合、VOICEVOXエンジン/音声再生を一切呼ばずログ出力のみ行う。
 	DryRun bool
+	// SaveWavPath が空でない場合、合成した WAV をこのパスに保存する。
+	// DryRun 時・viewer 送信経路では保存しない。
+	SaveWavPath string
 }
 
 // SayOption はSayUsecaseの生成時に指定するオプション。
@@ -28,11 +32,21 @@ func WithSayLogger(logger *slog.Logger) SayOption {
 	}
 }
 
+// WithWavSaver は WavSaver を設定するオプション。
+func WithWavSaver(saver WavSaver) SayOption {
+	return func(u *SayUsecase) {
+		if saver != nil {
+			u.wavSaver = saver
+		}
+	}
+}
+
 // SayUsecase はsayサブコマンドのユースケース。
 type SayUsecase struct {
-	client VoicevoxClient
-	player AudioPlayer
-	logger *slog.Logger
+	client   VoicevoxClient
+	player   AudioPlayer
+	logger   *slog.Logger
+	wavSaver WavSaver
 }
 
 // NewSayUsecase は新しいSayUsecaseを生成する。
@@ -87,6 +101,13 @@ func (u *SayUsecase) Run(ctx context.Context, params SayParams) error {
 		return err
 	}
 	u.logger.Info("synthesis completed", "wavSize", len(wavData))
+
+	if params.SaveWavPath != "" && u.wavSaver != nil {
+		if err := u.wavSaver.Save(params.SaveWavPath, wavData); err != nil {
+			return fmt.Errorf("save wav: %w", err)
+		}
+		u.logger.Info("wav saved", "path", params.SaveWavPath)
+	}
 
 	if err := u.player.Play(ctx, wavData, PlayMeta{Text: params.Text, SpeakerID: params.SpeakerID}); err != nil {
 		if ctx.Err() != nil {

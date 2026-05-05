@@ -41,6 +41,7 @@ func makeSayCmd(deps *SayDeps) *cobra.Command {
 	}
 
 	registerCommonFlags(cmd)
+	registerSaveWavFlag(cmd)
 
 	return cmd
 }
@@ -120,13 +121,16 @@ func runSay(cmd *cobra.Command, args []string, deps *SayDeps) error {
 		return err
 	}
 
+	saveWavPath, _ := cmd.Flags().GetString("save-wav")
+
 	params := app.SayParams{
-		Text:       args[0],
-		SpeakerID:  speakerID,
-		Speed:      &speed,
-		Pitch:      &pitch,
-		Intonation: &intonation,
-		DryRun:     dryRun,
+		Text:        args[0],
+		SpeakerID:   speakerID,
+		Speed:       &speed,
+		Pitch:       &pitch,
+		Intonation:  &intonation,
+		DryRun:      dryRun,
+		SaveWavPath: saveWavPath,
 	}
 
 	client := deps.ClientFactory(engineURL)
@@ -134,7 +138,12 @@ func runSay(cmd *cobra.Command, args []string, deps *SayDeps) error {
 		return fmt.Errorf("failed to create VoicevoxClient for %s", engineURL)
 	}
 
-	uc := app.NewSayUsecase(client, deps.Player, app.WithSayLogger(logger))
+	opts := []app.SayOption{app.WithSayLogger(logger)}
+	if saveWavPath != "" {
+		opts = append(opts, app.WithWavSaver(infra.NewWavSaver()))
+	}
+
+	uc := app.NewSayUsecase(client, deps.Player, opts...)
 	if err := uc.Run(ctx, params); err != nil {
 		return err
 	}
