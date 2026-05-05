@@ -254,3 +254,63 @@ test.describe("Timeline: 履歴件数上限", () => {
     ).not.toBeVisible();
   });
 });
+
+test.describe("TimelineItem: 再生ボタン", () => {
+  test.beforeEach(async ({ request }) => {
+    await resetStub(request);
+  });
+
+  test("clip アイテムに「再生」ボタンが表示される", async ({
+    page,
+    request,
+  }) => {
+    await page.goto("/");
+    await expect(page.getByText("● 接続中")).toBeVisible();
+
+    const ts = 1700003000001;
+    await pushClip(request, {
+      text: "再生ボタンテスト",
+      speakerId: 3,
+      timestamp: ts,
+    });
+
+    const item = page.locator(`[data-clip-timestamp="${ts}"]`);
+    await expect(item).toBeVisible();
+    await expect(item.getByRole("button", { name: "再生" })).toBeVisible();
+  });
+
+  test("「再生」ボタン押下で POST /api/play に skip_history:true, 正しい clip パラメータが送信される", async ({
+    page,
+    request,
+  }) => {
+    await page.goto("/");
+    await expect(page.getByText("● 接続中")).toBeVisible();
+
+    const ts = 1700003000002;
+    await pushClip(request, {
+      text: "再生テキスト",
+      speakerId: 3,
+      speed: 1.1,
+      timestamp: ts,
+    });
+
+    const item = page.locator(`[data-clip-timestamp="${ts}"]`);
+    await expect(item).toBeVisible();
+
+    const requestPromise = page.waitForRequest(
+      (req) => req.url().includes("/api/play") && req.method() === "POST",
+    );
+
+    await item.getByRole("button", { name: "再生" }).click();
+    const req = await requestPromise;
+    const body = req.postDataJSON() as {
+      clips: { text: string; speaker_id: number; speed?: number }[];
+      skip_history: boolean;
+    };
+    expect(body.skip_history).toBe(true);
+    expect(body.clips).toHaveLength(1);
+    expect(body.clips[0].text).toBe("再生テキスト");
+    expect(body.clips[0].speaker_id).toBe(3);
+    expect(body.clips[0].speed).toBe(1.1);
+  });
+});
