@@ -92,8 +92,7 @@ type HTTPStreamPlayer struct {
 
 	// saveWavDir が空でない場合、Play() で合成した WAV をこのディレクトリに保存する。
 	saveWavDir string
-	// wavSaver は WAV ファイルの保存に使うインターフェース。saveWavDir が空でなければ必須。
-	wavSaver app.WavSaver
+	wavSaver   app.WavSaver
 
 	// prefetchLeadTime は次クリップを前倒し broadcast するリードタイム。
 	// 現クリップの推定再生時間残り prefetchLeadTime の段階で次クリップの clipEvent を送信する。
@@ -584,7 +583,7 @@ func (p *HTTPStreamPlayer) Play(ctx context.Context, wavData []byte, meta app.Pl
 		return fmt.Errorf("failed to marshal clip payload: %w", err)
 	}
 
-	if p.saveWavDir != "" && p.wavSaver != nil {
+	if p.saveWavDir != "" {
 		savePath := filepath.Join(p.saveWavDir, app.GenerateWavFilename(meta.Text, ts))
 		if err := p.wavSaver.Save(savePath, buf); err != nil {
 			p.logger.Warn("failed to save wav", "path", savePath, "error", err)

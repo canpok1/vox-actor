@@ -156,9 +156,8 @@ func runViewer(cmd *cobra.Command, deps *ViewerDeps) error {
 	factory := deps.StreamPlayerFactory
 	if saveWavDir != "" {
 		saver := infra.NewWavSaver()
-		origFactory := deps.StreamPlayerFactory
 		factory = func(addr string, logger *slog.Logger, speakerLookup map[int]entity.SpeakerStyleInfo, orderedSpeakerIDs []int, client app.VoicevoxClient) (app.StreamPlayer, error) {
-			sp, err := origFactory(addr, logger, speakerLookup, orderedSpeakerIDs, client)
+			sp, err := deps.StreamPlayerFactory(addr, logger, speakerLookup, orderedSpeakerIDs, client)
 			if err != nil {
 				return nil, err
 			}
