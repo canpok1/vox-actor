@@ -99,6 +99,7 @@ func makeViewerCmd(deps *ViewerDeps) *cobra.Command {
 	registerBaseFlags(cmd)
 	cmd.Flags().String("host", "127.0.0.1", "HTTPサーバーのバインドホスト")
 	cmd.Flags().Int("port", 8080, "HTTPサーバーのバインドポート")
+	registerSaveWavDirFlag(cmd)
 
 	return cmd
 }
@@ -131,6 +132,7 @@ func runViewer(cmd *cobra.Command, deps *ViewerDeps) error {
 	host, _ := cmd.Flags().GetString("host")
 	port, _ := cmd.Flags().GetInt("port")
 	engineURL, _ := cmd.Flags().GetString("engine-url")
+	saveWavDir, _ := cmd.Flags().GetString("save-wav-dir")
 
 	if port < 1 || port > 65535 {
 		return fmt.Errorf("%w: invalid port: %d", ErrUsage, port)
@@ -151,7 +153,22 @@ func runViewer(cmd *cobra.Command, deps *ViewerDeps) error {
 		return fmt.Errorf("failed to create VoicevoxClient for %s", engineURL)
 	}
 
-	sp, silent, err := startStreamPlayer(ctx, addr, logger, client, deps.StreamPlayerFactory)
+	factory := deps.StreamPlayerFactory
+	if saveWavDir != "" {
+		saver := infra.NewWavSaver()
+		factory = func(addr string, logger *slog.Logger, speakerLookup map[int]entity.SpeakerStyleInfo, orderedSpeakerIDs []int, client app.VoicevoxClient) (app.StreamPlayer, error) {
+			sp, err := deps.StreamPlayerFactory(addr, logger, speakerLookup, orderedSpeakerIDs, client)
+			if err != nil {
+				return nil, err
+			}
+			if httpSP, ok := sp.(*infra.HTTPStreamPlayer); ok {
+				infra.WithSaveWavDir(saveWavDir, saver)(httpSP)
+			}
+			return sp, nil
+		}
+	}
+
+	sp, silent, err := startStreamPlayer(ctx, addr, logger, client, factory)
 	if err != nil {
 		return err
 	}
