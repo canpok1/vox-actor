@@ -44,8 +44,6 @@ export function usePlaybackQueue(
   const [playingClipTimestamp, setPlayingClipTimestamp] = useState<
     number | null
   >(null);
-  const playingClipTimestampRef = useRef<number | null>(null);
-  playingClipTimestampRef.current = playingClipTimestamp;
 
   // startPrefetch は startNext から呼ばれ、完了後に startNext を呼ぶ。
   // 互いに依存する循環呼び出しを ref で解決する。
@@ -83,7 +81,6 @@ export function usePlaybackQueue(
         }
         isPlayingRef.current = false;
         if (item.kind === "timeline") {
-          playingClipTimestampRef.current = null;
           setPlayingClipTimestamp(null);
         }
         startNextRef.current();
@@ -113,9 +110,7 @@ export function usePlaybackQueue(
       playingObjUrlRef.current = ready.objectUrl;
       isPlayingRef.current = true;
       if (ready.item.kind === "timeline") {
-        const ts = ready.item.clip.timestamp;
-        playingClipTimestampRef.current = ts;
-        setPlayingClipTimestamp(ts);
+        setPlayingClipTimestamp(ready.item.clip.timestamp);
       }
       audio.src = ready.objectUrl;
       audio.play().catch((err: unknown) => {
@@ -127,7 +122,6 @@ export function usePlaybackQueue(
         clearWatchdog();
         isPlayingRef.current = false;
         if (ready.item.kind === "timeline") {
-          playingClipTimestampRef.current = null;
           setPlayingClipTimestamp(null);
         }
         startNextRef.current();
@@ -223,7 +217,6 @@ export function usePlaybackQueue(
     }
     waitingRef.current = [];
     isPlayingRef.current = false;
-    playingClipTimestampRef.current = null;
     setPlayingClipTimestamp(null);
   }, [audioRef, clearWatchdog]);
 
