@@ -69,9 +69,19 @@ func registerViewerURLFlag(cmd *cobra.Command) {
 	cmd.Flags().String("viewer-url", viewerURLDefaultFromEnv(), "viewer の HTTP エンドポイント URL (例: http://192.168.1.10:8080)。指定時は lockfile auto-detect をスキップして明示 URL の viewer に POST する。")
 }
 
+// saveWavDefaultFromEnv は VOX_SAVE_WAV 環境変数からデフォルトの保存パスを解決する。
+func saveWavDefaultFromEnv() string {
+	return os.Getenv("VOX_SAVE_WAV")
+}
+
 // registerCommonFlags は各サブコマンド共通のフラグを登録する。
 func registerCommonFlags(cmd *cobra.Command) {
 	registerBaseFlags(cmd)
 	cmd.Flags().Bool("dry-run", false, "VOICEVOX・音声再生を行わず、読み上げ対象をログ出力")
 	registerViewerURLFlag(cmd)
+}
+
+// registerSaveWavFlag は --save-wav フラグを登録する。say コマンドなど wav 保存が必要なコマンドで呼ぶ。
+func registerSaveWavFlag(cmd *cobra.Command) {
+	cmd.Flags().String("save-wav", saveWavDefaultFromEnv(), "合成した WAV を保存するパス（ローカル合成時のみ。親ディレクトリは自動作成）")
 }

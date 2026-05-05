@@ -85,6 +85,7 @@ vox-actor say <text>
 | `--intonation` | — | `1.0` | 抑揚 |
 | `--verbose` | — | `false` | 詳細ログを出力 |
 | `--dry-run` | — | `false` | VOICEVOX・音声再生を行わず、読み上げ対象をログ出力（[詳細](#dry-runモード)） |
+| `--save-wav` | `VOX_SAVE_WAV` | (未指定) | 合成した WAV をファイルに保存するパス。ローカル合成時のみ有効（viewer 送信経路では保存しない）。親ディレクトリが存在しない場合は自動作成。既存ファイルは上書き。`--dry-run` 時は保存しない。 |
 
 ## `script` サブコマンド
 

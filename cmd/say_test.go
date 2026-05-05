@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -735,5 +736,80 @@ func TestRunSay_LocalMode_PrintsLocalPlaybackToStdout(t *testing.T) {
 	got := strings.TrimSpace(stdout.String())
 	if got != "local_playback" {
 		t.Errorf("expected stdout=local_playback, got %q", got)
+	}
+}
+
+// --- #534 --save-wav テスト ---
+// DONE: --save-wav フラグがヘルプに含まれる             → TestSayCmd_HelpContainsSaveWav
+// DONE: --save-wav デフォルトは空文字                   → TestSayCmd_SaveWavFlag_DefaultEmpty
+// DONE: VOX_SAVE_WAV 環境変数でデフォルト値が設定される → TestSayCmd_EnvVarVOXSaveWav
+// DONE: --save-wav 指定時にファイルが保存される          → TestRunSay_SaveWav_SavesFile
+
+func TestSayCmd_HelpContainsSaveWav(t *testing.T) {
+	rootCmd := makeRootCmd()
+	buf := new(bytes.Buffer)
+	rootCmd.SetOut(buf)
+	rootCmd.SetArgs([]string{"say", "--help"})
+
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("expected no error for --help, got: %v", err)
+	}
+	if !strings.Contains(buf.String(), "--save-wav") {
+		t.Error("expected help output to contain '--save-wav'")
+	}
+}
+
+func TestSayCmd_SaveWavFlag_DefaultEmpty(t *testing.T) {
+	t.Setenv("VOX_SAVE_WAV", "")
+
+	rootCmd := makeRootCmd()
+	sayCmd := findSayCmd(t, rootCmd)
+
+	saveWav, err := sayCmd.Flags().GetString("save-wav")
+	if err != nil {
+		t.Fatalf("expected save-wav flag to exist, got error: %v", err)
+	}
+	if saveWav != "" {
+		t.Errorf("expected default save-wav to be empty, got: %s", saveWav)
+	}
+}
+
+func TestSayCmd_EnvVarVOXSaveWav(t *testing.T) {
+	t.Setenv("VOX_SAVE_WAV", "/tmp/output.wav")
+
+	rootCmd := makeRootCmd()
+	sayCmd := findSayCmd(t, rootCmd)
+
+	saveWav, err := sayCmd.Flags().GetString("save-wav")
+	if err != nil {
+		t.Fatalf("expected save-wav flag to exist, got error: %v", err)
+	}
+	if saveWav != "/tmp/output.wav" {
+		t.Errorf("expected save-wav '/tmp/output.wav', got: %s", saveWav)
+	}
+}
+
+func TestRunSay_SaveWav_SavesFile(t *testing.T) {
+	dir := t.TempDir()
+	lockPath := filepath.Join(dir, "viewer.lock")
+	wavPath := filepath.Join(dir, "output.wav")
+
+	cmd := newCmdWithContext(t)
+	registerCommonFlags(cmd)
+	registerSaveWavFlag(cmd)
+	_ = cmd.ParseFlags([]string{"--save-wav", wavPath})
+
+	deps := &SayDeps{
+		ClientFactory:    func(_ string) app.VoicevoxClient { return &mockSayClient{} },
+		Player:           &trackingPlayer{playFn: func() {}},
+		LockPathResolver: func() (string, error) { return lockPath, nil },
+	}
+
+	if err := runSay(cmd, []string{"こんにちは"}, deps); err != nil {
+		t.Fatalf("runSay: %v", err)
+	}
+
+	if _, err := os.Stat(wavPath); os.IsNotExist(err) {
+		t.Errorf("expected wav file to be saved at %s", wavPath)
 	}
 }

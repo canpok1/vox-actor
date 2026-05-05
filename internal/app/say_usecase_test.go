@@ -303,3 +303,124 @@ func TestSayUsecase_Run_CancelledContext_ReturnsNil(t *testing.T) {
 		t.Fatalf("expected nil for cancelled context, got: %v", err)
 	}
 }
+
+// --- SaveWavPath テスト (#534) ---
+// DONE: 正常系: SaveWavPath 指定時に WavSaver.Save が呼ばれる
+// DONE: 正常系: SaveWavPath が空の場合 WavSaver.Save は呼ばれない
+// DONE: 正常系: DryRun 時は SaveWavPath 指定でも WavSaver.Save は呼ばれない
+// DONE: 異常系: WavSaver.Save がエラーを返したらエラーが返る
+
+type mockWavSaver struct {
+	saveCalls int
+	savedPath string
+	savedData []byte
+	err       error
+}
+
+func (m *mockWavSaver) Save(path string, data []byte) error {
+	m.saveCalls++
+	m.savedPath = path
+	m.savedData = data
+	return m.err
+}
+
+func TestSayUsecase_Run_SaveWav_SavesFile(t *testing.T) {
+	wavData := []byte("RIFF fake-wav")
+	client := &mockVoicevoxClient{
+		query:   &entity.AudioQuery{},
+		wavData: wavData,
+	}
+	player := &mockAudioPlayer{}
+	saver := &mockWavSaver{}
+
+	uc := app.NewSayUsecase(client, player, app.WithWavSaver(saver))
+	params := app.SayParams{
+		Text:        "こんにちは",
+		SpeakerID:   3,
+		SaveWavPath: "/tmp/test.wav",
+	}
+
+	if err := uc.Run(context.Background(), params); err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+	if saver.saveCalls != 1 {
+		t.Errorf("expected 1 Save call, got: %d", saver.saveCalls)
+	}
+	if saver.savedPath != "/tmp/test.wav" {
+		t.Errorf("expected saved path /tmp/test.wav, got: %s", saver.savedPath)
+	}
+	if string(saver.savedData) != string(wavData) {
+		t.Errorf("expected saved data %q, got %q", wavData, saver.savedData)
+	}
+	// 保存後も再生は行われる
+	if player.playCalls != 1 {
+		t.Errorf("expected 1 Play call after save, got: %d", player.playCalls)
+	}
+}
+
+func TestSayUsecase_Run_SaveWav_EmptyPath_NotSaved(t *testing.T) {
+	client := &mockVoicevoxClient{
+		query:   &entity.AudioQuery{},
+		wavData: []byte("RIFF fake-wav"),
+	}
+	player := &mockAudioPlayer{}
+	saver := &mockWavSaver{}
+
+	uc := app.NewSayUsecase(client, player, app.WithWavSaver(saver))
+	params := app.SayParams{
+		Text:        "こんにちは",
+		SpeakerID:   3,
+		SaveWavPath: "",
+	}
+
+	if err := uc.Run(context.Background(), params); err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+	if saver.saveCalls != 0 {
+		t.Errorf("expected 0 Save calls when path is empty, got: %d", saver.saveCalls)
+	}
+}
+
+func TestSayUsecase_Run_SaveWav_DryRun_NotSaved(t *testing.T) {
+	client := &mockVoicevoxClient{
+		query:   &entity.AudioQuery{},
+		wavData: []byte("RIFF fake-wav"),
+	}
+	player := &mockAudioPlayer{}
+	saver := &mockWavSaver{}
+
+	uc := app.NewSayUsecase(client, player, app.WithWavSaver(saver))
+	params := app.SayParams{
+		Text:        "こんにちは",
+		SpeakerID:   3,
+		SaveWavPath: "/tmp/test.wav",
+		DryRun:      true,
+	}
+
+	if err := uc.Run(context.Background(), params); err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+	if saver.saveCalls != 0 {
+		t.Errorf("expected 0 Save calls in dry-run, got: %d", saver.saveCalls)
+	}
+}
+
+func TestSayUsecase_Run_SaveWav_SaveError_ReturnsError(t *testing.T) {
+	client := &mockVoicevoxClient{
+		query:   &entity.AudioQuery{},
+		wavData: []byte("RIFF fake-wav"),
+	}
+	player := &mockAudioPlayer{}
+	saver := &mockWavSaver{err: errors.New("disk full")}
+
+	uc := app.NewSayUsecase(client, player, app.WithWavSaver(saver))
+	params := app.SayParams{
+		Text:        "こんにちは",
+		SpeakerID:   3,
+		SaveWavPath: "/tmp/test.wav",
+	}
+
+	if err := uc.Run(context.Background(), params); err == nil {
+		t.Fatal("expected error when WavSaver.Save fails, got nil")
+	}
+}
