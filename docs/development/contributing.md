@@ -71,7 +71,7 @@ make dev-frontend
 make dev-watch
 ```
 
-ブラウザで **Vite の URL（例: `http://localhost:5173`）** を開きます。`/events`（SSE）, `/speakers.json`, `/test-clip`, `/clips/*` は `frontend/vite.config.ts` の `server.proxy` 経由で Go バックエンド（`localhost:8080`）に中継されます。
+ブラウザで **Vite の URL（例: `http://localhost:5173`）** を開きます。`/events`（SSE）, `/api/*`, `/clips/*` は `frontend/vite.config.ts` の `server.proxy` 経由で Go バックエンド（`localhost:8080`）に中継されます。
 
 ### 動作確認ポイント
 
@@ -133,7 +133,7 @@ cd frontend && npm run test:unit:watch
 
 ## 配信画面の E2E テスト（Playwright）
 
-`frontend/test/e2e/` 以下に Playwright + Chromium による配信画面の E2E テストがあります。実バックエンド（`vox-actor viewer`）の代わりに `frontend/test/stub-server.mjs` のスタブを使い、SSE / `/api/status` / `/test-clip` / `/clips/*.wav` を決定的にエミュレートします。
+`frontend/test/e2e/` 以下に Playwright + Chromium による配信画面の E2E テストがあります。実バックエンド（`vox-actor viewer`）の代わりに `frontend/test/stub-server.mjs` のスタブを使い、SSE / `/api/status` / `/api/play` / `/clips/*.wav` を決定的にエミュレートします。
 
 ### 実行
 

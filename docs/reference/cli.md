@@ -323,11 +323,12 @@ viewer が起動する HTTP サーバーが提供するエンドポイントの�
       "pitch": 0.0,
       "intonation": 1.0
     }
-  ]
+  ],
+  "skip_history": false
 }
 ```
 
-`speed` / `pitch` / `intonation` は省略可能です。省略時は viewer 起動時のデフォルト値が使用されます。
+`speed` / `pitch` / `intonation` は省略可能です。省略時は viewer 起動時のデフォルト値が使用されます。`skip_history` は省略可能（省略時 `false`）です。`true` を指定すると、再生履歴ファイル（`~/.vox-actor/viewer/history/YYYY-MM-DD.jsonl`）への追記をスキップします。
 
 **レスポンス**
 
@@ -457,32 +458,6 @@ viewer が起動する HTTP サーバーが提供するエンドポイントの�
 - 複数スタイルを持つキャラクターはスタイルごとにエントリが展開されます。
 - 不正な `speaker.json` を持つキャラクターはスキップされ、有効なキャラクターのみ返します。
 - キャラクター設定の優先順位はプロジェクト assets（`VOX_ACTOR_WORKSPACE/assets/`）> HOME assets（`~/.vox-actor/assets/`）です。
-
-#### GET /test-clip
-
-指定した話者 ID でテスト用 WAV を合成して返します。初回合成結果は viewer 終了まで話者ごとにキャッシュされ、2 回目以降は同一バイト列を返します（冪等）。
-
-**クエリパラメーター**
-
-| パラメーター | 必須 | 説明 |
-|---|---|---|
-| `speaker` | 必須 | 話者 ID（整数） |
-
-**レスポンス**
-
-| ステータスコード | 条件 |
-|---|---|
-| 200 | 正常（WAV バイナリ） |
-| 400 | 無音モード時（話者情報が空のため `speaker not found`） |
-
-正常時のヘッダー:
-
-| ヘッダー | 値 |
-|---|---|
-| `Content-Type` | `audio/wav` |
-| `Content-Length` | WAV のバイト数 |
-
-デフォルトの合成フレーズは「音量テストです」です。
 
 #### GET /clips/{id}.wav
 

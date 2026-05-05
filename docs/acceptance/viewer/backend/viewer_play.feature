@@ -121,52 +121,14 @@ Feature: viewer バックエンド 再生API・クリップ配信・テストク
     Then URL1 と URL2 が異なる（再起動後の衝突回避）
     # test: test/e2e/viewer_clip_test.go::TestViewerE2E_Clip_RestartCollisionAvoidance
 
-  # ── viewer_test_clip_test.go ─────────────────────────────────────
+  # ── skip_history フラグ ─────────────────────────────────────────
 
-  Scenario: GET /test-clip?speaker=<id> が WAV を返す
+  Scenario: POST /api/play に skip_history:true を渡すと履歴ファイルへ追記しない
     Given vox-actor バイナリがビルド済みである
     And フェイク VOICEVOX サーバーが起動している
     And 空きポートを取得している
     When "vox-actor viewer --port <port>" を起動する
-    And GET /test-clip?speaker=3 を送信する
+    And POST /api/play に { clips:[{text:"テスト",speaker_id:3}], skip_history:true } を送信する
     Then ステータスコード 200 が返る
-    And レスポンスボディが空でない（WAV バイト列）
-    # test: test/e2e/viewer_test_clip_test.go::TestViewerE2E_TestClip_Success
-
-  Scenario: GET /test-clip の Content-Type が audio/wav である
-    Given vox-actor バイナリがビルド済みである
-    And フェイク VOICEVOX サーバーが起動している
-    And 空きポートを取得している
-    When "vox-actor viewer --port <port>" を起動する
-    And GET /test-clip?speaker=3 を送信する
-    Then Content-Type が "audio/wav" である
-    # test: test/e2e/viewer_test_clip_test.go::TestViewerE2E_TestClip_ContentType
-
-  Scenario: GET /test-clip の Content-Length がボディのバイト数と一致する
-    Given vox-actor バイナリがビルド済みである
-    And フェイク VOICEVOX サーバーが起動している
-    And 空きポートを取得している
-    When "vox-actor viewer --port <port>" を起動する
-    And GET /test-clip?speaker=3 を送信する
-    Then Content-Length ヘッダが空でない
-    And Content-Length の値がレスポンスボディのバイト数と一致する
-    # test: test/e2e/viewer_test_clip_test.go::TestViewerE2E_TestClip_ContentLength
-
-  Scenario: GET /test-clip を 2 回呼ぶと同一のボディが返る（冪等性）
-    Given vox-actor バイナリがビルド済みである
-    And フェイク VOICEVOX サーバーが起動している
-    And 空きポートを取得している
-    When "vox-actor viewer --port <port>" を起動する
-    And GET /test-clip?speaker=3 を 1 回目として送信する
-    And GET /test-clip?speaker=3 を 2 回目として送信する
-    Then 1 回目と 2 回目のボディが同一である
-    # test: test/e2e/viewer_test_clip_test.go::TestViewerE2E_TestClip_Idempotent
-
-  Scenario: VOICEVOX 接続不可（サイレントモード）の場合に GET /test-clip が 400 を返す
-    Given vox-actor バイナリがビルド済みである
-    And VOX_ENGINE_URL が到達不能なアドレス "http://127.0.0.1:1" に設定されている
-    And 空きポートを取得している
-    When "vox-actor viewer --port <port>" を起動する（サイレントモードになる）
-    And GET /test-clip?speaker=3 を送信する
-    Then ステータスコード 400 が返る（speakerLookup が空のため speaker not found）
-    # test: test/e2e/viewer_test_clip_test.go::TestViewerE2E_TestClip_SilentMode
+    And 履歴ファイル（YYYY-MM-DD.jsonl）が作成されない
+    # test: internal/infra/http_stream_player_test.go::TestHTTPStreamPlayer_APIPlay_SkipHistoryFlagNotWrittenToHistory
