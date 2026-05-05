@@ -249,8 +249,13 @@ const server = http.createServer((req, res) => {
     return handleApiCharacters(req, res);
   if (req.method === "GET" && path === "/api/history")
     return handleApiHistory(req, res);
-  if (req.method === "POST" && path === "/api/play")
-    return handleApiPlay(req, res);
+  if (req.method === "POST" && path === "/api/play") {
+    handleApiPlay(req, res).catch(() => {
+      if (!res.headersSent) res.writeHead(500);
+      res.end();
+    });
+    return;
+  }
   if (
     req.method === "GET" &&
     path.startsWith("/clips/") &&

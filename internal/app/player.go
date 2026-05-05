@@ -43,10 +43,9 @@ type PlayMeta struct {
 	SpeakerID int
 	// Speed / Pitch / Intonation は合成パラメータ（省略可）。
 	// 再合成時に元のパラメータを復元できるよう履歴に保持される。
-	Speed      *float64
-	Pitch      *float64
-	Intonation *float64
-	// SkipHistory が true の場合、HTTPStreamPlayer は履歴ファイルへの追記をスキップする。
+	Speed       *float64
+	Pitch       *float64
+	Intonation  *float64
 	SkipHistory bool
 }
 
