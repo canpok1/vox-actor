@@ -46,6 +46,8 @@ type PlayMeta struct {
 	Speed      *float64
 	Pitch      *float64
 	Intonation *float64
+	// SkipHistory が true の場合、HTTPStreamPlayer は履歴ファイルへの追記をスキップする。
+	SkipHistory bool
 }
 
 // AudioPlayer はWAVバイト列を再生するインターフェース。
