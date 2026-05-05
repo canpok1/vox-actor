@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { pushClip, resetStub } from "./helpers";
+import { pushClip, resetStub, setApiHistory } from "./helpers";
 
 test.describe("再生キュー", () => {
   test.beforeEach(async ({ request }) => {
@@ -130,6 +130,94 @@ test.describe("再生キュー", () => {
       (el: HTMLAudioElement) => el.src,
     );
     expect(audioSrc).toMatch(/^blob:/);
+  });
 
+  test("テスト再生で共有 audio の src が blob URL になる（口パク対象の audioRef を経由）", async ({
+    page,
+  }) => {
+    await page.goto("/");
+    await expect(page.getByText("● 接続中")).toBeVisible();
+
+    await page.getByRole("tab", { name: "音声テスト" }).click();
+    await page.getByLabel("話者", { exact: true }).selectOption("3");
+
+    const requestPromise = page.waitForRequest(
+      (req) => req.url().includes("/api/preview-clip") && req.method() === "POST",
+    );
+
+    await page.getByRole("button", { name: /テスト再生/ }).click();
+    await requestPromise;
+
+    // 共有 audio 要素の src が blob URL になっている = 口パク対象の audioRef を経由している
+    const audioSrc = await page.locator("audio").evaluate(
+      (el: HTMLAudioElement) => el.src,
+    );
+    expect(audioSrc).toMatch(/^blob:/);
+  });
+
+  test("履歴「再生」ボタンで共有 audio の src が blob URL になる（口パク対象の audioRef を経由）", async ({
+    page,
+    request,
+  }) => {
+    const ts = 1700003400001;
+    await setApiHistory(request, [
+      {
+        text: "履歴再生テスト",
+        speakerName: "ずんだもん",
+        styleName: "ノーマル",
+        timestamp: ts,
+      },
+    ]);
+
+    await page.goto("/");
+    await expect(page.getByText("● 接続中")).toBeVisible();
+    await expect(page.locator(`[data-clip-timestamp="${ts}"]`)).toBeVisible();
+
+    const requestPromise = page.waitForRequest(
+      (req) => req.url().includes("/api/preview-clip") && req.method() === "POST",
+    );
+
+    await page.locator(`[data-clip-timestamp="${ts}"]`).getByRole("button", { name: "再生" }).click();
+    await requestPromise;
+
+    // 共有 audio 要素の src が blob URL になっている
+    const audioSrc = await page.locator("audio").evaluate(
+      (el: HTMLAudioElement) => el.src,
+    );
+    expect(audioSrc).toMatch(/^blob:/);
+  });
+
+  test("テストタブ表示中でも clip が届いたら audio.src に blob URL が設定される（常時アクティブキュー）", async ({
+    page,
+    request,
+  }) => {
+    await page.goto("/");
+    await expect(page.getByText("● 接続中")).toBeVisible();
+
+    // テストタブへ切り替え
+    await page.getByRole("tab", { name: "音声テスト" }).click();
+
+    const ts = 1700003500001;
+    const clipUrl = `/clips/${ts}.wav`;
+
+    const requestPromise = page.waitForRequest(
+      (req) => req.url().includes(`/clips/${ts}.wav`),
+    );
+
+    await pushClip(request, {
+      url: clipUrl,
+      text: "タブ切替後キューテスト",
+      speakerName: "ずんだもん",
+      styleName: "ノーマル",
+      timestamp: ts,
+    });
+
+    // テストタブ表示中でもキューが動作し fetch が発生する
+    await requestPromise;
+
+    const audioSrc = await page.locator("audio").evaluate(
+      (el: HTMLAudioElement) => el.src,
+    );
+    expect(audioSrc).toMatch(/^blob:/);
   });
 });

@@ -132,9 +132,8 @@ export function App() {
   const [characters, setCharacters] = useState<CharacterEntry[]>([]);
   const testErrorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const { playingClipTimestamp, enqueue } = usePlaybackQueue(
+  const { playingClipTimestamp, enqueue, enqueuePreview } = usePlaybackQueue(
     audioRef,
-    activeTab === "stream",
   );
   const audioVolume = useAudioVolume(
     audioRef,
@@ -333,50 +332,18 @@ export function App() {
 
   const connected = useEventSource("/events", handleClip, handleServerError);
 
-  const playPreviewClip = useCallback(
-    (body: object, onError?: (msg: string) => void): void => {
-      fetch("/api/preview-clip", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      })
-        .then((res) => {
-          if (!res.ok) throw new Error(`preview-clip ${res.status}`);
-          return res.blob();
-        })
-        .then((blob) => {
-          const url = URL.createObjectURL(blob);
-          const audio = new Audio(url);
-          const cleanup = () => URL.revokeObjectURL(url);
-          audio.addEventListener("ended", cleanup);
-          audio.play().catch((err: unknown) => {
-            cleanup();
-            console.error("audio play failed", err);
-          });
-        })
-        .catch((err: unknown) => {
-          console.error("preview-clip failed", err);
-          onError?.("合成に失敗しました");
-        });
-    },
-    [],
-  );
-
   const handleTestPlay = useCallback((): void => {
     if (!testSpeakerId) {
       showTestError("話者が選択されていません");
       return;
     }
     setTestError("");
-    playPreviewClip(
-      { text: "音量テストです", speaker_id: Number(testSpeakerId) },
-      showTestError,
-    );
-  }, [testSpeakerId, showTestError, playPreviewClip]);
+    enqueuePreview({ text: "音量テストです", speaker_id: Number(testSpeakerId) });
+  }, [testSpeakerId, showTestError, enqueuePreview]);
 
   const handleReplay = useCallback(
     (entry: ClipEvent & { kind: "clip" }): void => {
-      playPreviewClip({
+      enqueuePreview({
         text: entry.text,
         speaker_id: entry.speakerId,
         ...(entry.speed !== undefined && { speed: entry.speed }),
@@ -384,7 +351,7 @@ export function App() {
         ...(entry.intonation !== undefined && { intonation: entry.intonation }),
       });
     },
-    [playPreviewClip],
+    [enqueuePreview],
   );
 
   return (

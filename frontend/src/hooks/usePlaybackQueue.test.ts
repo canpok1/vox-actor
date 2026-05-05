@@ -1,6 +1,7 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ClipEvent } from "../types/api";
+import type { PreviewBody } from "./usePlaybackQueue";
 import { usePlaybackQueue } from "./usePlaybackQueue";
 
 function makeClip(n: number): ClipEvent {
@@ -14,12 +15,22 @@ function makeClip(n: number): ClipEvent {
   };
 }
 
+function makePreviewBody(n: number): PreviewBody {
+  return {
+    text: `preview ${n}`,
+    speaker_id: n,
+  };
+}
+
 function makeFetchMock() {
   return vi.fn((url: string | URL | Request) => {
     const blobData = new Blob([`audio:${String(url)}`], { type: "audio/wav" });
     // jsdom では new Response(blob) が blob.stream() を呼び失敗するため
     // 実装が使う .blob() のみを持つ最小限のオブジェクトを返す
-    return Promise.resolve({ blob: () => Promise.resolve(blobData) } as Response);
+    return Promise.resolve({
+      ok: true,
+      blob: () => Promise.resolve(blobData),
+    } as Response);
   });
 }
 
@@ -77,7 +88,7 @@ describe("usePlaybackQueue", () => {
   });
 
   it("enqueue で audio.play が呼ばれ playingClipTimestamp が更新される", async () => {
-    const { result } = renderHook(() => usePlaybackQueue(audioRef, true));
+    const { result } = renderHook(() => usePlaybackQueue(audioRef));
     expect(result.current.playingClipTimestamp).toBeNull();
     await act(async () => {
       result.current.enqueue(makeClip(1));
@@ -87,7 +98,7 @@ describe("usePlaybackQueue", () => {
   });
 
   it("enqueue で fetch が呼ばれ audio.src に blob URL が設定される", async () => {
-    const { result } = renderHook(() => usePlaybackQueue(audioRef, true));
+    const { result } = renderHook(() => usePlaybackQueue(audioRef));
     await act(async () => {
       result.current.enqueue(makeClip(1));
     });
@@ -100,7 +111,7 @@ describe("usePlaybackQueue", () => {
   });
 
   it("timeupdate で audio.ended=true のとき次クリップが再生されキューが空なら null", async () => {
-    const { result } = renderHook(() => usePlaybackQueue(audioRef, true));
+    const { result } = renderHook(() => usePlaybackQueue(audioRef));
     await act(async () => {
       result.current.enqueue(makeClip(1));
       result.current.enqueue(makeClip(2));
@@ -121,7 +132,7 @@ describe("usePlaybackQueue", () => {
   });
 
   it("duration/currentTime 判定でウォッチドッグが発火して次クリップが再生される", async () => {
-    const { result } = renderHook(() => usePlaybackQueue(audioRef, true));
+    const { result } = renderHook(() => usePlaybackQueue(audioRef));
     await act(async () => {
       result.current.enqueue(makeClip(1));
       result.current.enqueue(makeClip(2));
@@ -139,7 +150,7 @@ describe("usePlaybackQueue", () => {
 
   it("setInterval でウォッチドッグが発火する", async () => {
     vi.useFakeTimers();
-    const { result } = renderHook(() => usePlaybackQueue(audioRef, true));
+    const { result } = renderHook(() => usePlaybackQueue(audioRef));
     await act(async () => {
       result.current.enqueue(makeClip(1));
     });
@@ -153,7 +164,7 @@ describe("usePlaybackQueue", () => {
   });
 
   it("ウォッチドッグ発火時に先読み済みクリップが即再生される", async () => {
-    const { result } = renderHook(() => usePlaybackQueue(audioRef, true));
+    const { result } = renderHook(() => usePlaybackQueue(audioRef));
     await act(async () => {
       result.current.enqueue(makeClip(1));
       result.current.enqueue(makeClip(2));
@@ -171,37 +182,12 @@ describe("usePlaybackQueue", () => {
     expect(result.current.playingClipTimestamp).toBe(2000);
   });
 
-  it("active=false への遷移で pause とキュー破棄と playingClipTimestamp=null になる", async () => {
-    const { result, rerender } = renderHook(
-      ({ active }: { active: boolean }) => usePlaybackQueue(audioRef, active),
-      { initialProps: { active: true } },
-    );
-    await act(async () => {
-      result.current.enqueue(makeClip(1));
-    });
-    expect(result.current.playingClipTimestamp).toBe(1000);
-    await act(async () => {
-      rerender({ active: false });
-    });
-    expect(mockPause).toHaveBeenCalled();
-    expect(result.current.playingClipTimestamp).toBeNull();
-  });
-
-  it("active=false の間に enqueue してもキューに積まれない", async () => {
-    const { result } = renderHook(() => usePlaybackQueue(audioRef, false));
-    await act(async () => {
-      result.current.enqueue(makeClip(1));
-    });
-    expect(mockPlay).not.toHaveBeenCalled();
-    expect(result.current.playingClipTimestamp).toBeNull();
-  });
-
   it("audio.play reject 時に playingClipTimestamp が null に戻り次の再生試行が走る", async () => {
     mockPlay
       .mockRejectedValueOnce(new Error("play failed"))
       .mockResolvedValue(undefined);
     vi.spyOn(console, "error").mockImplementation(() => {});
-    const { result } = renderHook(() => usePlaybackQueue(audioRef, true));
+    const { result } = renderHook(() => usePlaybackQueue(audioRef));
     await act(async () => {
       result.current.enqueue(makeClip(1));
       result.current.enqueue(makeClip(2));
@@ -216,7 +202,7 @@ describe("usePlaybackQueue", () => {
       .mockImplementation(makeFetchMock());
     vi.stubGlobal("fetch", fetchMock);
     vi.spyOn(console, "error").mockImplementation(() => {});
-    const { result } = renderHook(() => usePlaybackQueue(audioRef, true));
+    const { result } = renderHook(() => usePlaybackQueue(audioRef));
     await act(async () => {
       result.current.enqueue(makeClip(1));
       result.current.enqueue(makeClip(2));
@@ -225,7 +211,105 @@ describe("usePlaybackQueue", () => {
     expect(result.current.playingClipTimestamp).toBe(2000);
   });
 
-  it("active=false 遷移で進行中の先読み fetch がキャンセルされる", async () => {
+  it("アンマウントでウォッチドッグがクリアされる", async () => {
+    const clearIntervalSpy = vi.spyOn(global, "clearInterval");
+    const { result, unmount } = renderHook(() => usePlaybackQueue(audioRef));
+    await act(async () => {
+      result.current.enqueue(makeClip(1));
+    });
+    unmount();
+    expect(clearIntervalSpy).toHaveBeenCalled();
+  });
+
+  // enqueuePreview のテスト
+  it("enqueuePreview で /api/preview-clip に POST され audio.play が呼ばれる", async () => {
+    const { result } = renderHook(() => usePlaybackQueue(audioRef));
+    await act(async () => {
+      result.current.enqueuePreview(makePreviewBody(1));
+    });
+    expect(vi.mocked(fetch)).toHaveBeenCalledWith(
+      "/api/preview-clip",
+      expect.objectContaining({
+        method: "POST",
+        signal: expect.any(AbortSignal),
+      }),
+    );
+    expect(mockPlay).toHaveBeenCalled();
+  });
+
+  it("enqueuePreview 再生中は playingClipTimestamp が変化しない（常に null）", async () => {
+    const { result } = renderHook(() => usePlaybackQueue(audioRef));
+    await act(async () => {
+      result.current.enqueuePreview(makePreviewBody(1));
+    });
+    expect(mockPlay).toHaveBeenCalled();
+    expect(result.current.playingClipTimestamp).toBeNull();
+  });
+
+  it("enqueuePreview 後に timeupdate で audio.ended=true のとき playingClipTimestamp は null のまま", async () => {
+    const { result } = renderHook(() => usePlaybackQueue(audioRef));
+    await act(async () => {
+      result.current.enqueuePreview(makePreviewBody(1));
+    });
+    setAudioEnded(audio, true);
+    await act(async () => {
+      audio.dispatchEvent(new Event("timeupdate"));
+    });
+    expect(result.current.playingClipTimestamp).toBeNull();
+  });
+
+  it("timeline と preview を混在キューに積んだ場合、順次再生され timeline のみ playingClipTimestamp が更新される", async () => {
+    const { result } = renderHook(() => usePlaybackQueue(audioRef));
+    // timeline → preview → timeline の順でキューに積む
+    await act(async () => {
+      result.current.enqueue(makeClip(1));
+      result.current.enqueuePreview(makePreviewBody(10));
+      result.current.enqueue(makeClip(2));
+    });
+    // clip1(timeline) が再生中
+    expect(result.current.playingClipTimestamp).toBe(1000);
+
+    // clip1 再生終了
+    setAudioEnded(audio, true);
+    await act(async () => {
+      audio.dispatchEvent(new Event("timeupdate"));
+    });
+    // preview(10) が再生中 → playingClipTimestamp は null
+    expect(result.current.playingClipTimestamp).toBeNull();
+    expect(mockPlay.mock.calls.length).toBeGreaterThanOrEqual(2);
+
+    // preview 再生終了
+    setAudioEnded(audio, false);
+    setAudioEnded(audio, true);
+    await act(async () => {
+      audio.dispatchEvent(new Event("timeupdate"));
+    });
+    // clip2(timeline) が再生中
+    expect(result.current.playingClipTimestamp).toBe(2000);
+  });
+
+  it("再生中でも enqueue した場合はキュー末尾に追加され順次再生される", async () => {
+    const { result } = renderHook(() => usePlaybackQueue(audioRef));
+    await act(async () => {
+      result.current.enqueue(makeClip(1));
+    });
+    expect(result.current.playingClipTimestamp).toBe(1000);
+
+    // 再生中に追加
+    await act(async () => {
+      result.current.enqueue(makeClip(2));
+    });
+    // まだ clip1 が再生中
+    expect(result.current.playingClipTimestamp).toBe(1000);
+
+    setAudioEnded(audio, true);
+    await act(async () => {
+      audio.dispatchEvent(new Event("timeupdate"));
+    });
+    expect(result.current.playingClipTimestamp).toBe(2000);
+  });
+
+  it("進行中の fetch がキャンセルされるのはアンマウント時のみ（タブ切替なし）", async () => {
     let capturedSignal: AbortSignal | null = null;
     const slowFetch = vi.fn((_url: string | URL | Request, init?: RequestInit) => {
       capturedSignal = init?.signal ?? null;
@@ -233,31 +317,29 @@ describe("usePlaybackQueue", () => {
     });
     vi.stubGlobal("fetch", slowFetch);
 
-    const { result, rerender } = renderHook(
-      ({ active }: { active: boolean }) => usePlaybackQueue(audioRef, active),
-      { initialProps: { active: true } },
-    );
+    const { result, unmount } = renderHook(() => usePlaybackQueue(audioRef));
     await act(async () => {
       result.current.enqueue(makeClip(1));
     });
     expect(capturedSignal).not.toBeNull();
     expect((capturedSignal as unknown as AbortSignal).aborted).toBe(false);
 
+    // アンマウント時にキャンセルされる
     await act(async () => {
-      rerender({ active: false });
+      unmount();
     });
     expect((capturedSignal as unknown as AbortSignal).aborted).toBe(true);
   });
 
-  it("アンマウントでウォッチドッグがクリアされる", async () => {
-    const clearIntervalSpy = vi.spyOn(global, "clearInterval");
-    const { result, unmount } = renderHook(() =>
-      usePlaybackQueue(audioRef, true),
-    );
+  it("pause はアンマウント時に呼ばれる", async () => {
+    const { result, unmount } = renderHook(() => usePlaybackQueue(audioRef));
     await act(async () => {
       result.current.enqueue(makeClip(1));
     });
-    unmount();
-    expect(clearIntervalSpy).toHaveBeenCalled();
+    expect(result.current.playingClipTimestamp).toBe(1000);
+    await act(async () => {
+      unmount();
+    });
+    expect(mockPause).toHaveBeenCalled();
   });
 });

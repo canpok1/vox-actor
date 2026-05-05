@@ -7,35 +7,45 @@ import {
 } from "react";
 import type { ClipEvent } from "../types/api";
 
+export interface PreviewBody {
+  text: string;
+  speaker_id: number;
+  speed?: number;
+  pitch?: number;
+  intonation?: number;
+}
+
+type QueueItem =
+  | { kind: "timeline"; clip: ClipEvent }
+  | { kind: "preview"; body: PreviewBody };
+
 interface PlaybackQueue {
   playingClipTimestamp: number | null;
   enqueue: (clip: ClipEvent) => void;
+  enqueuePreview: (body: PreviewBody) => void;
 }
 
-interface ReadyClip {
-  clip: ClipEvent;
+interface ReadyItem {
+  item: QueueItem;
   objectUrl: string;
 }
 
 const WATCHDOG_EPSILON = 0.05;
 const WATCHDOG_INTERVAL_MS = 250;
 
-// active=false の間は enqueue してもキューに積まれず、既存の再生は停止される。
 export function usePlaybackQueue(
   audioRef: RefObject<HTMLAudioElement>,
-  active: boolean,
 ): PlaybackQueue {
-  const waitingRef = useRef<ClipEvent[]>([]);
-  const prefetchedRef = useRef<ReadyClip | null>(null);
+  const waitingRef = useRef<QueueItem[]>([]);
+  const prefetchedRef = useRef<ReadyItem | null>(null);
   const prefetchingAbortRef = useRef<AbortController | null>(null);
   const playingObjUrlRef = useRef<string | null>(null);
+  const isPlayingRef = useRef(false);
   const [playingClipTimestamp, setPlayingClipTimestamp] = useState<
     number | null
   >(null);
   const playingClipTimestampRef = useRef<number | null>(null);
   playingClipTimestampRef.current = playingClipTimestamp;
-  const activeRef = useRef(active);
-  activeRef.current = active;
 
   // startPrefetch は startNext から呼ばれ、完了後に startNext を呼ぶ。
   // 互いに依存する循環呼び出しを ref で解決する。
@@ -51,7 +61,7 @@ export function usePlaybackQueue(
   }, []);
 
   const startWatchdog = useCallback(
-    (audio: HTMLAudioElement): void => {
+    (audio: HTMLAudioElement, item: QueueItem): void => {
       clearWatchdog();
       let fired = false;
 
@@ -71,8 +81,11 @@ export function usePlaybackQueue(
           URL.revokeObjectURL(playingObjUrlRef.current);
           playingObjUrlRef.current = null;
         }
-        playingClipTimestampRef.current = null;
-        setPlayingClipTimestamp(null);
+        isPlayingRef.current = false;
+        if (item.kind === "timeline") {
+          playingClipTimestampRef.current = null;
+          setPlayingClipTimestamp(null);
+        }
         startNextRef.current();
       };
 
@@ -88,8 +101,7 @@ export function usePlaybackQueue(
   );
 
   const startNext = useCallback((): void => {
-    if (!activeRef.current) return;
-    if (playingClipTimestampRef.current !== null) return;
+    if (isPlayingRef.current) return;
     const audio = audioRef.current;
     if (!audio) return;
 
@@ -99,8 +111,12 @@ export function usePlaybackQueue(
       const oldUrl = playingObjUrlRef.current;
       if (oldUrl) URL.revokeObjectURL(oldUrl);
       playingObjUrlRef.current = ready.objectUrl;
-      playingClipTimestampRef.current = ready.clip.timestamp;
-      setPlayingClipTimestamp(ready.clip.timestamp);
+      isPlayingRef.current = true;
+      if (ready.item.kind === "timeline") {
+        const ts = ready.item.clip.timestamp;
+        playingClipTimestampRef.current = ts;
+        setPlayingClipTimestamp(ts);
+      }
       audio.src = ready.objectUrl;
       audio.play().catch((err: unknown) => {
         console.error("play failed", err);
@@ -109,11 +125,14 @@ export function usePlaybackQueue(
           playingObjUrlRef.current = null;
         }
         clearWatchdog();
-        playingClipTimestampRef.current = null;
-        setPlayingClipTimestamp(null);
+        isPlayingRef.current = false;
+        if (ready.item.kind === "timeline") {
+          playingClipTimestampRef.current = null;
+          setPlayingClipTimestamp(null);
+        }
         startNextRef.current();
       });
-      startWatchdog(audio);
+      startWatchdog(audio, ready.item);
       startPrefetchRef.current();
       return;
     }
@@ -130,18 +149,28 @@ export function usePlaybackQueue(
     const abort = new AbortController();
     prefetchingAbortRef.current = abort;
 
-    fetch(next.url, { signal: abort.signal })
-      .then((res) => res.blob())
+    const fetchPromise: Promise<Response> =
+      next.kind === "timeline"
+        ? fetch(next.clip.url, { signal: abort.signal })
+        : fetch("/api/preview-clip", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(next.body),
+            signal: abort.signal,
+          });
+
+    fetchPromise
+      .then((res) => {
+        if (!res.ok) throw new Error(`fetch failed: ${res.status}`);
+        return res.blob();
+      })
       .then((blob) => {
         prefetchingAbortRef.current = null;
-        if (!activeRef.current) {
-          return;
-        }
         prefetchedRef.current = {
-          clip: next,
+          item: next,
           objectUrl: URL.createObjectURL(blob),
         };
-        if (playingClipTimestampRef.current === null) {
+        if (!isPlayingRef.current) {
           startNextRef.current();
         }
       })
@@ -158,8 +187,15 @@ export function usePlaybackQueue(
 
   const enqueue = useCallback(
     (clip: ClipEvent): void => {
-      if (!activeRef.current) return;
-      waitingRef.current.push(clip);
+      waitingRef.current.push({ kind: "timeline", clip });
+      startNext();
+    },
+    [startNext],
+  );
+
+  const enqueuePreview = useCallback(
+    (body: PreviewBody): void => {
+      waitingRef.current.push({ kind: "preview", body });
       startNext();
     },
     [startNext],
@@ -186,15 +222,10 @@ export function usePlaybackQueue(
       playingObjUrlRef.current = null;
     }
     waitingRef.current = [];
+    isPlayingRef.current = false;
     playingClipTimestampRef.current = null;
     setPlayingClipTimestamp(null);
   }, [audioRef, clearWatchdog]);
-
-  useEffect(() => {
-    if (!active) {
-      stop();
-    }
-  }, [active, stop]);
 
   useEffect(() => {
     return () => {
@@ -202,5 +233,5 @@ export function usePlaybackQueue(
     };
   }, [stop]);
 
-  return { playingClipTimestamp, enqueue };
+  return { playingClipTimestamp, enqueue, enqueuePreview };
 }
