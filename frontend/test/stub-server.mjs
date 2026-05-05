@@ -162,7 +162,11 @@ async function handleStubClip(req, res) {
       typeof body.speakerName === "string" ? body.speakerName : "ずんだもん",
     styleName: typeof body.styleName === "string" ? body.styleName : "ノーマル",
     timestamp,
+    speakerId: typeof body.speakerId === "number" ? body.speakerId : 0,
   };
+  if (typeof body.speed === "number") payload.speed = body.speed;
+  if (typeof body.pitch === "number") payload.pitch = body.pitch;
+  if (typeof body.intonation === "number") payload.intonation = body.intonation;
   broadcast("clip", payload);
   writeJSON(res, 200, { ok: true, payload });
 }
@@ -227,9 +231,13 @@ async function handleStubApiCharacters(req, res) {
 
 async function handleStubApiHistory(req, res) {
   const body = await readJSON(req);
-  apiHistory = {
-    entries: Array.isArray(body.entries) ? body.entries : [],
-  };
+  const entries = Array.isArray(body.entries)
+    ? body.entries.map((e) => ({
+        speakerId: 0,
+        ...e,
+      }))
+    : [];
+  apiHistory = { entries };
   writeJSON(res, 200, { ok: true, apiHistory });
 }
 
