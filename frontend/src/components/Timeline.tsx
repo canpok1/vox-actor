@@ -78,7 +78,7 @@ export function Timeline({
             showTimestamp={isCharacterMode ? false : showTimestamp}
             highlightPlaying={!isCharacterMode}
             onReplay={
-              onReplay && entry.kind === "clip" && typeof entry.speakerId === "number"
+              onReplay && entry.kind === "clip"
                 ? () => onReplay(entry)
                 : undefined
             }
