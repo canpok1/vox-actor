@@ -1601,3 +1601,203 @@ func TestWatchUsecase_Run_BroadcastsConnectionError_OnHealthCheckFailure(t *test
 		t.Errorf("expected message to contain underlying error, got %q", e.Message)
 	}
 }
+
+// --- GenerateWavFilename テスト ---
+// DONE: 基本形: <UnixMs>_<text>.wav が生成される               → TestGenerateWavFilename_Basic
+// DONE: テキスト20文字超は先頭20文字に切り捨て               → TestGenerateWavFilename_Truncates20Runes
+// DONE: / を _ に置換する                                       → TestGenerateWavFilename_SanitizesForwardSlash
+// DONE: \ を _ に置換する                                       → TestGenerateWavFilename_SanitizesBackslash
+// DONE: 制御文字を _ に置換する                                 → TestGenerateWavFilename_SanitizesControlChars
+
+func TestGenerateWavFilename_Basic(t *testing.T) {
+	got := app.GenerateWavFilename("こんにちは", 1000)
+	want := "1000_こんにちは.wav"
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestGenerateWavFilename_Truncates20Runes(t *testing.T) {
+	text := "あいうえおかきくけこさしすせそたちつてと超過分"
+	got := app.GenerateWavFilename(text, 2000)
+	want := "2000_あいうえおかきくけこさしすせそたちつてと.wav"
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestGenerateWavFilename_SanitizesForwardSlash(t *testing.T) {
+	got := app.GenerateWavFilename("a/b", 3000)
+	want := "3000_a_b.wav"
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestGenerateWavFilename_SanitizesBackslash(t *testing.T) {
+	got := app.GenerateWavFilename("a\\b", 4000)
+	want := "4000_a_b.wav"
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestGenerateWavFilename_SanitizesControlChars(t *testing.T) {
+	got := app.GenerateWavFilename("a\nb", 5000)
+	want := "5000_a_b.wav"
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+// --- WatchUsecase WavSaver 統合テスト ---
+// DONE: SaveWavDir 指定時にローカル合成で wavSaver.Save が呼ばれる     → TestWatchUsecase_Run_SavesWav_WhenSaveWavDirSet
+// DONE: SaveWavDir が空の場合は wavSaver.Save は呼ばれない             → TestWatchUsecase_Run_DoesNotSaveWav_WhenSaveWavDirEmpty
+// DONE: DryRun 時は wavSaver.Save は呼ばれない                         → TestWatchUsecase_Run_DoesNotSaveWav_WhenDryRun
+// DONE: WithSilent（viewer 経路）時は wavSaver.Save は呼ばれない       → TestWatchUsecase_Run_DoesNotSaveWav_WhenSilent
+
+type mockWavSaverForWatch struct {
+	mu         sync.Mutex
+	savedPaths []string
+	savedData  [][]byte
+	err        error
+}
+
+func (m *mockWavSaverForWatch) Save(path string, data []byte) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.savedPaths = append(m.savedPaths, path)
+	m.savedData = append(m.savedData, data)
+	return m.err
+}
+
+func TestWatchUsecase_Run_SavesWav_WhenSaveWavDirSet(t *testing.T) {
+	reader := &mockScriptReader{
+		scripts: []entity.Script{
+			{Path: "a.txt", Text: "こんにちは", IsEmpty: false},
+		},
+	}
+	wavBytes := []byte("fake-wav")
+	client := &mockVoicevoxClient{
+		query:   &entity.AudioQuery{},
+		wavData: wavBytes,
+	}
+	player := &mockAudioPlayer{}
+	mover := &mockFileMover{}
+	watcher := &mockDirWatcher{files: []string{"/tmp/watch/a.txt"}}
+	saver := &mockWavSaverForWatch{}
+	fixedNowMs := int64(9999)
+
+	uc := app.NewWatchUsecase(reader, client, player, mover, watcher,
+		app.WithWatchWavSaver(saver),
+		app.WithWatchNowFunc(func() time.Time { return time.UnixMilli(fixedNowMs) }),
+	)
+	params := app.WatchParams{
+		Paths:      []string{"/tmp/watch"},
+		SpeakerID:  3,
+		SaveWavDir: "/out",
+	}
+	if err := uc.Run(context.Background(), params); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(saver.savedPaths) != 1 {
+		t.Fatalf("expected 1 save call, got %d", len(saver.savedPaths))
+	}
+	wantPath := "/out/" + app.GenerateWavFilename("こんにちは", fixedNowMs)
+	if saver.savedPaths[0] != wantPath {
+		t.Errorf("saved path = %q, want %q", saver.savedPaths[0], wantPath)
+	}
+	if !bytes.Equal(saver.savedData[0], wavBytes) {
+		t.Errorf("saved data does not match wav bytes")
+	}
+}
+
+func TestWatchUsecase_Run_DoesNotSaveWav_WhenSaveWavDirEmpty(t *testing.T) {
+	reader := &mockScriptReader{
+		scripts: []entity.Script{
+			{Path: "a.txt", Text: "テスト", IsEmpty: false},
+		},
+	}
+	client := &mockVoicevoxClient{query: &entity.AudioQuery{}, wavData: []byte("w")}
+	player := &mockAudioPlayer{}
+	mover := &mockFileMover{}
+	watcher := &mockDirWatcher{files: []string{"/tmp/watch/a.txt"}}
+	saver := &mockWavSaverForWatch{}
+
+	uc := app.NewWatchUsecase(reader, client, player, mover, watcher,
+		app.WithWatchWavSaver(saver),
+	)
+	params := app.WatchParams{
+		Paths:      []string{"/tmp/watch"},
+		SpeakerID:  3,
+		SaveWavDir: "",
+	}
+	if err := uc.Run(context.Background(), params); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(saver.savedPaths) != 0 {
+		t.Errorf("expected no save calls, got %d: %v", len(saver.savedPaths), saver.savedPaths)
+	}
+}
+
+func TestWatchUsecase_Run_DoesNotSaveWav_WhenDryRun(t *testing.T) {
+	reader := &mockScriptReader{
+		scripts: []entity.Script{
+			{Path: "a.txt", Text: "テスト", IsEmpty: false},
+		},
+	}
+	client := &mockVoicevoxClient{query: &entity.AudioQuery{}, wavData: []byte("w")}
+	player := &mockAudioPlayer{}
+	mover := &mockFileMover{}
+	watcher := &mockDirWatcher{files: []string{"/tmp/watch/a.txt"}}
+	saver := &mockWavSaverForWatch{}
+
+	uc := app.NewWatchUsecase(reader, client, player, mover, watcher,
+		app.WithWatchWavSaver(saver),
+	)
+	params := app.WatchParams{
+		Paths:      []string{"/tmp/watch"},
+		SpeakerID:  3,
+		SaveWavDir: "/out",
+		DryRun:     true,
+	}
+	if err := uc.Run(context.Background(), params); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(saver.savedPaths) != 0 {
+		t.Errorf("expected no save calls during dry-run, got %d", len(saver.savedPaths))
+	}
+}
+
+func TestWatchUsecase_Run_DoesNotSaveWav_WhenSilent(t *testing.T) {
+	reader := &mockScriptReader{
+		scripts: []entity.Script{
+			{Path: "a.txt", Text: "テスト", IsEmpty: false},
+		},
+	}
+	client := &mockVoicevoxClient{query: &entity.AudioQuery{}, wavData: []byte("w")}
+	player := &recordingErrorPlayer{}
+	mover := &mockFileMover{}
+	watcher := &mockDirWatcher{files: []string{"/tmp/watch/a.txt"}}
+	saver := &mockWavSaverForWatch{}
+
+	uc := app.NewWatchUsecase(reader, client, player, mover, watcher,
+		app.WithWatchWavSaver(saver),
+		app.WithSilent(),
+	)
+	params := app.WatchParams{
+		Paths:      []string{"/tmp/watch"},
+		SpeakerID:  3,
+		SaveWavDir: "/out",
+	}
+	if err := uc.Run(context.Background(), params); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(saver.savedPaths) != 0 {
+		t.Errorf("expected no save calls in silent mode, got %d", len(saver.savedPaths))
+	}
+}

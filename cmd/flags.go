@@ -85,3 +85,13 @@ func registerCommonFlags(cmd *cobra.Command) {
 func registerSaveWavFlag(cmd *cobra.Command) {
 	cmd.Flags().String("save-wav", saveWavDefaultFromEnv(), "合成した WAV を保存するパス（ローカル合成時のみ。親ディレクトリは自動作成）")
 }
+
+// saveWavDirDefaultFromEnv は VOX_SAVE_WAV_DIR 環境変数からデフォルトの保存ディレクトリを解決する。
+func saveWavDirDefaultFromEnv() string {
+	return os.Getenv("VOX_SAVE_WAV_DIR")
+}
+
+// registerSaveWavDirFlag は --save-wav-dir フラグを登録する。watch コマンドなど wav 一括保存が必要なコマンドで呼ぶ。
+func registerSaveWavDirFlag(cmd *cobra.Command) {
+	cmd.Flags().String("save-wav-dir", saveWavDirDefaultFromEnv(), "合成した WAV を保存するディレクトリ（ローカル合成時のみ。未作成なら自動作成）")
+}

@@ -799,3 +799,121 @@ func TestRunWatch_LockfileAutoDetect_PostsToViewer(t *testing.T) {
 		t.Error("expected at least 1 POST to /api/play via lockfile auto-detect, got 0")
 	}
 }
+
+// --- --save-wav-dir フラグテスト ---
+// DONE: --save-wav-dir がヘルプに含まれる                          → TestWatchCmd_HelpContainsSaveWavDir
+// DONE: --save-wav-dir デフォルトは空文字                          → TestWatchCmd_SaveWavDirFlag_DefaultEmpty
+// DONE: VOX_SAVE_WAV_DIR 環境変数でデフォルト値が設定される        → TestWatchCmd_EnvVarVOXSaveWavDir
+
+func TestWatchCmd_HelpContainsSaveWavDir(t *testing.T) {
+	rootCmd := makeRootCmd()
+	buf := new(bytes.Buffer)
+	rootCmd.SetOut(buf)
+	rootCmd.SetArgs([]string{"watch", "--help"})
+
+	_ = rootCmd.Execute()
+	if !strings.Contains(buf.String(), "--save-wav-dir") {
+		t.Error("expected help output to contain '--save-wav-dir'")
+	}
+}
+
+func TestWatchCmd_SaveWavDirFlag_DefaultEmpty(t *testing.T) {
+	t.Setenv("VOX_SAVE_WAV_DIR", "")
+
+	rootCmd := makeRootCmd()
+	watchCmd := findWatchCmd(t, rootCmd)
+
+	val, err := watchCmd.Flags().GetString("save-wav-dir")
+	if err != nil {
+		t.Fatalf("expected save-wav-dir flag to exist, got error: %v", err)
+	}
+	if val != "" {
+		t.Errorf("expected default save-wav-dir to be empty, got: %s", val)
+	}
+}
+
+func TestWatchCmd_EnvVarVOXSaveWavDir(t *testing.T) {
+	t.Setenv("VOX_SAVE_WAV_DIR", "/tmp/wav-out")
+
+	rootCmd := makeRootCmd()
+	watchCmd := findWatchCmd(t, rootCmd)
+
+	val, err := watchCmd.Flags().GetString("save-wav-dir")
+	if err != nil {
+		t.Fatalf("expected save-wav-dir flag to exist, got error: %v", err)
+	}
+	if val != "/tmp/wav-out" {
+		t.Errorf("expected save-wav-dir '/tmp/wav-out', got: %s", val)
+	}
+}
+
+// DONE: --save-wav-dir 指定時にローカル合成で wav ファイルが saveDir に書き出される → TestRunWatch_SaveWavDir_WritesFileToDir
+
+// fixedScriptReader は固定スクリプトを返すテスト用 ScriptReader。
+type fixedScriptReader struct {
+	scripts []entity.Script
+}
+
+func (r fixedScriptReader) Read(_ string) ([]entity.Script, error) { return r.scripts, nil }
+
+func TestRunWatch_SaveWavDir_WritesFileToDir(t *testing.T) {
+	watchDir := t.TempDir()
+	saveDir := t.TempDir()
+	lockPath := filepath.Join(t.TempDir(), "viewer.lock") // 存在しない = viewer なし
+	scriptFile := filepath.Join(watchDir, "a.txt")
+
+	cmd := newCmdWithContext(t)
+	registerCommonFlags(cmd)
+	registerSaveWavDirFlag(cmd)
+	cmd.Flags().Bool("delete", false, "")
+	cmd.Flags().Bool("queue", false, "")
+	_ = cmd.ParseFlags([]string{"--save-wav-dir", saveDir})
+
+	deps := &WatchDeps{
+		ClientFactory: func(_ string) app.VoicevoxClient { return &mockSayClient{} },
+		Reader: fixedScriptReader{scripts: []entity.Script{
+			{Path: scriptFile, Text: "テスト", IsEmpty: false},
+		}},
+		Player:            stubAudioPlayer{},
+		Mover:             stubFileMover{},
+		DirWatcherFactory: func(_ *slog.Logger) app.DirWatcher { return &oneFileDirWatcher{filePath: scriptFile} },
+		LockPathResolver:  func() (string, error) { return lockPath, nil },
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	cmd.SetContext(ctx)
+
+	done := make(chan error, 1)
+	go func() { done <- runWatch(cmd, []string{watchDir}, deps) }()
+
+	for range 100 {
+		entries, _ := os.ReadDir(saveDir)
+		var count int
+		for _, e := range entries {
+			if filepath.Ext(e.Name()) == ".wav" {
+				count++
+			}
+		}
+		if count > 0 {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	cancel()
+	<-done
+
+	entries, err := os.ReadDir(saveDir)
+	if err != nil {
+		t.Fatalf("failed to read saveDir: %v", err)
+	}
+	var wavFiles []string
+	for _, e := range entries {
+		if !e.IsDir() && filepath.Ext(e.Name()) == ".wav" {
+			wavFiles = append(wavFiles, e.Name())
+		}
+	}
+	if len(wavFiles) != 1 {
+		t.Errorf("expected 1 wav file in saveDir, got %d: %v", len(wavFiles), wavFiles)
+	}
+}

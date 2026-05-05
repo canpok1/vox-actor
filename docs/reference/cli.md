@@ -212,6 +212,7 @@ vox-actor watch --queue
 | `--intonation` | — | `1.0` | 抑揚 |
 | `--delete` | — | `false` | 処理済みファイルを削除（未指定時は各ディレクトリの `done/` に移動） |
 | `--queue` | — | `false` | `vox-actor config path.queue` で解決される queue ディレクトリを監視対象に自動選択（[詳細](#queueオプション)） |
+| `--save-wav-dir` | `VOX_SAVE_WAV_DIR` | (未指定) | 合成した WAV を保存するディレクトリ。ファイル名は `<UnixMs>_<text先頭20文字>.wav`（ローカル合成時のみ保存。未作成なら自動作成。`--dry-run` および viewer 送信時は保存しない） |
 | `--verbose` | — | `false` | 詳細ログを出力 |
 | `--dry-run` | — | `false` | VOICEVOX・音声再生を行わず、読み上げ対象をログ出力（[詳細](#dry-runモード)） |
 
