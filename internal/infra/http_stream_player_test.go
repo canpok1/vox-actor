@@ -92,7 +92,7 @@ package infra
 //
 // #537 --save-wav-dir:
 // DONE: WithSaveWavDir 設定時に Play() で WAV が saveWavDir に保存される   → TestHTTPStreamPlayer_Play_SavesWavWhenSaveWavDirSet
-// DONE: WithSaveWavDir 未設定時は Play() で WAV は保存されない             → TestHTTPStreamPlayer_Play_DoesNotSaveWavWhenSaveWavDirEmpty
+// DONE: WithSaveWavDir 未設定時は Play() がパニックしない                   → TestHTTPStreamPlayer_Play_DoesNotPanicWhenSaveWavDirNotSet
 
 import (
 	"bufio"
@@ -3530,19 +3530,11 @@ func TestHTTPStreamPlayer_Play_SavesWavWhenSaveWavDirSet(t *testing.T) {
 	}
 }
 
-func TestHTTPStreamPlayer_Play_DoesNotSaveWavWhenSaveWavDirEmpty(t *testing.T) {
+func TestHTTPStreamPlayer_Play_DoesNotPanicWhenSaveWavDirNotSet(t *testing.T) {
 	t.Parallel()
-	saver := &stubWavSaverForStream{}
-	p := newStartedPlayerWithOpts(t)
-
+	p := newStartedPlayerWithOpts(t) // WithSaveWavDir 未設定
 	wav := []byte("RIFFwavdata")
 	if err := p.Play(context.Background(), wav, app.PlayMeta{Text: "テスト"}); err != nil {
 		t.Fatalf("Play: %v", err)
-	}
-
-	saver.mu.Lock()
-	defer saver.mu.Unlock()
-	if len(saver.saved) != 0 {
-		t.Errorf("expected no saved files, got %d", len(saver.saved))
 	}
 }
