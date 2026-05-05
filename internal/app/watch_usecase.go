@@ -5,10 +5,32 @@ import (
 	"fmt"
 	"log/slog"
 	"path/filepath"
+	"strings"
 	"sync"
+	"time"
+	"unicode"
 
 	"github.com/canpok1/vox-actor/internal/domain/entity"
 )
+
+// GenerateWavFilename はタイムスタンプとテキストから WAV ファイル名を生成する。
+// テキストはパス区切り文字と制御文字を _ に置換し、先頭 20 ルーンに切り捨てる。
+// 書式: <nowMs>_<sanitized20>.wav
+func GenerateWavFilename(text string, nowMs int64) string {
+	runes := []rune(text)
+	if len(runes) > 20 {
+		runes = runes[:20]
+	}
+	var b strings.Builder
+	for _, r := range runes {
+		if r == '/' || r == '\\' || unicode.IsControl(r) {
+			b.WriteRune('_')
+		} else {
+			b.WriteRune(r)
+		}
+	}
+	return fmt.Sprintf("%d_%s.wav", nowMs, b.String())
+}
 
 // WatchParams はWatchUsecaseのパラメータ。
 type WatchParams struct {
@@ -20,6 +42,9 @@ type WatchParams struct {
 	// DryRun が true の場合、VOICEVOXエンジン/音声再生は一切呼ばずログ出力のみ行う。
 	// ディレクトリ監視・done/移動・削除は通常通り実施する。
 	DryRun bool
+	// SaveWavDir が空でない場合、ローカル合成した WAV をこのディレクトリに保存する。
+	// DryRun 時・viewer 送信経路では保存しない。
+	SaveWavDir string
 }
 
 // WatchOption はWatchUsecaseの生成時に指定するオプション。
@@ -45,6 +70,20 @@ func WithDeleteMode() WatchOption {
 func WithSilent() WatchOption {
 	return func(u *WatchUsecase) {
 		u.silent = true
+	}
+}
+
+// WithWatchWavSaver は WAV 保存機能を有効にするオプション。
+func WithWatchWavSaver(saver WavSaver) WatchOption {
+	return func(u *WatchUsecase) {
+		u.wavSaver = saver
+	}
+}
+
+// WithWatchNowFunc は時刻取得関数を差し替えるオプション（テスト用）。
+func WithWatchNowFunc(now func() time.Time) WatchOption {
+	return func(u *WatchUsecase) {
+		u.nowFunc = now
 	}
 }
 
@@ -93,7 +132,9 @@ type WatchUsecase struct {
 	deleteMode bool
 	// silent が true の場合、HealthCheck / 合成パイプラインを一切呼ばず
 	// player.PlayText 経由でテキストのみ配信する。
-	silent bool
+	silent   bool
+	wavSaver WavSaver
+	nowFunc  func() time.Time
 }
 
 // NewWatchUsecase は新しいWatchUsecaseを生成する。
@@ -105,6 +146,7 @@ func NewWatchUsecase(reader ScriptReader, client VoicevoxClient, player AudioPla
 		mover:   mover,
 		watcher: watcher,
 		logger:  discardLogger(),
+		nowFunc: time.Now,
 	}
 	for _, opt := range opts {
 		opt(u)
@@ -290,6 +332,16 @@ func (u *WatchUsecase) processFile(ctx context.Context, path string, params Watc
 		}
 
 		u.logger.Debug("processing script", "path", result.script.Path)
+
+		if params.SaveWavDir != "" && u.wavSaver != nil {
+			filename := GenerateWavFilename(result.script.Text, u.nowFunc().UnixMilli())
+			savePath := filepath.Join(params.SaveWavDir, filename)
+			if err := u.wavSaver.Save(savePath, result.wav); err != nil {
+				u.logger.Error("save wav error (skipping save)", "path", savePath, "error", err)
+			} else {
+				u.logger.Info("wav saved", "path", savePath)
+			}
+		}
 
 		if err := u.player.Play(ctx, result.wav, PlayMeta{Text: result.script.Text, SpeakerID: speakerID}); err != nil {
 			u.logger.Error("play error (skipping script)", "path", result.script.Path, "error", err)

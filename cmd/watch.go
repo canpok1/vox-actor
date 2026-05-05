@@ -53,6 +53,7 @@ func makeWatchCmd(deps *WatchDeps) *cobra.Command {
 	}
 
 	registerCommonFlags(cmd)
+	registerSaveWavDirFlag(cmd)
 	cmd.Flags().Bool("delete", false, "処理済みファイルを削除する（未指定時は各ディレクトリの done/ に移動）")
 	cmd.Flags().Bool("queue", false, "vox-actor config path.queue で解決される queue ディレクトリを監視対象に自動選択する（位置引数と併用不可、起動時に自動作成）")
 
@@ -169,6 +170,7 @@ func runWatch(cmd *cobra.Command, args []string, deps *WatchDeps) error {
 	pitch, _ := cmd.Flags().GetFloat64("pitch")
 	intonation, _ := cmd.Flags().GetFloat64("intonation")
 	dryRun, _ := cmd.Flags().GetBool("dry-run")
+	saveWavDir, _ := cmd.Flags().GetString("save-wav-dir")
 
 	if deps == nil || deps.ClientFactory == nil || deps.Reader == nil || deps.Player == nil || deps.Mover == nil || deps.DirWatcherFactory == nil {
 		return fmt.Errorf("watch command dependencies are not initialized")
@@ -238,6 +240,10 @@ func runWatch(cmd *cobra.Command, args []string, deps *WatchDeps) error {
 		return err
 	}
 
+	if saveWavDir != "" {
+		opts = append(opts, app.WithWatchWavSaver(infra.NewWavSaver()))
+	}
+
 	uc := app.NewWatchUsecase(deps.Reader, client, deps.Player, deps.Mover, watcher, opts...)
 	return uc.Run(ctx, app.WatchParams{
 		Paths:      args,
@@ -246,5 +252,6 @@ func runWatch(cmd *cobra.Command, args []string, deps *WatchDeps) error {
 		Pitch:      &pitch,
 		Intonation: &intonation,
 		DryRun:     dryRun,
+		SaveWavDir: saveWavDir,
 	})
 }
