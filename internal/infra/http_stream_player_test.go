@@ -89,6 +89,10 @@ package infra
 // TODO: 当日ファイルなし時も正常起動                             → TestHTTPStreamPlayer_Start_NoHistoryFile
 // TODO: /api/history が当日末尾 50 件を返す                      → TestHTTPStreamPlayer_APIHistory_ReturnsTodaysEntries
 // TODO: /api/history がファイルなし時に空配列を返す              → TestHTTPStreamPlayer_APIHistory_EmptyWhenNoFile
+//
+// #537 --save-wav-dir:
+// DONE: WithSaveWavDir 設定時に Play() で WAV が saveWavDir に保存される   → TestHTTPStreamPlayer_Play_SavesWavWhenSaveWavDirSet
+// DONE: WithSaveWavDir 未設定時は Play() で WAV は保存されない             → TestHTTPStreamPlayer_Play_DoesNotSaveWavWhenSaveWavDirEmpty
 
 import (
 	"bufio"
@@ -3477,5 +3481,68 @@ func TestHTTPStreamPlayer_APIPlayback_TTLExpiry(t *testing.T) {
 	}
 	if result.Status != "unknown" {
 		t.Errorf("expected status=unknown after TTL expiry, got %q", result.Status)
+	}
+}
+
+// --- #537 --save-wav-dir テスト ---
+
+type stubWavSaverForStream struct {
+	mu    sync.Mutex
+	saved map[string][]byte
+}
+
+func (s *stubWavSaverForStream) Save(path string, data []byte) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.saved == nil {
+		s.saved = make(map[string][]byte)
+	}
+	cp := make([]byte, len(data))
+	copy(cp, data)
+	s.saved[path] = cp
+	return nil
+}
+
+func TestHTTPStreamPlayer_Play_SavesWavWhenSaveWavDirSet(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	saver := &stubWavSaverForStream{}
+	fixed := time.Date(2026, 5, 5, 0, 0, 0, 0, time.UTC)
+	p := newStartedPlayerWithOpts(t,
+		WithSaveWavDir(dir, saver),
+		withNowFunc(func() time.Time { return fixed }),
+	)
+
+	wav := []byte("RIFFwavdata")
+	if err := p.Play(context.Background(), wav, app.PlayMeta{Text: "テスト"}); err != nil {
+		t.Fatalf("Play: %v", err)
+	}
+
+	saver.mu.Lock()
+	defer saver.mu.Unlock()
+	if len(saver.saved) != 1 {
+		t.Fatalf("expected 1 saved file, got %d", len(saver.saved))
+	}
+	expectedFilename := app.GenerateWavFilename("テスト", fixed.UnixMilli())
+	expectedPath := filepath.Join(dir, expectedFilename)
+	if _, ok := saver.saved[expectedPath]; !ok {
+		t.Errorf("expected saved path %q, got paths: %v", expectedPath, saver.saved)
+	}
+}
+
+func TestHTTPStreamPlayer_Play_DoesNotSaveWavWhenSaveWavDirEmpty(t *testing.T) {
+	t.Parallel()
+	saver := &stubWavSaverForStream{}
+	p := newStartedPlayerWithOpts(t)
+
+	wav := []byte("RIFFwavdata")
+	if err := p.Play(context.Background(), wav, app.PlayMeta{Text: "テスト"}); err != nil {
+		t.Fatalf("Play: %v", err)
+	}
+
+	saver.mu.Lock()
+	defer saver.mu.Unlock()
+	if len(saver.saved) != 0 {
+		t.Errorf("expected no saved files, got %d", len(saver.saved))
 	}
 }

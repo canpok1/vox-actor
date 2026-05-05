@@ -90,6 +90,11 @@ type HTTPStreamPlayer struct {
 	// workerCancel は worker goroutine と GC goroutine を停止するためのキャンセル関数。
 	workerCancel context.CancelFunc
 
+	// saveWavDir が空でない場合、Play() で合成した WAV をこのディレクトリに保存する。
+	saveWavDir string
+	// wavSaver は WAV ファイルの保存に使うインターフェース。saveWavDir が空でなければ必須。
+	wavSaver app.WavSaver
+
 	// prefetchLeadTime は次クリップを前倒し broadcast するリードタイム。
 	// 現クリップの推定再生時間残り prefetchLeadTime の段階で次クリップの clipEvent を送信する。
 	prefetchLeadTime time.Duration
@@ -291,6 +296,17 @@ func WithHistoryDir(dir string) HTTPStreamOption {
 	return func(p *HTTPStreamPlayer) {
 		if dir != "" {
 			p.historyDir = dir
+		}
+	}
+}
+
+// WithSaveWavDir は Play() で合成した WAV を保存するディレクトリと保存実装を設定するオプション。
+// dir が空文字の場合は WAV 保存を行わない。
+func WithSaveWavDir(dir string, saver app.WavSaver) HTTPStreamOption {
+	return func(p *HTTPStreamPlayer) {
+		if dir != "" && saver != nil {
+			p.saveWavDir = dir
+			p.wavSaver = saver
 		}
 	}
 }
@@ -566,6 +582,13 @@ func (p *HTTPStreamPlayer) Play(ctx context.Context, wavData []byte, meta app.Pl
 	payload, err := json.Marshal(ev)
 	if err != nil {
 		return fmt.Errorf("failed to marshal clip payload: %w", err)
+	}
+
+	if p.saveWavDir != "" && p.wavSaver != nil {
+		savePath := filepath.Join(p.saveWavDir, app.GenerateWavFilename(meta.Text, ts))
+		if err := p.wavSaver.Save(savePath, buf); err != nil {
+			p.logger.Warn("failed to save wav", "path", savePath, "error", err)
+		}
 	}
 
 	n, dropped := p.subscribers.broadcast(sseEventClip, payload)

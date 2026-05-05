@@ -247,7 +247,8 @@ vox-actor watch --queue --delete
 ```
 vox-actor viewer [--host <host>] [--port <port>] \
                  [--engine-url <url>] [--speaker <id>] \
-                 [--speed N] [--pitch N] [--intonation N] [--verbose]
+                 [--speed N] [--pitch N] [--intonation N] [--verbose] \
+                 [--save-wav-dir <dir>]
 ```
 
 HTTPサーバーとブラウザUIを起動し、SSE経由でブラウザに音声を配信する。ディレクトリ監視が必要な場合は `vox-actor watch` を別途起動してください。
@@ -262,6 +263,7 @@ HTTPサーバーとブラウザUIを起動し、SSE経由でブラウザに音�
 | `--pitch` | — | `0.0` | 音高 |
 | `--intonation` | — | `1.0` | 抑揚 |
 | `--verbose` | — | `false` | 詳細ログを出力 |
+| `--save-wav-dir` | `VOX_SAVE_WAV_DIR` | (未指定) | 合成した WAV を保存するディレクトリ。ファイル名は `<UnixMs>_<text先頭20文字>.wav`。保存先が存在しない場合は自動作成。 |
 
 ### 起動パターン
 

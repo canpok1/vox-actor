@@ -355,6 +355,48 @@ func TestResolveViewerLockPath_IgnoresVoxActorWorkspaceEnv(t *testing.T) {
 	}
 }
 
+// --- #537 --save-wav-dir テスト ---
+// DONE: --save-wav-dir がヘルプに含まれる          → TestViewerCmd_HelpContainsSaveWavDir
+// DONE: --save-wav-dir デフォルトは空文字          → TestViewerCmd_SaveWavDirFlag_DefaultEmpty
+// DONE: VOX_SAVE_WAV_DIR が --save-wav-dir のデフォルトに反映される → TestViewerCmd_EnvVarVOXSaveWavDir
+
+func TestViewerCmd_HelpContainsSaveWavDir(t *testing.T) {
+	rootCmd := makeRootCmd()
+	buf := new(bytes.Buffer)
+	rootCmd.SetOut(buf)
+	rootCmd.SetArgs([]string{"viewer", "--help"})
+	_ = rootCmd.Execute()
+	if !strings.Contains(buf.String(), "--save-wav-dir") {
+		t.Errorf("expected help output to contain '--save-wav-dir'\noutput:\n%s", buf.String())
+	}
+}
+
+func TestViewerCmd_SaveWavDirFlag_DefaultEmpty(t *testing.T) {
+	t.Setenv("VOX_SAVE_WAV_DIR", "")
+	rootCmd := makeRootCmd()
+	viewerCmd := findViewerCmd(t, rootCmd)
+	val, err := viewerCmd.Flags().GetString("save-wav-dir")
+	if err != nil {
+		t.Fatalf("expected save-wav-dir flag to exist, got error: %v", err)
+	}
+	if val != "" {
+		t.Errorf("expected default save-wav-dir to be empty, got: %s", val)
+	}
+}
+
+func TestViewerCmd_EnvVarVOXSaveWavDir(t *testing.T) {
+	t.Setenv("VOX_SAVE_WAV_DIR", "/tmp/wav-out")
+	rootCmd := makeRootCmd()
+	viewerCmd := findViewerCmd(t, rootCmd)
+	val, err := viewerCmd.Flags().GetString("save-wav-dir")
+	if err != nil {
+		t.Fatalf("expected save-wav-dir flag to exist, got error: %v", err)
+	}
+	if val != "/tmp/wav-out" {
+		t.Errorf("expected save-wav-dir '/tmp/wav-out', got: %s", val)
+	}
+}
+
 func TestViewerCmd_AlreadyRunning_ReturnsError(t *testing.T) {
 	dir := t.TempDir()
 	lockPath := filepath.Join(dir, "viewer", "viewer.lock")
