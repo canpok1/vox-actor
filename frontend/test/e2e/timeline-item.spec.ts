@@ -279,7 +279,7 @@ test.describe("TimelineItem: 再生ボタン", () => {
     await expect(item.getByRole("button", { name: "再生" })).toBeVisible();
   });
 
-  test("「再生」ボタン押下で POST /api/play に skip_history:true, 正しい clip パラメータが送信される", async ({
+  test("「再生」ボタン押下で POST /api/preview-clip に正しい clip パラメータが送信される", async ({
     page,
     request,
   }) => {
@@ -298,19 +298,18 @@ test.describe("TimelineItem: 再生ボタン", () => {
     await expect(item).toBeVisible();
 
     const requestPromise = page.waitForRequest(
-      (req) => req.url().includes("/api/play") && req.method() === "POST",
+      (req) => req.url().includes("/api/preview-clip") && req.method() === "POST",
     );
 
     await item.getByRole("button", { name: "再生" }).click();
     const req = await requestPromise;
     const body = req.postDataJSON() as {
-      clips: { text: string; speaker_id: number; speed?: number }[];
-      skip_history: boolean;
+      text: string;
+      speaker_id: number;
+      speed?: number;
     };
-    expect(body.skip_history).toBe(true);
-    expect(body.clips).toHaveLength(1);
-    expect(body.clips[0].text).toBe("再生テキスト");
-    expect(body.clips[0].speaker_id).toBe(3);
-    expect(body.clips[0].speed).toBe(1.1);
+    expect(body.text).toBe("再生テキスト");
+    expect(body.speaker_id).toBe(3);
+    expect(body.speed).toBe(1.1);
   });
 });

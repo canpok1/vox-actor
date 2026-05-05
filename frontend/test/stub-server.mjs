@@ -137,6 +137,20 @@ function handleClipFile(_req, res) {
   res.end(SILENT_WAV);
 }
 
+async function handleApiPreviewClip(req, res) {
+  const body = await readJSON(req);
+  if (!body.text) {
+    res.writeHead(400, { "Content-Type": "text/plain" });
+    res.end("text must not be empty");
+    return;
+  }
+  res.writeHead(200, {
+    "Content-Type": "audio/wav",
+    "Content-Length": SILENT_WAV.length,
+  });
+  res.end(SILENT_WAV);
+}
+
 async function handleStubClip(req, res) {
   const body = await readJSON(req);
   const timestamp = typeof body.timestamp === "number" ? body.timestamp : Date.now();
@@ -251,6 +265,13 @@ const server = http.createServer((req, res) => {
     return handleApiHistory(req, res);
   if (req.method === "POST" && path === "/api/play") {
     handleApiPlay(req, res).catch(() => {
+      if (!res.headersSent) res.writeHead(500);
+      res.end();
+    });
+    return;
+  }
+  if (req.method === "POST" && path === "/api/preview-clip") {
+    handleApiPreviewClip(req, res).catch(() => {
       if (!res.headersSent) res.writeHead(500);
       res.end();
     });

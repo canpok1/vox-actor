@@ -157,9 +157,8 @@ type playbackStateRecord struct {
 
 // playBatch は worker への投入単位。
 type playBatch struct {
-	playbackID  string
-	clips       []ViewerClip
-	skipHistory bool
+	playbackID string
+	clips      []ViewerClip
 }
 
 var (
@@ -382,6 +381,7 @@ func (p *HTTPStreamPlayer) Start(_ context.Context) error {
 	mux.HandleFunc("/api/status", p.handleAPIStatus)
 	mux.HandleFunc("/api/history", p.handleAPIHistory)
 	mux.HandleFunc("/api/play", p.handleAPIPlay)
+	mux.HandleFunc("/api/preview-clip", p.handleAPIPreviewClip)
 	mux.HandleFunc("/api/playback/", p.handleAPIPlayback)
 	mux.HandleFunc("/api/characters", p.handleAPICharacters)
 	mux.HandleFunc("/assets/images/", p.handleCharacterImage)
@@ -482,14 +482,13 @@ func (p *HTTPStreamPlayer) SetSilent(reason string) {
 }
 
 // clipToPlayMeta は ViewerClip を app.PlayMeta に変換する。
-func clipToPlayMeta(clip ViewerClip, skipHistory bool) app.PlayMeta {
+func clipToPlayMeta(clip ViewerClip) app.PlayMeta {
 	return app.PlayMeta{
-		Text:        clip.Text,
-		SpeakerID:   clip.SpeakerID,
-		Speed:       clip.Speed,
-		Pitch:       clip.Pitch,
-		Intonation:  clip.Intonation,
-		SkipHistory: skipHistory,
+		Text:       clip.Text,
+		SpeakerID:  clip.SpeakerID,
+		Speed:      clip.Speed,
+		Pitch:      clip.Pitch,
+		Intonation: clip.Intonation,
 	}
 }
 
@@ -538,9 +537,7 @@ func (p *HTTPStreamPlayer) PlayText(ctx context.Context, meta app.PlayMeta) erro
 		p.logger.Warn("stream clip dropped for slow subscribers", "clipTimestamp", ts, "dropped", dropped)
 	}
 	p.logger.Info("stream clip delivered (silent)", "clipTimestamp", ts, "subscribers", n)
-	if !meta.SkipHistory {
-		p.appendHistory(ev)
-	}
+	p.appendHistory(ev)
 
 	if p.silentInterval <= 0 {
 		return nil
@@ -601,9 +598,7 @@ func (p *HTTPStreamPlayer) Play(ctx context.Context, wavData []byte, meta app.Pl
 		p.logger.Warn("stream clip dropped for slow subscribers", "clipTimestamp", ts, "dropped", dropped)
 	}
 	p.logger.Info("stream clip delivered", "clipTimestamp", ts, "subscribers", n)
-	if !meta.SkipHistory {
-		p.appendHistory(ev)
-	}
+	p.appendHistory(ev)
 	return nil
 }
 
@@ -1022,7 +1017,7 @@ func (p *HTTPStreamPlayer) handleAPIPlay(w http.ResponseWriter, r *http.Request)
 		_, _ = w.Write(payload)
 		return
 	}
-	batch := playBatch{playbackID: playbackID, clips: req.Clips, skipHistory: req.SkipHistory}
+	batch := playBatch{playbackID: playbackID, clips: req.Clips}
 	select {
 	case p.batchQueue <- batch:
 	default:
@@ -1039,6 +1034,45 @@ func (p *HTTPStreamPlayer) handleAPIPlay(w http.ResponseWriter, r *http.Request)
 	payload, _ := json.Marshal(resp)
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	_, _ = w.Write(payload)
+}
+
+func (p *HTTPStreamPlayer) handleAPIPreviewClip(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	if p.voicevoxClient == nil {
+		http.Error(w, "voicevox client is not configured", http.StatusServiceUnavailable)
+		return
+	}
+
+	var req ViewerPreviewClipRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+	if req.Text == "" {
+		http.Error(w, "text must not be empty", http.StatusBadRequest)
+		return
+	}
+
+	query, err := p.voicevoxClient.CreateQuery(r.Context(), req.Text, req.SpeakerID)
+	if err != nil {
+		p.logger.Error("/api/preview-clip CreateQuery failed", "speakerID", req.SpeakerID, "error", err)
+		http.Error(w, "synthesis failed", http.StatusBadGateway)
+		return
+	}
+	q := query.WithOverrides(req.Speed, req.Pitch, req.Intonation)
+	wav, err := p.voicevoxClient.Synthesize(r.Context(), &q, req.SpeakerID)
+	if err != nil {
+		p.logger.Error("/api/preview-clip Synthesize failed", "speakerID", req.SpeakerID, "error", err)
+		http.Error(w, "synthesis failed", http.StatusBadGateway)
+		return
+	}
+
+	w.Header().Set("Content-Type", "audio/wav")
+	_, _ = w.Write(wav)
 }
 
 func (p *HTTPStreamPlayer) initPlayback(id string, clipCount int) {
@@ -1157,7 +1191,7 @@ func (p *HTTPStreamPlayer) processBatch(ctx context.Context, batch playBatch) {
 			prefetchedWAV = nil
 		} else {
 			var err error
-			wav, err = p.synthesizeAndPlay(ctx, batch.playbackID, clip, batch.skipHistory)
+			wav, err = p.synthesizeAndPlay(ctx, batch.playbackID, clip)
 			if err != nil {
 				return
 			}
@@ -1186,7 +1220,7 @@ func (p *HTTPStreamPlayer) processBatch(ctx context.Context, batch playBatch) {
 		if dErr == nil && duration > 0 {
 			if nextSynthCh != nil {
 				var err error
-				prefetchedWAV, err = p.prefetchSleep(ctx, batch.playbackID, duration, nextSynthCh, batch.clips[i+1], batch.skipHistory)
+				prefetchedWAV, err = p.prefetchSleep(ctx, batch.playbackID, duration, nextSynthCh, batch.clips[i+1])
 				if err != nil {
 					return
 				}
@@ -1211,7 +1245,7 @@ func (p *HTTPStreamPlayer) processBatch(ctx context.Context, batch playBatch) {
 
 // synthesizeAndPlay は clip を合成して Play() でブロードキャストする。
 // エラー時は playback を failed に遷移させて error を返す。
-func (p *HTTPStreamPlayer) synthesizeAndPlay(ctx context.Context, playbackID string, clip ViewerClip, skipHistory bool) ([]byte, error) {
+func (p *HTTPStreamPlayer) synthesizeAndPlay(ctx context.Context, playbackID string, clip ViewerClip) ([]byte, error) {
 	query, err := p.voicevoxClient.CreateQuery(ctx, clip.Text, clip.SpeakerID)
 	if err != nil {
 		p.logger.Error("worker CreateQuery failed", "playbackID", playbackID, "speakerID", clip.SpeakerID, "error", err)
@@ -1227,7 +1261,7 @@ func (p *HTTPStreamPlayer) synthesizeAndPlay(ctx context.Context, playbackID str
 		return nil, err
 	}
 
-	if pErr := p.Play(ctx, wav, clipToPlayMeta(clip, skipHistory)); pErr != nil {
+	if pErr := p.Play(ctx, wav, clipToPlayMeta(clip)); pErr != nil {
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
 		}
@@ -1242,7 +1276,7 @@ func (p *HTTPStreamPlayer) synthesizeAndPlay(ctx context.Context, playbackID str
 // nextClip を前倒し broadcast する。broadcast に成功した場合は nextClip の WAV を返す（nil なら
 // タイムアウトで broadcast スキップ）。エラー時は playback を failed に遷移させて error を返す。
 // goroutine leak を防ぐため nextSynthCh は buffered channel (cap=1) であること。
-func (p *HTTPStreamPlayer) prefetchSleep(ctx context.Context, playbackID string, duration time.Duration, nextSynthCh chan synthResult, nextClip ViewerClip, skipHistory bool) ([]byte, error) {
+func (p *HTTPStreamPlayer) prefetchSleep(ctx context.Context, playbackID string, duration time.Duration, nextSynthCh chan synthResult, nextClip ViewerClip) ([]byte, error) {
 	timer1 := time.NewTimer(duration - p.prefetchLeadTime)
 	select {
 	case <-timer1.C:
@@ -1267,7 +1301,7 @@ func (p *HTTPStreamPlayer) prefetchSleep(ctx context.Context, playbackID string,
 			p.setPlaybackStatus(playbackID, playbackStatusFailed, result.err.Error())
 			return nil, result.err
 		}
-		if pErr := p.Play(ctx, result.wav, clipToPlayMeta(nextClip, skipHistory)); pErr != nil {
+		if pErr := p.Play(ctx, result.wav, clipToPlayMeta(nextClip)); pErr != nil {
 			if !remainTimer.Stop() {
 				<-remainTimer.C
 			}
