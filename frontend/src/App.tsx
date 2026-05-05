@@ -223,6 +223,10 @@ export function App() {
           speakerName: e.speakerName,
           styleName: e.styleName,
           timestamp: e.timestamp,
+          speakerId: e.speakerId,
+          speed: e.speed,
+          pitch: e.pitch,
+          intonation: e.intonation,
         }));
         setEntries(historyEntries);
       } catch (err) {

@@ -11,6 +11,7 @@ const mockEntries: TimelineEntry[] = [
     speakerName: "話者A",
     styleName: "ノーマル",
     timestamp: 1700000000000,
+    speakerId: 0,
   },
 ];
 
@@ -129,6 +130,7 @@ describe("StreamPanel", () => {
         speakerName: "話者A",
         styleName: "ノーマル",
         timestamp: 1700000000000,
+        speakerId: 0,
       },
       {
         kind: "clip",
@@ -137,6 +139,7 @@ describe("StreamPanel", () => {
         speakerName: "話者A",
         styleName: "ノーマル",
         timestamp: 1700000001000,
+        speakerId: 0,
       },
     ];
     render(
@@ -160,6 +163,7 @@ describe("StreamPanel", () => {
         speakerName: "話者A",
         styleName: "ノーマル",
         timestamp: 1700000000000,
+        speakerId: 0,
       },
       {
         kind: "clip",
@@ -168,6 +172,7 @@ describe("StreamPanel", () => {
         speakerName: "話者A",
         styleName: "ノーマル",
         timestamp: 1700000001000,
+        speakerId: 0,
       },
     ];
     // showCharacters=true かつ characters が存在し playingClipTimestamp が設定されていると
@@ -196,6 +201,7 @@ describe("StreamPanel", () => {
         speakerName: "話者A",
         styleName: "ノーマル",
         timestamp: 1700000000000,
+        speakerId: 0,
       },
       {
         kind: "clip",
@@ -204,6 +210,7 @@ describe("StreamPanel", () => {
         speakerName: "話者A",
         styleName: "ノーマル",
         timestamp: 1700000001000,
+        speakerId: 0,
       },
     ];
     render(

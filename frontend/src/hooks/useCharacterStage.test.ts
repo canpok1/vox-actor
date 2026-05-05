@@ -25,6 +25,7 @@ function makeClipEntry(
     speakerName,
     styleName,
     timestamp: n * 1000,
+    speakerId: 0,
   };
 }
 

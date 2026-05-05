@@ -392,13 +392,17 @@ viewer が起動する HTTP サーバーが提供するエンドポイントの�
       "text": "読み上げテキスト",
       "speakerName": "ずんだもん",
       "styleName": "ノーマル",
-      "timestamp": 1746316414387
+      "timestamp": 1746316414387,
+      "speakerId": 3,
+      "speed": 1.0,
+      "pitch": 0.0,
+      "intonation": 1.0
     }
   ]
 }
 ```
 
-`timestamp` は配信時刻の Unix ms（UTC）です。WAV URL は viewer 再起動で失効するため履歴には含まれません。
+`timestamp` は配信時刻の Unix ms（UTC）です。WAV URL は viewer 再起動で失効するため履歴には含まれません。`speed` / `pitch` / `intonation` は合成時に指定された場合のみ含まれます（省略時はフィールドなし）。旧形式の履歴エントリ（`speakerId` 欠落）はロード時に `speakerId: 0` として扱われます。
 
 #### GET /api/playback/{id}
 
@@ -524,7 +528,7 @@ Server-Sent Events ストリームです。ブラウザが接続し、再生ク�
 
 ```
 event: clip
-data: {"url":"/clips/1746316414387.wav","text":"読み上げテキスト","speakerName":"ずんだもん","styleName":"ノーマル","timestamp":1746316414387}
+data: {"url":"/clips/1746316414387.wav","text":"読み上げテキスト","speakerName":"ずんだもん","styleName":"ノーマル","timestamp":1746316414387,"speakerId":3}
 ```
 
 | フィールド | 説明 |
@@ -534,6 +538,10 @@ data: {"url":"/clips/1746316414387.wav","text":"読み上げテキスト","speak
 | `speakerName` | 話者名（エンジン未登録 ID は `話者#<ID>`） |
 | `styleName` | スタイル名（無音モード時は空文字） |
 | `timestamp` | 配信時刻の Unix ms（UTC） |
+| `speakerId` | VOICEVOX スタイル ID |
+| `speed` | 話速（合成時に指定した場合のみ） |
+| `pitch` | 音高（合成時に指定した場合のみ） |
+| `intonation` | 抑揚（合成時に指定した場合のみ） |
 
 `error` イベント（合成エラー等発生時）:
 

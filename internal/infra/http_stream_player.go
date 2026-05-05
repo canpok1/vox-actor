@@ -178,11 +178,16 @@ var (
 
 // historyRecord は履歴ファイル（YYYY-MM-DD.jsonl）の 1 行スキーマ。
 // WAV URL は viewer 再起動で失効するため含めない。
+// 旧形式（SpeakerID/Speed/Pitch/Intonation なし）は json.Unmarshal でゼロ値・nil として読み込まれる。
 type historyRecord struct {
-	Text        string `json:"text"`
-	SpeakerName string `json:"speakerName"`
-	StyleName   string `json:"styleName"`
-	Timestamp   int64  `json:"timestamp"`
+	Text        string   `json:"text"`
+	SpeakerName string   `json:"speakerName"`
+	StyleName   string   `json:"styleName"`
+	Timestamp   int64    `json:"timestamp"`
+	SpeakerID   int      `json:"speakerId"`
+	Speed       *float64 `json:"speed,omitempty"`
+	Pitch       *float64 `json:"pitch,omitempty"`
+	Intonation  *float64 `json:"intonation,omitempty"`
 }
 
 // apiHistoryResponse は GET /api/history のレスポンスペイロード。
@@ -198,7 +203,11 @@ type clipEvent struct {
 	StyleName   string `json:"styleName"`
 	// Timestamp は配信時刻の Unix ms（UTC）。ブラウザ側で HH:MM:SS に整形する。
 	// セッション跨ぎで単調増加するため再起動後も timestamp が衝突しない。
-	Timestamp int64 `json:"timestamp"`
+	Timestamp  int64    `json:"timestamp"`
+	SpeakerID  int      `json:"speakerId"`
+	Speed      *float64 `json:"speed,omitempty"`
+	Pitch      *float64 `json:"pitch,omitempty"`
+	Intonation *float64 `json:"intonation,omitempty"`
 }
 
 // errorEvent は SSE で配信する error イベントのペイロード。
@@ -491,6 +500,33 @@ func (p *HTTPStreamPlayer) SetSilent(reason string) {
 	p.silentReason = reason
 }
 
+// clipToPlayMeta は ViewerClip を app.PlayMeta に変換する。
+func clipToPlayMeta(clip ViewerClip) app.PlayMeta {
+	return app.PlayMeta{
+		Text:       clip.Text,
+		SpeakerID:  clip.SpeakerID,
+		Speed:      clip.Speed,
+		Pitch:      clip.Pitch,
+		Intonation: clip.Intonation,
+	}
+}
+
+// newClipEvent は meta と ts から clipEvent を構築する。url は呼び出し元が指定する。
+func (p *HTTPStreamPlayer) newClipEvent(meta app.PlayMeta, ts int64, url string) clipEvent {
+	speakerName, styleName := p.resolveSpeaker(meta.SpeakerID)
+	return clipEvent{
+		URL:         url,
+		Text:        meta.Text,
+		SpeakerName: speakerName,
+		StyleName:   styleName,
+		Timestamp:   ts,
+		SpeakerID:   meta.SpeakerID,
+		Speed:       meta.Speed,
+		Pitch:       meta.Pitch,
+		Intonation:  meta.Intonation,
+	}
+}
+
 // PlayText は WAV 合成を伴わないテキストのみの SSE 配信を行う。
 // clipEvent.url は空文字で配信され、ブラウザ側は再生をスキップする。
 // 配信後は固定 silentInterval だけブロックして backpressure として働く。
@@ -509,14 +545,7 @@ func (p *HTTPStreamPlayer) PlayText(ctx context.Context, meta app.PlayMeta) erro
 	}
 
 	ts := p.nowFunc().UnixMilli()
-	speakerName, styleName := p.resolveSpeaker(meta.SpeakerID)
-	ev := clipEvent{
-		URL:         "",
-		Text:        meta.Text,
-		SpeakerName: speakerName,
-		StyleName:   styleName,
-		Timestamp:   ts,
-	}
+	ev := p.newClipEvent(meta, ts, "")
 	payload, err := json.Marshal(ev)
 	if err != nil {
 		return fmt.Errorf("failed to marshal clip payload: %w", err)
@@ -570,14 +599,7 @@ func (p *HTTPStreamPlayer) Play(ctx context.Context, wavData []byte, meta app.Pl
 	copy(buf, wavData)
 	p.clips.put(ts, buf)
 
-	speakerName, styleName := p.resolveSpeaker(meta.SpeakerID)
-	ev := clipEvent{
-		URL:         clipPathPrefix + strconv.FormatInt(ts, 10) + clipPathSuffix,
-		Text:        meta.Text,
-		SpeakerName: speakerName,
-		StyleName:   styleName,
-		Timestamp:   ts,
-	}
+	ev := p.newClipEvent(meta, ts, clipPathPrefix+strconv.FormatInt(ts, 10)+clipPathSuffix)
 	payload, err := json.Marshal(ev)
 	if err != nil {
 		return fmt.Errorf("failed to marshal clip payload: %w", err)
@@ -1219,8 +1241,7 @@ func (p *HTTPStreamPlayer) synthesizeAndPlay(ctx context.Context, playbackID str
 		return nil, err
 	}
 
-	meta := app.PlayMeta{Text: clip.Text, SpeakerID: clip.SpeakerID}
-	if pErr := p.Play(ctx, wav, meta); pErr != nil {
+	if pErr := p.Play(ctx, wav, clipToPlayMeta(clip)); pErr != nil {
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
 		}
@@ -1260,8 +1281,7 @@ func (p *HTTPStreamPlayer) prefetchSleep(ctx context.Context, playbackID string,
 			p.setPlaybackStatus(playbackID, playbackStatusFailed, result.err.Error())
 			return nil, result.err
 		}
-		nextMeta := app.PlayMeta{Text: nextClip.Text, SpeakerID: nextClip.SpeakerID}
-		if pErr := p.Play(ctx, result.wav, nextMeta); pErr != nil {
+		if pErr := p.Play(ctx, result.wav, clipToPlayMeta(nextClip)); pErr != nil {
 			if !remainTimer.Stop() {
 				<-remainTimer.C
 			}
@@ -1405,6 +1425,10 @@ func (p *HTTPStreamPlayer) appendHistory(ev clipEvent) {
 		SpeakerName: ev.SpeakerName,
 		StyleName:   ev.StyleName,
 		Timestamp:   ev.Timestamp,
+		SpeakerID:   ev.SpeakerID,
+		Speed:       ev.Speed,
+		Pitch:       ev.Pitch,
+		Intonation:  ev.Intonation,
 	}
 	data, err := json.Marshal(record)
 	if err != nil {
