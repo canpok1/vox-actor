@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef } from "react";
-import type { TimelineEntry } from "../types/api";
+import type { ClipEvent, TimelineEntry } from "../types/api";
 import { TimelineItem } from "./TimelineItem";
 
 interface TimelineProps {
@@ -10,6 +10,7 @@ interface TimelineProps {
   showStyleName: boolean;
   showTimestamp: boolean;
   isCharacterMode?: boolean;
+  onReplay?: (entry: ClipEvent & { kind: "clip" }) => void;
 }
 
 export function Timeline({
@@ -20,6 +21,7 @@ export function Timeline({
   showStyleName,
   showTimestamp,
   isCharacterMode = false,
+  onReplay,
 }: TimelineProps) {
   const listRef = useRef<HTMLOListElement>(null);
   const prevIsCharacterMode = useRef(isCharacterMode);
@@ -75,6 +77,11 @@ export function Timeline({
             showStyleName={isCharacterMode ? false : showStyleName}
             showTimestamp={isCharacterMode ? false : showTimestamp}
             highlightPlaying={!isCharacterMode}
+            onReplay={
+              onReplay && entry.kind === "clip"
+                ? () => onReplay(entry)
+                : undefined
+            }
           />
         ))}
       </ol>

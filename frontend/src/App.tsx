@@ -17,6 +17,7 @@ import {
   isErrorEventPayload,
   type Speaker,
   type CharacterEntry,
+  type ClipEvent,
   type TimelineEntry,
 } from "./types/api";
 
@@ -351,6 +352,27 @@ export function App() {
     });
   }, [testSpeakerId, showTestError]);
 
+  const handleReplay = useCallback((entry: ClipEvent & { kind: "clip" }): void => {
+    fetch("/api/play", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        clips: [
+          {
+            text: entry.text,
+            speaker_id: entry.speakerId,
+            ...(entry.speed !== undefined && { speed: entry.speed }),
+            ...(entry.pitch !== undefined && { pitch: entry.pitch }),
+            ...(entry.intonation !== undefined && { intonation: entry.intonation }),
+          },
+        ],
+        skip_history: true,
+      }),
+    }).catch((err: unknown) => {
+      console.error("replay failed", err);
+    });
+  }, []);
+
   return (
     <main className="mx-auto flex h-dvh max-w-[1200px] flex-col overflow-hidden rounded-md bg-ctp-surface p-3 sm:p-4 md:rounded-lg md:p-6">
       <div className="shrink-0">
@@ -388,6 +410,7 @@ export function App() {
           showCharacters={showCharacters}
           onShowCharactersChange={setShowCharacters}
           volume={audioVolume}
+          onReplay={handleReplay}
         />
         {!silent && (
           <TestPanel

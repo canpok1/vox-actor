@@ -13,6 +13,10 @@ export interface ClipPayload {
   speakerName?: string;
   styleName?: string;
   timestamp?: number;
+  speakerId?: number;
+  speed?: number;
+  pitch?: number;
+  intonation?: number;
 }
 
 export interface ErrorPayload {
