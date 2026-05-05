@@ -10,6 +10,7 @@ const clipEntry: TimelineEntry = {
   speakerName: "話者A",
   styleName: "スタイル1",
   timestamp: 1700000000000,
+  speakerId: 0,
 };
 
 const defaultProps = {

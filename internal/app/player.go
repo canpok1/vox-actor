@@ -41,6 +41,11 @@ type PlayMeta struct {
 	// SpeakerID は再生に使ったVOICEVOXのスタイルID（解決後の値）。
 	// HTTPStreamPlayer では話者名/スタイル名の解決キーとして利用される。
 	SpeakerID int
+	// Speed / Pitch / Intonation は合成パラメータ（省略可）。
+	// 再合成時に元のパラメータを復元できるよう履歴に保持される。
+	Speed      *float64
+	Pitch      *float64
+	Intonation *float64
 }
 
 // AudioPlayer はWAVバイト列を再生するインターフェース。

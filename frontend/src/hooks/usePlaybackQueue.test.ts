@@ -10,6 +10,7 @@ function makeClip(n: number): ClipEvent {
     speakerName: "speaker",
     styleName: "normal",
     timestamp: n * 1000,
+    speakerId: 0,
   };
 }
 

@@ -3538,3 +3538,248 @@ func TestHTTPStreamPlayer_Play_DoesNotPanicWhenSaveWavDirNotSet(t *testing.T) {
 		t.Fatalf("Play: %v", err)
 	}
 }
+
+// --- History params tests (Issue #545) ---
+
+func TestHTTPStreamPlayer_History_WritesParamsOnPlay(t *testing.T) {
+	historyDir := t.TempDir()
+	fixedNow := time.Date(2026, 4, 28, 10, 0, 0, 0, time.Local)
+	lookup := map[int]entity.SpeakerStyleInfo{
+		3: {SpeakerName: "ずんだもん", StyleName: "ノーマル"},
+	}
+	p, err := NewHTTPStreamPlayer("127.0.0.1:0", newTestStreamAssets(),
+		WithHistoryDir(historyDir),
+		withNowFunc(func() time.Time { return fixedNow }),
+		WithSpeakerLookup(lookup),
+	)
+	if err != nil {
+		t.Fatalf("NewHTTPStreamPlayer: %v", err)
+	}
+	if err := p.Start(context.Background()); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		_ = p.Shutdown(ctx)
+	})
+
+	speed := 1.2
+	pitch := 0.05
+	intonation := 1.3
+	if err := p.Play(context.Background(), []byte("RIFFwavdata"), app.PlayMeta{
+		Text: "パラメータテスト", SpeakerID: 3,
+		Speed: &speed, Pitch: &pitch, Intonation: &intonation,
+	}); err != nil {
+		t.Fatalf("Play: %v", err)
+	}
+
+	filePath := filepath.Join(historyDir, "2026-04-28.jsonl")
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		t.Fatalf("expected history file at %s: %v", filePath, err)
+	}
+	lines := strings.Split(strings.TrimRight(string(data), "\n"), "\n")
+	if len(lines) != 1 {
+		t.Fatalf("expected 1 line, got %d", len(lines))
+	}
+	var rec historyRecord
+	if err := json.Unmarshal([]byte(lines[0]), &rec); err != nil {
+		t.Fatalf("failed to parse history line: %v", err)
+	}
+	if rec.SpeakerID != 3 {
+		t.Errorf("expected SpeakerID=3, got %d", rec.SpeakerID)
+	}
+	if rec.Speed == nil || *rec.Speed != speed {
+		t.Errorf("expected Speed=%v, got %v", speed, rec.Speed)
+	}
+	if rec.Pitch == nil || *rec.Pitch != pitch {
+		t.Errorf("expected Pitch=%v, got %v", pitch, rec.Pitch)
+	}
+	if rec.Intonation == nil || *rec.Intonation != intonation {
+		t.Errorf("expected Intonation=%v, got %v", intonation, rec.Intonation)
+	}
+}
+
+func TestHTTPStreamPlayer_History_WritesParamsOnPlayText(t *testing.T) {
+	historyDir := t.TempDir()
+	fixedNow := time.Date(2026, 4, 28, 10, 0, 0, 0, time.Local)
+	lookup := map[int]entity.SpeakerStyleInfo{
+		3: {SpeakerName: "ずんだもん", StyleName: "ノーマル"},
+	}
+	p, err := NewHTTPStreamPlayer("127.0.0.1:0", newTestStreamAssets(),
+		WithHistoryDir(historyDir),
+		withNowFunc(func() time.Time { return fixedNow }),
+		WithSpeakerLookup(lookup),
+	)
+	if err != nil {
+		t.Fatalf("NewHTTPStreamPlayer: %v", err)
+	}
+	if err := p.Start(context.Background()); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		_ = p.Shutdown(ctx)
+	})
+	p.silentInterval = 1 * time.Millisecond
+
+	speed := 0.9
+	pitch := -0.05
+	intonation := 0.8
+	if err := p.PlayText(context.Background(), app.PlayMeta{
+		Text: "サイレントパラメータ", SpeakerID: 3,
+		Speed: &speed, Pitch: &pitch, Intonation: &intonation,
+	}); err != nil {
+		t.Fatalf("PlayText: %v", err)
+	}
+
+	filePath := filepath.Join(historyDir, "2026-04-28.jsonl")
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		t.Fatalf("expected history file at %s: %v", filePath, err)
+	}
+	lines := strings.Split(strings.TrimRight(string(data), "\n"), "\n")
+	if len(lines) != 1 {
+		t.Fatalf("expected 1 line, got %d", len(lines))
+	}
+	var rec historyRecord
+	if err := json.Unmarshal([]byte(lines[0]), &rec); err != nil {
+		t.Fatalf("failed to parse history line: %v", err)
+	}
+	if rec.SpeakerID != 3 {
+		t.Errorf("expected SpeakerID=3, got %d", rec.SpeakerID)
+	}
+	if rec.Speed == nil || *rec.Speed != speed {
+		t.Errorf("expected Speed=%v, got %v", speed, rec.Speed)
+	}
+	if rec.Pitch == nil || *rec.Pitch != pitch {
+		t.Errorf("expected Pitch=%v, got %v", pitch, rec.Pitch)
+	}
+	if rec.Intonation == nil || *rec.Intonation != intonation {
+		t.Errorf("expected Intonation=%v, got %v", intonation, rec.Intonation)
+	}
+}
+
+func TestHTTPStreamPlayer_History_BackwardCompatMissingParams(t *testing.T) {
+	historyDir := t.TempDir()
+	fixedNow := time.Date(2026, 4, 28, 10, 0, 0, 0, time.Local)
+
+	// 旧形式（speakerId/speed/pitch/intonation なし）のエントリをファイルに書く。
+	oldJSON := `{"text":"旧形式エントリ","speakerName":"ずんだもん","styleName":"ノーマル","timestamp":1745820000000}`
+	filePath := filepath.Join(historyDir, "2026-04-28.jsonl")
+	if err := os.WriteFile(filePath, []byte(oldJSON+"\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	p, err := NewHTTPStreamPlayer("127.0.0.1:0", newTestStreamAssets(),
+		WithHistoryDir(historyDir),
+		withNowFunc(func() time.Time { return fixedNow }),
+	)
+	if err != nil {
+		t.Fatalf("NewHTTPStreamPlayer: %v", err)
+	}
+	if err := p.Start(context.Background()); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		_ = p.Shutdown(ctx)
+	})
+
+	resp, err := http.Get("http://" + p.Addr() + "/api/history")
+	if err != nil {
+		t.Fatalf("GET /api/history: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+	var result apiHistoryResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(result.Entries) != 1 {
+		t.Fatalf("expected 1 entry, got %d", len(result.Entries))
+	}
+	entry := result.Entries[0]
+	if entry.Text != "旧形式エントリ" {
+		t.Errorf("expected Text=%q, got %q", "旧形式エントリ", entry.Text)
+	}
+	if entry.SpeakerID != 0 {
+		t.Errorf("expected SpeakerID=0 for old record, got %d", entry.SpeakerID)
+	}
+	if entry.Speed != nil {
+		t.Errorf("expected Speed=nil for old record, got %v", entry.Speed)
+	}
+	if entry.Pitch != nil {
+		t.Errorf("expected Pitch=nil for old record, got %v", entry.Pitch)
+	}
+	if entry.Intonation != nil {
+		t.Errorf("expected Intonation=nil for old record, got %v", entry.Intonation)
+	}
+}
+
+func TestHTTPStreamPlayer_APIHistory_IncludesParams(t *testing.T) {
+	historyDir := t.TempDir()
+	fixedNow := time.Date(2026, 4, 28, 10, 0, 0, 0, time.Local)
+	lookup := map[int]entity.SpeakerStyleInfo{
+		3: {SpeakerName: "ずんだもん", StyleName: "ノーマル"},
+	}
+	p, err := NewHTTPStreamPlayer("127.0.0.1:0", newTestStreamAssets(),
+		WithHistoryDir(historyDir),
+		withNowFunc(func() time.Time { return fixedNow }),
+		WithSpeakerLookup(lookup),
+	)
+	if err != nil {
+		t.Fatalf("NewHTTPStreamPlayer: %v", err)
+	}
+	if err := p.Start(context.Background()); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		_ = p.Shutdown(ctx)
+	})
+
+	speed := 1.1
+	intonation := 1.4
+	if err := p.Play(context.Background(), []byte("RIFFwavdata"), app.PlayMeta{
+		Text: "APIレスポンステスト", SpeakerID: 3,
+		Speed: &speed, Intonation: &intonation,
+	}); err != nil {
+		t.Fatalf("Play: %v", err)
+	}
+
+	resp, err := http.Get("http://" + p.Addr() + "/api/history")
+	if err != nil {
+		t.Fatalf("GET /api/history: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+	var result apiHistoryResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(result.Entries) != 1 {
+		t.Fatalf("expected 1 entry, got %d", len(result.Entries))
+	}
+	entry := result.Entries[0]
+	if entry.SpeakerID != 3 {
+		t.Errorf("expected SpeakerID=3, got %d", entry.SpeakerID)
+	}
+	if entry.Speed == nil || *entry.Speed != speed {
+		t.Errorf("expected Speed=%v, got %v", speed, entry.Speed)
+	}
+	if entry.Pitch != nil {
+		t.Errorf("expected Pitch=nil (omitted), got %v", entry.Pitch)
+	}
+	if entry.Intonation == nil || *entry.Intonation != intonation {
+		t.Errorf("expected Intonation=%v, got %v", intonation, entry.Intonation)
+	}
+}

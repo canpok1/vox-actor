@@ -17,6 +17,7 @@ const clipEntry = (timestamp: number, text: string): TimelineEntry => ({
   speakerName: "話者A",
   styleName: "ノーマル",
   timestamp,
+  speakerId: 0,
 });
 
 describe("Timeline", () => {

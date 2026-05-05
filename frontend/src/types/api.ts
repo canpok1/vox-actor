@@ -9,6 +9,10 @@ export interface ClipEvent {
   styleName: string;
   // Unix ms (UTC)。セッション跨ぎでも単調増加するため再起動後の衝突が発生しない。
   timestamp: number;
+  speakerId: number;
+  speed?: number;
+  pitch?: number;
+  intonation?: number;
 }
 
 // ErrorEventPayload は SSE "error" イベントで届くサーバー側エラーのペイロード。
@@ -45,18 +49,30 @@ declare global {
   }
 }
 
+function hasValidSpeechParams(v: Record<string, unknown>): boolean {
+  return (
+    (v.speed === undefined || typeof v.speed === "number") &&
+    (v.pitch === undefined || typeof v.pitch === "number") &&
+    (v.intonation === undefined || typeof v.intonation === "number")
+  );
+}
+
 export function isClipEvent(value: unknown): value is ClipEvent {
   if (typeof value !== "object" || value === null) {
     return false;
   }
   const v = value as Record<string, unknown>;
-  return (
-    typeof v.url === "string" &&
-    typeof v.text === "string" &&
-    typeof v.speakerName === "string" &&
-    typeof v.styleName === "string" &&
-    typeof v.timestamp === "number"
-  );
+  if (
+    typeof v.url !== "string" ||
+    typeof v.text !== "string" ||
+    typeof v.speakerName !== "string" ||
+    typeof v.styleName !== "string" ||
+    typeof v.timestamp !== "number" ||
+    typeof v.speakerId !== "number"
+  ) {
+    return false;
+  }
+  return hasValidSpeechParams(v);
 }
 
 export function isErrorEventPayload(
@@ -173,6 +189,10 @@ export interface HistoryEntry {
   speakerName: string;
   styleName: string;
   timestamp: number;
+  speakerId: number;
+  speed?: number;
+  pitch?: number;
+  intonation?: number;
 }
 
 export interface ApiHistory {
@@ -184,12 +204,16 @@ export function isHistoryEntry(value: unknown): value is HistoryEntry {
     return false;
   }
   const v = value as Record<string, unknown>;
-  return (
-    typeof v.text === "string" &&
-    typeof v.speakerName === "string" &&
-    typeof v.styleName === "string" &&
-    typeof v.timestamp === "number"
-  );
+  if (
+    typeof v.text !== "string" ||
+    typeof v.speakerName !== "string" ||
+    typeof v.styleName !== "string" ||
+    typeof v.timestamp !== "number" ||
+    typeof v.speakerId !== "number"
+  ) {
+    return false;
+  }
+  return hasValidSpeechParams(v);
 }
 
 export function isApiHistory(value: unknown): value is ApiHistory {
