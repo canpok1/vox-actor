@@ -25,7 +25,7 @@ test.describe("音声テストタブ", () => {
     await expect(page.getByLabel("話者", { exact: true })).toHaveValue("1");
   });
 
-  test("テスト再生ボタンで POST /api/play に skip_history:true でリクエストが飛ぶ", async ({
+  test("テスト再生ボタンで POST /api/preview-clip に正しいパラメータが送信される", async ({
     page,
   }) => {
     await page.goto("/");
@@ -33,17 +33,16 @@ test.describe("音声テストタブ", () => {
     await page.getByLabel("話者", { exact: true }).selectOption("3");
 
     const requestPromise = page.waitForRequest(
-      (req) => req.url().includes("/api/play") && req.method() === "POST",
+      (req) => req.url().includes("/api/preview-clip") && req.method() === "POST",
     );
 
     await page.getByRole("button", { name: /テスト再生/ }).click();
     const req = await requestPromise;
     const body = req.postDataJSON() as {
-      clips: { text: string; speaker_id: number }[];
-      skip_history: boolean;
+      text: string;
+      speaker_id: number;
     };
-    expect(body.skip_history).toBe(true);
-    expect(body.clips).toHaveLength(1);
-    expect(body.clips[0].speaker_id).toBe(3);
+    expect(body.speaker_id).toBe(3);
+    expect(body.text).toBeTruthy();
   });
 });

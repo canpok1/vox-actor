@@ -333,45 +333,59 @@ export function App() {
 
   const connected = useEventSource("/events", handleClip, handleServerError);
 
+  const playPreviewClip = useCallback(
+    (body: object, onError?: (msg: string) => void): void => {
+      fetch("/api/preview-clip", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      })
+        .then((res) => {
+          if (!res.ok) throw new Error(`preview-clip ${res.status}`);
+          return res.blob();
+        })
+        .then((blob) => {
+          const url = URL.createObjectURL(blob);
+          const audio = new Audio(url);
+          const cleanup = () => URL.revokeObjectURL(url);
+          audio.addEventListener("ended", cleanup);
+          audio.play().catch((err: unknown) => {
+            cleanup();
+            console.error("audio play failed", err);
+          });
+        })
+        .catch((err: unknown) => {
+          console.error("preview-clip failed", err);
+          onError?.("合成に失敗しました");
+        });
+    },
+    [],
+  );
+
   const handleTestPlay = useCallback((): void => {
     if (!testSpeakerId) {
       showTestError("話者が選択されていません");
       return;
     }
     setTestError("");
-    fetch("/api/play", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        clips: [{ text: "音量テストです", speaker_id: Number(testSpeakerId) }],
-        skip_history: true,
-      }),
-    }).catch((err: unknown) => {
-      console.error("test play failed", err);
-      showTestError("合成に失敗しました");
-    });
-  }, [testSpeakerId, showTestError]);
+    playPreviewClip(
+      { text: "音量テストです", speaker_id: Number(testSpeakerId) },
+      showTestError,
+    );
+  }, [testSpeakerId, showTestError, playPreviewClip]);
 
-  const handleReplay = useCallback((entry: ClipEvent & { kind: "clip" }): void => {
-    fetch("/api/play", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        clips: [
-          {
-            text: entry.text,
-            speaker_id: entry.speakerId,
-            ...(entry.speed !== undefined && { speed: entry.speed }),
-            ...(entry.pitch !== undefined && { pitch: entry.pitch }),
-            ...(entry.intonation !== undefined && { intonation: entry.intonation }),
-          },
-        ],
-        skip_history: true,
-      }),
-    }).catch((err: unknown) => {
-      console.error("replay failed", err);
-    });
-  }, []);
+  const handleReplay = useCallback(
+    (entry: ClipEvent & { kind: "clip" }): void => {
+      playPreviewClip({
+        text: entry.text,
+        speaker_id: entry.speakerId,
+        ...(entry.speed !== undefined && { speed: entry.speed }),
+        ...(entry.pitch !== undefined && { pitch: entry.pitch }),
+        ...(entry.intonation !== undefined && { intonation: entry.intonation }),
+      });
+    },
+    [playPreviewClip],
+  );
 
   return (
     <main className="mx-auto flex h-dvh max-w-[1200px] flex-col overflow-hidden rounded-md bg-ctp-surface p-3 sm:p-4 md:rounded-lg md:p-6">

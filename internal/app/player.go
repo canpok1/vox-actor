@@ -43,10 +43,9 @@ type PlayMeta struct {
 	SpeakerID int
 	// Speed / Pitch / Intonation は合成パラメータ（省略可）。
 	// 再合成時に元のパラメータを復元できるよう履歴に保持される。
-	Speed       *float64
-	Pitch       *float64
-	Intonation  *float64
-	SkipHistory bool
+	Speed      *float64
+	Pitch      *float64
+	Intonation *float64
 }
 
 // AudioPlayer はWAVバイト列を再生するインターフェース。

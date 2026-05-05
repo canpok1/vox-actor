@@ -88,3 +88,23 @@ Feature: TimelineItem の個別 UI 要素
     Then 最新10件はタイムラインに表示される
     And 最古のエントリはタイムラインから削除されている
     # test: frontend/test/e2e/timeline-item.spec.ts::"履歴件数が上限を超えると古いエントリが削除される"
+
+  # ── TimelineItem: 再生ボタン ────────────────────────────────────
+
+  Scenario: clip アイテムに「再生」ボタンが表示される
+    Given viewer フロントエンドが起動している
+    When ページを開く
+    And clip イベントを受信する
+    Then タイムラインアイテムに「再生」ボタンが表示される
+    # test: frontend/test/e2e/timeline-item.spec.ts::"clip アイテムに「再生」ボタンが表示される"
+
+  Scenario: 「再生」ボタン押下で POST /api/preview-clip に正しい clip パラメータが送信される
+    Given viewer フロントエンドが起動している
+    When ページを開く
+    And text="再生テキスト", speakerId=3, speed=1.1 の clip イベントを受信する
+    And タイムラインアイテムの「再生」ボタンをクリックする
+    Then POST /api/preview-clip のリクエストが発生する
+    And リクエストボディの text が "再生テキスト" である
+    And リクエストボディの speaker_id が 3 である
+    And リクエストボディの speed が 1.1 である
+    # test: frontend/test/e2e/timeline-item.spec.ts::"「再生」ボタン押下で POST /api/preview-clip に正しい clip パラメータが送信される"

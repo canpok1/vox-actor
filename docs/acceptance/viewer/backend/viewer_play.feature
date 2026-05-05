@@ -121,14 +121,3 @@ Feature: viewer バックエンド 再生API・クリップ配信・テストク
     Then URL1 と URL2 が異なる（再起動後の衝突回避）
     # test: test/e2e/viewer_clip_test.go::TestViewerE2E_Clip_RestartCollisionAvoidance
 
-  # ── skip_history フラグ ─────────────────────────────────────────
-
-  Scenario: POST /api/play に skip_history:true を渡すと履歴ファイルへ追記しない
-    Given vox-actor バイナリがビルド済みである
-    And フェイク VOICEVOX サーバーが起動している
-    And 空きポートを取得している
-    When "vox-actor viewer --port <port>" を起動する
-    And POST /api/play に { clips:[{text:"テスト",speaker_id:3}], skip_history:true } を送信する
-    Then ステータスコード 200 が返る
-    And 履歴ファイル（YYYY-MM-DD.jsonl）が作成されない
-    # test: internal/infra/http_stream_player_test.go::TestHTTPStreamPlayer_APIPlay_SkipHistoryFlagNotWrittenToHistory

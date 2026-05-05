@@ -79,10 +79,8 @@ package infra
 // TODO: Play() で clip が YYYY-MM-DD.jsonl に追記される          → TestHTTPStreamPlayer_History_WritesClipOnPlay
 // TODO: PlayText() で clip が YYYY-MM-DD.jsonl に追記される      → TestHTTPStreamPlayer_History_WritesClipOnPlayText
 //
-// #544 /api/play skip_history フラグ・/test-clip 廃止:
-// DONE: Play() に SkipHistory=true を渡すと履歴ファイルへ追記しない → TestHTTPStreamPlayer_History_SkipHistoryOnPlay
-// DONE: PlayText() に SkipHistory=true を渡すと履歴ファイルへ追記しない → TestHTTPStreamPlayer_History_SkipHistoryOnPlayText
-// DONE: /api/play の skip_history:true リクエストで履歴ファイルへ追記しない → TestHTTPStreamPlayer_APIPlay_SkipHistoryFlagNotWrittenToHistory
+// #544/#550 /api/play skip_history フラグ廃止・/api/preview-clip 追加:
+// skip_history フラグは #550 で廃止済み（/api/preview-clip に移行）
 // TODO: 日付変更時に新ファイルへ切り替わる                       → TestHTTPStreamPlayer_History_RotatesOnDateChange
 // TODO: viewer 起動時に 30日より古い *.jsonl が削除される        → TestHTTPStreamPlayer_History_PrunesOldFiles
 // TODO: 当日ファイルなし時も正常起動                             → TestHTTPStreamPlayer_Start_NoHistoryFile
@@ -92,6 +90,17 @@ package infra
 // #537 --save-wav-dir:
 // DONE: WithSaveWavDir 設定時に Play() で WAV が saveWavDir に保存される   → TestHTTPStreamPlayer_Play_SavesWavWhenSaveWavDirSet
 // DONE: WithSaveWavDir 未設定時は Play() がパニックしない                   → TestHTTPStreamPlayer_Play_DoesNotPanicWhenSaveWavDirNotSet
+//
+// #550 /api/preview-clip 新エンドポイント・skip_history 廃止:
+// DONE: GET /api/preview-clip は 405 を返す                                → TestHTTPStreamPlayer_APIPreviewClip_MethodNotAllowed
+// DONE: voicevoxClient 未設定時は 503 を返す                               → TestHTTPStreamPlayer_APIPreviewClip_NoClient
+// DONE: 不正 JSON ボディで 400 を返す                                       → TestHTTPStreamPlayer_APIPreviewClip_InvalidJSON
+// DONE: text が空のリクエストで 400 を返す                                  → TestHTTPStreamPlayer_APIPreviewClip_EmptyText
+// DONE: 正常リクエストで合成して audio/wav を返す                           → TestHTTPStreamPlayer_APIPreviewClip_Success
+// DONE: 合成エラー時に 502 を返す                                           → TestHTTPStreamPlayer_APIPreviewClip_SynthesisFails
+// DONE: /api/preview-clip は SSE clip イベントを配信しない                  → TestHTTPStreamPlayer_APIPreviewClip_NoSSEBroadcast
+// DONE: /api/preview-clip は履歴ファイルへ追記しない                        → TestHTTPStreamPlayer_APIPreviewClip_NoHistoryWrite
+// DONE: speed/pitch/intonation パラメータが合成クエリに反映される           → TestHTTPStreamPlayer_APIPreviewClip_SpeechParams
 
 import (
 	"bufio"
@@ -3648,123 +3657,178 @@ func TestHTTPStreamPlayer_APIHistory_IncludesParams(t *testing.T) {
 	}
 }
 
-func TestHTTPStreamPlayer_History_SkipHistoryOnPlay(t *testing.T) {
-	historyDir := t.TempDir()
-	fixedNow := time.Date(2026, 4, 28, 10, 0, 0, 0, time.Local)
-	lookup := map[int]entity.SpeakerStyleInfo{
-		3: {SpeakerName: "ずんだもん", StyleName: "ノーマル"},
-	}
-	p, err := NewHTTPStreamPlayer("127.0.0.1:0", newTestStreamAssets(),
-		WithHistoryDir(historyDir),
-		withNowFunc(func() time.Time { return fixedNow }),
-		WithSpeakerLookup(lookup),
-	)
+// --- #550 /api/preview-clip ---
+
+func TestHTTPStreamPlayer_APIPreviewClip_MethodNotAllowed(t *testing.T) {
+	t.Parallel()
+	p := newStartedPlayerWithOpts(t)
+
+	resp, err := http.Get("http://" + p.Addr() + "/api/preview-clip")
 	if err != nil {
-		t.Fatalf("NewHTTPStreamPlayer: %v", err)
+		t.Fatalf("GET /api/preview-clip: %v", err)
 	}
-	if err := p.Start(context.Background()); err != nil {
-		t.Fatalf("Start: %v", err)
-	}
-	t.Cleanup(func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-		defer cancel()
-		_ = p.Shutdown(ctx)
-	})
-
-	if err := p.Play(context.Background(), []byte("RIFFwavdata"), app.PlayMeta{
-		Text: "スキップテスト", SpeakerID: 3, SkipHistory: true,
-	}); err != nil {
-		t.Fatalf("Play: %v", err)
-	}
-
-	filePath := filepath.Join(historyDir, "2026-04-28.jsonl")
-	if _, err := os.Stat(filePath); !os.IsNotExist(err) {
-		t.Errorf("expected history file not to exist when SkipHistory=true, but it exists (err=%v)", err)
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusMethodNotAllowed {
+		t.Errorf("expected 405, got %d", resp.StatusCode)
 	}
 }
 
-func TestHTTPStreamPlayer_History_SkipHistoryOnPlayText(t *testing.T) {
-	historyDir := t.TempDir()
-	fixedNow := time.Date(2026, 4, 28, 10, 0, 0, 0, time.Local)
-	lookup := map[int]entity.SpeakerStyleInfo{
-		3: {SpeakerName: "ずんだもん", StyleName: "ノーマル"},
-	}
-	p, err := NewHTTPStreamPlayer("127.0.0.1:0", newTestStreamAssets(),
-		WithHistoryDir(historyDir),
-		withNowFunc(func() time.Time { return fixedNow }),
-		WithSpeakerLookup(lookup),
-	)
+func TestHTTPStreamPlayer_APIPreviewClip_NoClient(t *testing.T) {
+	t.Parallel()
+	p := newStartedPlayerWithOpts(t)
+
+	body := bytes.NewBufferString(`{"text":"テスト","speaker_id":3}`)
+	resp, err := http.Post("http://"+p.Addr()+"/api/preview-clip", "application/json", body)
 	if err != nil {
-		t.Fatalf("NewHTTPStreamPlayer: %v", err)
+		t.Fatalf("POST /api/preview-clip: %v", err)
 	}
-	if err := p.Start(context.Background()); err != nil {
-		t.Fatalf("Start: %v", err)
-	}
-	t.Cleanup(func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-		defer cancel()
-		_ = p.Shutdown(ctx)
-	})
-	p.silentInterval = 1 * time.Millisecond
-
-	if err := p.PlayText(context.Background(), app.PlayMeta{
-		Text: "サイレントスキップ", SpeakerID: 3, SkipHistory: true,
-	}); err != nil {
-		t.Fatalf("PlayText: %v", err)
-	}
-
-	filePath := filepath.Join(historyDir, "2026-04-28.jsonl")
-	if _, err := os.Stat(filePath); !os.IsNotExist(err) {
-		t.Errorf("expected history file not to exist when SkipHistory=true, but it exists (err=%v)", err)
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusServiceUnavailable {
+		t.Errorf("expected 503, got %d", resp.StatusCode)
 	}
 }
 
-func TestHTTPStreamPlayer_APIPlay_SkipHistoryFlagNotWrittenToHistory(t *testing.T) {
-	historyDir := t.TempDir()
-	fixedNow := time.Date(2026, 4, 28, 10, 0, 0, 0, time.Local)
+func TestHTTPStreamPlayer_APIPreviewClip_InvalidJSON(t *testing.T) {
+	t.Parallel()
 	stub := &testVoicevoxClient{wav: []byte("RIFFx")}
-	lookup := map[int]entity.SpeakerStyleInfo{
-		3: {SpeakerName: "ずんだもん", StyleName: "ノーマル"},
-	}
-	p, err := NewHTTPStreamPlayer("127.0.0.1:0", newTestStreamAssets(),
-		WithHistoryDir(historyDir),
-		withNowFunc(func() time.Time { return fixedNow }),
-		WithSpeakerLookup(lookup),
-		WithVoicevoxClient(stub),
-	)
+	p := newStartedPlayerWithOpts(t, WithVoicevoxClient(stub))
+
+	body := bytes.NewBufferString("not-json")
+	resp, err := http.Post("http://"+p.Addr()+"/api/preview-clip", "application/json", body)
 	if err != nil {
-		t.Fatalf("NewHTTPStreamPlayer: %v", err)
+		t.Fatalf("POST /api/preview-clip: %v", err)
 	}
-	if err := p.Start(context.Background()); err != nil {
-		t.Fatalf("Start: %v", err)
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", resp.StatusCode)
 	}
-	t.Cleanup(func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-		defer cancel()
-		_ = p.Shutdown(ctx)
-	})
+}
+
+func TestHTTPStreamPlayer_APIPreviewClip_EmptyText(t *testing.T) {
+	t.Parallel()
+	stub := &testVoicevoxClient{wav: []byte("RIFFx")}
+	p := newStartedPlayerWithOpts(t, WithVoicevoxClient(stub))
+
+	body := bytes.NewBufferString(`{"text":"","speaker_id":3}`)
+	resp, err := http.Post("http://"+p.Addr()+"/api/preview-clip", "application/json", body)
+	if err != nil {
+		t.Fatalf("POST /api/preview-clip: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", resp.StatusCode)
+	}
+}
+
+func TestHTTPStreamPlayer_APIPreviewClip_Success(t *testing.T) {
+	t.Parallel()
+	wavData := []byte("RIFF\x24\x00\x00\x00WAVEfmt ")
+	stub := &testVoicevoxClient{wav: wavData}
+	p := newStartedPlayerWithOpts(t, WithVoicevoxClient(stub))
+
+	body := bytes.NewBufferString(`{"text":"テスト","speaker_id":3}`)
+	resp, err := http.Post("http://"+p.Addr()+"/api/preview-clip", "application/json", body)
+	if err != nil {
+		t.Fatalf("POST /api/preview-clip: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected 200, got %d", resp.StatusCode)
+	}
+	if ct := resp.Header.Get("Content-Type"); ct != "audio/wav" {
+		t.Errorf("expected Content-Type audio/wav, got %q", ct)
+	}
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read body: %v", err)
+	}
+	if len(respBody) == 0 {
+		t.Error("expected non-empty WAV body")
+	}
+}
+
+func TestHTTPStreamPlayer_APIPreviewClip_SynthesisFails(t *testing.T) {
+	t.Parallel()
+	stub := &testVoicevoxClient{createQueryErr: errors.New("synth failed")}
+	p := newStartedPlayerWithOpts(t, WithVoicevoxClient(stub))
+
+	body := bytes.NewBufferString(`{"text":"テスト","speaker_id":3}`)
+	resp, err := http.Post("http://"+p.Addr()+"/api/preview-clip", "application/json", body)
+	if err != nil {
+		t.Fatalf("POST /api/preview-clip: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusBadGateway {
+		t.Errorf("expected 502, got %d", resp.StatusCode)
+	}
+}
+
+func TestHTTPStreamPlayer_APIPreviewClip_NoSSEBroadcast(t *testing.T) {
+	t.Parallel()
+	stub := &testVoicevoxClient{wav: []byte("RIFFx")}
+	p := newStartedPlayerWithOpts(t, WithVoicevoxClient(stub))
 
 	events := subscribeSSE(t, "http://"+p.Addr())
 	time.Sleep(100 * time.Millisecond)
 
-	body := bytes.NewBufferString(`{"clips":[{"text":"テスト","speaker_id":3}],"skip_history":true}`)
-	resp, err := http.Post("http://"+p.Addr()+"/api/play", "application/json", body)
+	body := bytes.NewBufferString(`{"text":"テスト","speaker_id":3}`)
+	resp, err := http.Post("http://"+p.Addr()+"/api/preview-clip", "application/json", body)
 	if err != nil {
-		t.Fatalf("POST /api/play: %v", err)
+		t.Fatalf("POST /api/preview-clip: %v", err)
 	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("expected 200, got %d", resp.StatusCode)
-	}
+	_ = resp.Body.Close()
 
 	select {
-	case <-events:
-	case <-time.After(3 * time.Second):
-		t.Fatal("timeout waiting for SSE clip event")
+	case ev := <-events:
+		t.Errorf("unexpected SSE event received: %v", ev)
+	case <-time.After(300 * time.Millisecond):
+		// ok: no SSE event expected
 	}
+}
+
+func TestHTTPStreamPlayer_APIPreviewClip_NoHistoryWrite(t *testing.T) {
+	t.Parallel()
+	historyDir := t.TempDir()
+	fixedNow := time.Date(2026, 4, 28, 10, 0, 0, 0, time.Local)
+	stub := &testVoicevoxClient{wav: []byte("RIFFx")}
+	p := newStartedPlayerWithOpts(t,
+		WithVoicevoxClient(stub),
+		WithHistoryDir(historyDir),
+		withNowFunc(func() time.Time { return fixedNow }),
+	)
+
+	body := bytes.NewBufferString(`{"text":"テスト","speaker_id":3}`)
+	resp, err := http.Post("http://"+p.Addr()+"/api/preview-clip", "application/json", body)
+	if err != nil {
+		t.Fatalf("POST /api/preview-clip: %v", err)
+	}
+	_ = resp.Body.Close()
 
 	filePath := filepath.Join(historyDir, "2026-04-28.jsonl")
 	if _, err := os.Stat(filePath); !os.IsNotExist(err) {
-		t.Errorf("expected history file not to exist when skip_history=true, but it exists (err=%v)", err)
+		t.Errorf("expected history file not to exist for preview-clip, but it exists (err=%v)", err)
+	}
+}
+
+func TestHTTPStreamPlayer_APIPreviewClip_SpeechParams(t *testing.T) {
+	t.Parallel()
+	stub := &testVoicevoxClient{wav: []byte("RIFFx")}
+	p := newStartedPlayerWithOpts(t, WithVoicevoxClient(stub))
+
+	body := bytes.NewBufferString(`{"text":"テスト","speaker_id":3,"speed":1.2,"pitch":0.05,"intonation":1.5}`)
+	resp, err := http.Post("http://"+p.Addr()+"/api/preview-clip", "application/json", body)
+	if err != nil {
+		t.Fatalf("POST /api/preview-clip: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected 200, got %d", resp.StatusCode)
+	}
+	if stub.capturedText != "テスト" {
+		t.Errorf("expected capturedText='テスト', got %q", stub.capturedText)
+	}
+	if stub.capturedSpeaker != 3 {
+		t.Errorf("expected capturedSpeaker=3, got %d", stub.capturedSpeaker)
 	}
 }

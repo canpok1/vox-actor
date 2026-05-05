@@ -43,8 +43,16 @@ type ViewerClip struct {
 
 // ViewerPlayRequest is the request payload for POST /api/play.
 type ViewerPlayRequest struct {
-	Clips       []ViewerClip `json:"clips"`
-	SkipHistory bool         `json:"skip_history,omitempty"`
+	Clips []ViewerClip `json:"clips"`
+}
+
+// ViewerPreviewClipRequest is the request payload for POST /api/preview-clip.
+type ViewerPreviewClipRequest struct {
+	Text       string   `json:"text"`
+	SpeakerID  int      `json:"speaker_id"`
+	Speed      *float64 `json:"speed,omitempty"`
+	Pitch      *float64 `json:"pitch,omitempty"`
+	Intonation *float64 `json:"intonation,omitempty"`
 }
 
 // ViewerPlayResponse is the response from POST /api/play.
