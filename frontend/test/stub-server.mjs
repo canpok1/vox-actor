@@ -1,6 +1,6 @@
 // Playwright E2E 用スタブサーバー。
 // バックエンド (internal/infra/http_stream_player.go) の /events, /api/status,
-// /api/characters, /api/history, /test-clip, /clips/<id>.wav を Node 標準ライブラリだけでエミュレートする。
+// /api/characters, /api/history, /api/play, /clips/<id>.wav を Node 標準ライブラリだけでエミュレートする。
 //
 // テスト側からの制御チャネルとして以下を追加で提供する:
 // - POST /__stub/clip             { id?, url?, text, speakerName?, styleName?, timestamp? } → SSE clip 配信
@@ -18,7 +18,7 @@ import http from "node:http";
 const PORT = Number(process.env.VOX_STUB_PORT ?? 8080);
 
 // 短い無音 WAV（44 byte ヘッダのみ、PCM mono 8000Hz 8bit、データ長 0）。
-// /test-clip /clips/*.wav が返す。テストは再生成功までは検証しない。
+// /clips/*.wav が返す。テストは再生成功までは検証しない。
 const SILENT_WAV = (() => {
   const buf = Buffer.alloc(44);
   buf.write("RIFF", 0);
@@ -118,30 +118,15 @@ function handleApiHistory(_req, res) {
   writeJSON(res, 200, apiHistory);
 }
 
-function handleTestClip(req, res) {
-  const url = new URL(req.url, "http://localhost");
-  const speakerStr = url.searchParams.get("speaker") ?? "";
-  if (speakerStr === "") {
-    res.writeHead(400, { "Content-Type": "text/plain; charset=utf-8" });
-    res.end("speaker parameter is required");
-    return;
-  }
-  const speakerID = Number.parseInt(speakerStr, 10);
-  if (!Number.isInteger(speakerID)) {
-    res.writeHead(400, { "Content-Type": "text/plain; charset=utf-8" });
-    res.end("speaker parameter must be an integer");
-    return;
-  }
-  if (!apiStatus.speakers.some((s) => s.id === speakerID)) {
-    res.writeHead(400, { "Content-Type": "text/plain; charset=utf-8" });
-    res.end("speaker not found");
-    return;
-  }
-  res.writeHead(200, {
-    "Content-Type": "audio/wav",
-    "Content-Length": SILENT_WAV.length,
+async function handleApiPlay(req, res) {
+  const body = await readJSON(req);
+  const clips = Array.isArray(body.clips) ? body.clips : [];
+  const playbackId = `stub-${Date.now()}`;
+  writeJSON(res, 200, {
+    playback_id: playbackId,
+    clip_count: clips.length,
+    silent: false,
   });
-  res.end(SILENT_WAV);
 }
 
 function handleClipFile(_req, res) {
@@ -264,8 +249,8 @@ const server = http.createServer((req, res) => {
     return handleApiCharacters(req, res);
   if (req.method === "GET" && path === "/api/history")
     return handleApiHistory(req, res);
-  if (req.method === "GET" && path === "/test-clip")
-    return handleTestClip(req, res);
+  if (req.method === "POST" && path === "/api/play")
+    return handleApiPlay(req, res);
   if (
     req.method === "GET" &&
     path.startsWith("/clips/") &&
