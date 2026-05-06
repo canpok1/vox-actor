@@ -68,9 +68,13 @@ test.describe("配信タブ: SSE と Timeline", () => {
     await expect(page.getByText("● 接続中")).toBeVisible();
 
     const baseTs = 1700000001000;
-    // 21 件の clip イベントを送信する（デフォルト historySize=20 を超える）
+    // 21 件の clip イベントを送信する（デフォルト historySize=20 を超える）。
+    // url: "" を指定して音声キューに積まないようにする。
+    // URL がある場合、clip1 が再生中に clip21 が届くと trimTimeline が
+    // 再生中クリップを保護するため削除をスキップし、テストが flaky になる。
     for (let i = 0; i < 21; i++) {
       await pushClip(request, {
+        url: "",
         text: `クリップ${i + 1}`,
         timestamp: baseTs + i,
       });
