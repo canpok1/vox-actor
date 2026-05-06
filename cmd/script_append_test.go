@@ -275,7 +275,7 @@ func TestScriptAppendCmd_FlagsPassedToWriter(t *testing.T) {
 		t.Fatalf("expected 1 Write call, got: %d", len(writer.calls))
 	}
 	s := writer.calls[0].script
-	if s.SpeakerID == nil || *s.SpeakerID != 5 {
+	if s.SpeakerID == nil || s.SpeakerID.Value() != 5 {
 		t.Errorf("expected SpeakerID=5, got: %v", s.SpeakerID)
 	}
 	if s.Overrides.Speed == nil || *s.Overrides.Speed != 1.2 {

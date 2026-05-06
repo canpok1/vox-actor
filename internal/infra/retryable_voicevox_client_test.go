@@ -22,8 +22,8 @@ func (e *mockNetError) Temporary() bool { return true }
 // mockVoicevoxClient はテスト用のVoicevoxClientモック。
 type mockVoicevoxClient struct {
 	healthCheckFunc func(ctx context.Context) error
-	createQueryFunc func(ctx context.Context, text string, speakerID int) (*entity.AudioQuery, error)
-	synthesizeFunc  func(ctx context.Context, query *entity.AudioQuery, speakerID int) ([]byte, error)
+	createQueryFunc func(ctx context.Context, text string, speakerID entity.SpeakerID) (*entity.AudioQuery, error)
+	synthesizeFunc  func(ctx context.Context, query *entity.AudioQuery, speakerID entity.SpeakerID) ([]byte, error)
 	getSpeakersFunc func(ctx context.Context) ([]entity.Speaker, error)
 	callCounts      map[string]int
 }
@@ -42,7 +42,7 @@ func (m *mockVoicevoxClient) HealthCheck(ctx context.Context) error {
 	return nil
 }
 
-func (m *mockVoicevoxClient) CreateQuery(ctx context.Context, text string, speakerID int) (*entity.AudioQuery, error) {
+func (m *mockVoicevoxClient) CreateQuery(ctx context.Context, text string, speakerID entity.SpeakerID) (*entity.AudioQuery, error) {
 	m.callCounts["CreateQuery"]++
 	if m.createQueryFunc != nil {
 		return m.createQueryFunc(ctx, text, speakerID)
@@ -50,7 +50,7 @@ func (m *mockVoicevoxClient) CreateQuery(ctx context.Context, text string, speak
 	return &entity.AudioQuery{}, nil
 }
 
-func (m *mockVoicevoxClient) Synthesize(ctx context.Context, query *entity.AudioQuery, speakerID int) ([]byte, error) {
+func (m *mockVoicevoxClient) Synthesize(ctx context.Context, query *entity.AudioQuery, speakerID entity.SpeakerID) ([]byte, error) {
 	m.callCounts["Synthesize"]++
 	if m.synthesizeFunc != nil {
 		return m.synthesizeFunc(ctx, query, speakerID)
@@ -144,7 +144,7 @@ func TestRetryableVoicevoxClient_CreateQuery_RetrySuccess(t *testing.T) {
 	mock := newMockVoicevoxClient()
 	callCount := 0
 	expectedQuery := &entity.AudioQuery{SpeedScale: 1.0}
-	mock.createQueryFunc = func(_ context.Context, _ string, _ int) (*entity.AudioQuery, error) {
+	mock.createQueryFunc = func(_ context.Context, _ string, _ entity.SpeakerID) (*entity.AudioQuery, error) {
 		callCount++
 		if callCount == 1 {
 			return nil, &mockNetError{msg: "connection refused"}
@@ -155,7 +155,7 @@ func TestRetryableVoicevoxClient_CreateQuery_RetrySuccess(t *testing.T) {
 	noopSleep := func(_ context.Context, _ time.Duration) error { return nil }
 	client := infra.NewRetryableVoicevoxClient(mock, infra.WithSleepFunc(noopSleep))
 
-	query, err := client.CreateQuery(context.Background(), "test", 1)
+	query, err := client.CreateQuery(context.Background(), "test", entity.MustNewSpeakerID(1))
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -171,14 +171,14 @@ func TestRetryableVoicevoxClient_CreateQuery_RetrySuccess(t *testing.T) {
 func TestRetryableVoicevoxClient_CreateQuery_Success(t *testing.T) {
 	mock := newMockVoicevoxClient()
 	expectedQuery := &entity.AudioQuery{SpeedScale: 1.0}
-	mock.createQueryFunc = func(_ context.Context, _ string, _ int) (*entity.AudioQuery, error) {
+	mock.createQueryFunc = func(_ context.Context, _ string, _ entity.SpeakerID) (*entity.AudioQuery, error) {
 		return expectedQuery, nil
 	}
 
 	noopSleep := func(_ context.Context, _ time.Duration) error { return nil }
 	client := infra.NewRetryableVoicevoxClient(mock, infra.WithSleepFunc(noopSleep))
 
-	query, err := client.CreateQuery(context.Background(), "test", 1)
+	query, err := client.CreateQuery(context.Background(), "test", entity.MustNewSpeakerID(1))
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -194,7 +194,7 @@ func TestRetryableVoicevoxClient_CreateQuery_Success(t *testing.T) {
 func TestRetryableVoicevoxClient_Synthesize_Success(t *testing.T) {
 	mock := newMockVoicevoxClient()
 	expectedWAV := []byte("wav data")
-	mock.synthesizeFunc = func(_ context.Context, _ *entity.AudioQuery, _ int) ([]byte, error) {
+	mock.synthesizeFunc = func(_ context.Context, _ *entity.AudioQuery, _ entity.SpeakerID) ([]byte, error) {
 		return expectedWAV, nil
 	}
 
@@ -202,7 +202,7 @@ func TestRetryableVoicevoxClient_Synthesize_Success(t *testing.T) {
 	client := infra.NewRetryableVoicevoxClient(mock, infra.WithSleepFunc(noopSleep))
 
 	query := &entity.AudioQuery{SpeedScale: 1.0}
-	wav, err := client.Synthesize(context.Background(), query, 1)
+	wav, err := client.Synthesize(context.Background(), query, entity.MustNewSpeakerID(1))
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -219,7 +219,7 @@ func TestRetryableVoicevoxClient_Synthesize_RetrySuccess(t *testing.T) {
 	mock := newMockVoicevoxClient()
 	callCount := 0
 	expectedWAV := []byte("wav data")
-	mock.synthesizeFunc = func(_ context.Context, _ *entity.AudioQuery, _ int) ([]byte, error) {
+	mock.synthesizeFunc = func(_ context.Context, _ *entity.AudioQuery, _ entity.SpeakerID) ([]byte, error) {
 		callCount++
 		if callCount == 1 {
 			return nil, &mockNetError{msg: "connection refused"}
@@ -231,7 +231,7 @@ func TestRetryableVoicevoxClient_Synthesize_RetrySuccess(t *testing.T) {
 	client := infra.NewRetryableVoicevoxClient(mock, infra.WithSleepFunc(noopSleep))
 
 	query := &entity.AudioQuery{SpeedScale: 1.0}
-	wav, err := client.Synthesize(context.Background(), query, 1)
+	wav, err := client.Synthesize(context.Background(), query, entity.MustNewSpeakerID(1))
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -246,14 +246,14 @@ func TestRetryableVoicevoxClient_Synthesize_RetrySuccess(t *testing.T) {
 // リトライ上限超過: CreateQueryが最大3回リトライしても失敗する場合エラーを返す
 func TestRetryableVoicevoxClient_CreateQuery_MaxRetriesExceeded(t *testing.T) {
 	mock := newMockVoicevoxClient()
-	mock.createQueryFunc = func(_ context.Context, _ string, _ int) (*entity.AudioQuery, error) {
+	mock.createQueryFunc = func(_ context.Context, _ string, _ entity.SpeakerID) (*entity.AudioQuery, error) {
 		return nil, &mockNetError{msg: "connection refused"}
 	}
 
 	noopSleep := func(_ context.Context, _ time.Duration) error { return nil }
 	client := infra.NewRetryableVoicevoxClient(mock, infra.WithSleepFunc(noopSleep))
 
-	query, err := client.CreateQuery(context.Background(), "test", 1)
+	query, err := client.CreateQuery(context.Background(), "test", entity.MustNewSpeakerID(1))
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -269,7 +269,7 @@ func TestRetryableVoicevoxClient_CreateQuery_MaxRetriesExceeded(t *testing.T) {
 // リトライ上限超過: Synthesizeが最大3回リトライしても失敗する場合エラーを返す
 func TestRetryableVoicevoxClient_Synthesize_MaxRetriesExceeded(t *testing.T) {
 	mock := newMockVoicevoxClient()
-	mock.synthesizeFunc = func(_ context.Context, _ *entity.AudioQuery, _ int) ([]byte, error) {
+	mock.synthesizeFunc = func(_ context.Context, _ *entity.AudioQuery, _ entity.SpeakerID) ([]byte, error) {
 		return nil, &mockNetError{msg: "connection refused"}
 	}
 
@@ -277,7 +277,7 @@ func TestRetryableVoicevoxClient_Synthesize_MaxRetriesExceeded(t *testing.T) {
 	client := infra.NewRetryableVoicevoxClient(mock, infra.WithSleepFunc(noopSleep))
 
 	query := &entity.AudioQuery{SpeedScale: 1.0}
-	wav, err := client.Synthesize(context.Background(), query, 1)
+	wav, err := client.Synthesize(context.Background(), query, entity.MustNewSpeakerID(1))
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -293,7 +293,7 @@ func TestRetryableVoicevoxClient_Synthesize_MaxRetriesExceeded(t *testing.T) {
 // 指数バックオフ: リトライ間隔が1秒→2秒→4秒で増加する
 func TestRetryableVoicevoxClient_ExponentialBackoff(t *testing.T) {
 	mock := newMockVoicevoxClient()
-	mock.createQueryFunc = func(_ context.Context, _ string, _ int) (*entity.AudioQuery, error) {
+	mock.createQueryFunc = func(_ context.Context, _ string, _ entity.SpeakerID) (*entity.AudioQuery, error) {
 		return nil, &mockNetError{msg: "connection refused"}
 	}
 
@@ -304,7 +304,7 @@ func TestRetryableVoicevoxClient_ExponentialBackoff(t *testing.T) {
 	}
 	client := infra.NewRetryableVoicevoxClient(mock, infra.WithSleepFunc(recordingSleep))
 
-	_, _ = client.CreateQuery(context.Background(), "test", 1)
+	_, _ = client.CreateQuery(context.Background(), "test", entity.MustNewSpeakerID(1))
 
 	// 3回のリトライ → 3回のスリープ
 	expectedDurations := []time.Duration{1 * time.Second, 2 * time.Second, 4 * time.Second}
@@ -321,7 +321,7 @@ func TestRetryableVoicevoxClient_ExponentialBackoff(t *testing.T) {
 // バックオフ上限: 指数バックオフの上限が30秒である
 func TestRetryableVoicevoxClient_BackoffMaxInterval(t *testing.T) {
 	mock := newMockVoicevoxClient()
-	mock.createQueryFunc = func(_ context.Context, _ string, _ int) (*entity.AudioQuery, error) {
+	mock.createQueryFunc = func(_ context.Context, _ string, _ entity.SpeakerID) (*entity.AudioQuery, error) {
 		return nil, &mockNetError{msg: "connection refused"}
 	}
 
@@ -341,7 +341,7 @@ func TestRetryableVoicevoxClient_BackoffMaxInterval(t *testing.T) {
 		}),
 	)
 
-	_, _ = client.CreateQuery(context.Background(), "test", 1)
+	_, _ = client.CreateQuery(context.Background(), "test", entity.MustNewSpeakerID(1))
 
 	// 16秒 → 30秒（32秒が上限30秒でクリップ） → 30秒
 	expectedDurations := []time.Duration{16 * time.Second, 30 * time.Second, 30 * time.Second}
@@ -358,14 +358,14 @@ func TestRetryableVoicevoxClient_BackoffMaxInterval(t *testing.T) {
 // 非リトライエラー: HTTPステータスエラー（非net.Error）はリトライせず即座にエラーを返す
 func TestRetryableVoicevoxClient_CreateQuery_NonRetryableError(t *testing.T) {
 	mock := newMockVoicevoxClient()
-	mock.createQueryFunc = func(_ context.Context, _ string, _ int) (*entity.AudioQuery, error) {
+	mock.createQueryFunc = func(_ context.Context, _ string, _ entity.SpeakerID) (*entity.AudioQuery, error) {
 		return nil, errors.New("create query failed: status 400")
 	}
 
 	noopSleep := func(_ context.Context, _ time.Duration) error { return nil }
 	client := infra.NewRetryableVoicevoxClient(mock, infra.WithSleepFunc(noopSleep))
 
-	_, err := client.CreateQuery(context.Background(), "test", 1)
+	_, err := client.CreateQuery(context.Background(), "test", entity.MustNewSpeakerID(1))
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -378,7 +378,7 @@ func TestRetryableVoicevoxClient_CreateQuery_NonRetryableError(t *testing.T) {
 // 非リトライエラー: Synthesizeで非net.Errorはリトライせず即座にエラーを返す
 func TestRetryableVoicevoxClient_Synthesize_NonRetryableError(t *testing.T) {
 	mock := newMockVoicevoxClient()
-	mock.synthesizeFunc = func(_ context.Context, _ *entity.AudioQuery, _ int) ([]byte, error) {
+	mock.synthesizeFunc = func(_ context.Context, _ *entity.AudioQuery, _ entity.SpeakerID) ([]byte, error) {
 		return nil, errors.New("synthesis failed: status 500")
 	}
 
@@ -386,7 +386,7 @@ func TestRetryableVoicevoxClient_Synthesize_NonRetryableError(t *testing.T) {
 	client := infra.NewRetryableVoicevoxClient(mock, infra.WithSleepFunc(noopSleep))
 
 	query := &entity.AudioQuery{SpeedScale: 1.0}
-	_, err := client.Synthesize(context.Background(), query, 1)
+	_, err := client.Synthesize(context.Background(), query, entity.MustNewSpeakerID(1))
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -420,7 +420,7 @@ func TestRetryableVoicevoxClient_ConfigNormalization(t *testing.T) {
 // コンテキストキャンセル: リトライ中にコンテキストがキャンセルされた場合エラーを返す
 func TestRetryableVoicevoxClient_ContextCancelled(t *testing.T) {
 	mock := newMockVoicevoxClient()
-	mock.createQueryFunc = func(_ context.Context, _ string, _ int) (*entity.AudioQuery, error) {
+	mock.createQueryFunc = func(_ context.Context, _ string, _ entity.SpeakerID) (*entity.AudioQuery, error) {
 		return nil, &mockNetError{msg: "connection refused"}
 	}
 
@@ -429,7 +429,7 @@ func TestRetryableVoicevoxClient_ContextCancelled(t *testing.T) {
 	}
 	client := infra.NewRetryableVoicevoxClient(mock, infra.WithSleepFunc(cancelledSleep))
 
-	_, err := client.CreateQuery(context.Background(), "test", 1)
+	_, err := client.CreateQuery(context.Background(), "test", entity.MustNewSpeakerID(1))
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}

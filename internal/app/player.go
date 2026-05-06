@@ -1,6 +1,10 @@
 package app
 
-import "context"
+import (
+	"context"
+
+	"github.com/canpok1/vox-actor/internal/domain/entity"
+)
 
 // StreamErrorCategory は配信画面に表示するサーバー側エラーの種別。
 type StreamErrorCategory string
@@ -23,7 +27,7 @@ type StreamError struct {
 	Message   string
 	Path      string
 	Text      string
-	SpeakerID int
+	SpeakerID entity.SpeakerID
 }
 
 // ErrorBroadcaster は配信画面向けにサーバー側エラーをブロードキャストする。
@@ -40,7 +44,7 @@ type PlayMeta struct {
 	Text string
 	// SpeakerID は再生に使ったVOICEVOXのスタイルID（解決後の値）。
 	// HTTPStreamPlayer では話者名/スタイル名の解決キーとして利用される。
-	SpeakerID int
+	SpeakerID entity.SpeakerID
 	// Speed / Pitch / Intonation は合成パラメータ（省略可）。
 	// 再合成時に元のパラメータを復元できるよう履歴に保持される。
 	Speed      *float64

@@ -207,10 +207,10 @@ func TestSayCmd_VerboseFlag_DefaultFalse(t *testing.T) {
 type noopClient struct{}
 
 func (n *noopClient) HealthCheck(_ context.Context) error { return errors.New("must not be called") }
-func (n *noopClient) CreateQuery(_ context.Context, _ string, _ int) (*entity.AudioQuery, error) {
+func (n *noopClient) CreateQuery(_ context.Context, _ string, _ entity.SpeakerID) (*entity.AudioQuery, error) {
 	return nil, errors.New("must not be called")
 }
-func (n *noopClient) Synthesize(_ context.Context, _ *entity.AudioQuery, _ int) ([]byte, error) {
+func (n *noopClient) Synthesize(_ context.Context, _ *entity.AudioQuery, _ entity.SpeakerID) ([]byte, error) {
 	return nil, errors.New("must not be called")
 }
 func (n *noopClient) GetSpeakers(_ context.Context) ([]entity.Speaker, error) {
@@ -383,10 +383,10 @@ func (p *trackingPlayer) Play(_ context.Context, _ []byte, _ app.PlayMeta) error
 type mockSayClient struct{}
 
 func (c *mockSayClient) HealthCheck(_ context.Context) error { return nil }
-func (c *mockSayClient) CreateQuery(_ context.Context, _ string, _ int) (*entity.AudioQuery, error) {
+func (c *mockSayClient) CreateQuery(_ context.Context, _ string, _ entity.SpeakerID) (*entity.AudioQuery, error) {
 	return &entity.AudioQuery{}, nil
 }
-func (c *mockSayClient) Synthesize(_ context.Context, _ *entity.AudioQuery, _ int) ([]byte, error) {
+func (c *mockSayClient) Synthesize(_ context.Context, _ *entity.AudioQuery, _ entity.SpeakerID) ([]byte, error) {
 	return []byte("RIFFx"), nil
 }
 func (c *mockSayClient) GetSpeakers(_ context.Context) ([]entity.Speaker, error) { return nil, nil }

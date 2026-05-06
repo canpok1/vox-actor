@@ -66,10 +66,10 @@ type VoicevoxClient interface {
 	HealthCheck(ctx context.Context) error
 
 	// CreateQuery はテキストから音声合成用クエリを生成する。
-	CreateQuery(ctx context.Context, text string, speakerID int) (*entity.AudioQuery, error)
+	CreateQuery(ctx context.Context, text string, speakerID entity.SpeakerID) (*entity.AudioQuery, error)
 
 	// Synthesize は音声合成を実行し、WAV形式のバイト列を返す。
-	Synthesize(ctx context.Context, query *entity.AudioQuery, speakerID int) ([]byte, error)
+	Synthesize(ctx context.Context, query *entity.AudioQuery, speakerID entity.SpeakerID) ([]byte, error)
 
 	// GetSpeakers はエンジンに登録された話者一覧（話者名・スタイルID・スタイル名）を取得する。
 	GetSpeakers(ctx context.Context) ([]entity.Speaker, error)

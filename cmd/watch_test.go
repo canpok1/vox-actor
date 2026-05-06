@@ -240,10 +240,10 @@ type stubVoicevoxClient struct {
 }
 
 func (c *stubVoicevoxClient) HealthCheck(_ context.Context) error { return c.healthCheckErr }
-func (c *stubVoicevoxClient) CreateQuery(_ context.Context, _ string, _ int) (*entity.AudioQuery, error) {
+func (c *stubVoicevoxClient) CreateQuery(_ context.Context, _ string, _ entity.SpeakerID) (*entity.AudioQuery, error) {
 	return nil, nil
 }
-func (c *stubVoicevoxClient) Synthesize(_ context.Context, _ *entity.AudioQuery, _ int) ([]byte, error) {
+func (c *stubVoicevoxClient) Synthesize(_ context.Context, _ *entity.AudioQuery, _ entity.SpeakerID) ([]byte, error) {
 	return nil, nil
 }
 func (c *stubVoicevoxClient) GetSpeakers(_ context.Context) ([]entity.Speaker, error) {

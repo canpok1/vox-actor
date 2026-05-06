@@ -187,7 +187,7 @@ func TestScriptWriteCmd_JsonFieldsMappedToScript(t *testing.T) {
 	if s.Text != "セリフ" {
 		t.Errorf("Text: expected 'セリフ', got %q", s.Text)
 	}
-	if s.SpeakerID == nil || *s.SpeakerID != 3 {
+	if s.SpeakerID == nil || s.SpeakerID.Value() != 3 {
 		t.Errorf("SpeakerID: expected 3, got %v", s.SpeakerID)
 	}
 	if s.Overrides.Speed == nil || *s.Overrides.Speed != 1.2 {

@@ -33,7 +33,7 @@ func TestSayUsecase_Run_Success(t *testing.T) {
 	uc := app.NewSayUsecase(client, player)
 	params := app.SayParams{
 		Text:      "こんにちは",
-		SpeakerID: 3,
+		SpeakerID: entity.MustNewSpeakerID(3),
 	}
 
 	err := uc.Run(context.Background(), params)
@@ -60,7 +60,7 @@ func TestSayUsecase_Run_PlayReceivesText(t *testing.T) {
 	player := &mockAudioPlayer{}
 
 	uc := app.NewSayUsecase(client, player)
-	params := app.SayParams{Text: "こんにちはなのだ", SpeakerID: 3}
+	params := app.SayParams{Text: "こんにちはなのだ", SpeakerID: entity.MustNewSpeakerID(3)}
 
 	if err := uc.Run(context.Background(), params); err != nil {
 		t.Fatalf("expected no error, got: %v", err)
@@ -69,7 +69,7 @@ func TestSayUsecase_Run_PlayReceivesText(t *testing.T) {
 	if len(player.playMetas) != 1 || player.playMetas[0].Text != "こんにちはなのだ" {
 		t.Errorf("expected PlayMeta.Text=%q, got: %+v", "こんにちはなのだ", player.playMetas)
 	}
-	if player.playMetas[0].SpeakerID != 3 {
+	if player.playMetas[0].SpeakerID.Value() != 3 {
 		t.Errorf("expected PlayMeta.SpeakerID=3, got: %d", player.playMetas[0].SpeakerID)
 	}
 }
@@ -88,7 +88,7 @@ func TestSayUsecase_Run_WithParams(t *testing.T) {
 	uc := app.NewSayUsecase(client, player)
 	params := app.SayParams{
 		Text:       "こんにちは",
-		SpeakerID:  5,
+		SpeakerID:  entity.MustNewSpeakerID(5),
 		Speed:      &speed,
 		Pitch:      &pitch,
 		Intonation: &intonation,
@@ -125,7 +125,7 @@ func TestSayUsecase_Run_HealthCheckError(t *testing.T) {
 	player := &mockAudioPlayer{}
 
 	uc := app.NewSayUsecase(client, player)
-	params := app.SayParams{Text: "こんにちは", SpeakerID: 3}
+	params := app.SayParams{Text: "こんにちは", SpeakerID: entity.MustNewSpeakerID(3)}
 
 	err := uc.Run(context.Background(), params)
 	if err == nil {
@@ -140,7 +140,7 @@ func TestSayUsecase_Run_CreateQueryError(t *testing.T) {
 	player := &mockAudioPlayer{}
 
 	uc := app.NewSayUsecase(client, player)
-	params := app.SayParams{Text: "こんにちは", SpeakerID: 3}
+	params := app.SayParams{Text: "こんにちは", SpeakerID: entity.MustNewSpeakerID(3)}
 
 	err := uc.Run(context.Background(), params)
 	if err == nil {
@@ -156,7 +156,7 @@ func TestSayUsecase_Run_SynthesizeError(t *testing.T) {
 	player := &mockAudioPlayer{}
 
 	uc := app.NewSayUsecase(client, player)
-	params := app.SayParams{Text: "こんにちは", SpeakerID: 3}
+	params := app.SayParams{Text: "こんにちは", SpeakerID: entity.MustNewSpeakerID(3)}
 
 	err := uc.Run(context.Background(), params)
 	if err == nil {
@@ -174,7 +174,7 @@ func TestSayUsecase_Run_PlayError(t *testing.T) {
 	}
 
 	uc := app.NewSayUsecase(client, player)
-	params := app.SayParams{Text: "こんにちは", SpeakerID: 3}
+	params := app.SayParams{Text: "こんにちは", SpeakerID: entity.MustNewSpeakerID(3)}
 
 	err := uc.Run(context.Background(), params)
 	if err == nil {
@@ -191,7 +191,7 @@ func TestWithSayLogger_Nil_NoPanic(t *testing.T) {
 
 	// WithSayLogger(nil) でpanicしないことを確認
 	uc := app.NewSayUsecase(client, player, app.WithSayLogger(nil))
-	params := app.SayParams{Text: "こんにちは", SpeakerID: 3}
+	params := app.SayParams{Text: "こんにちは", SpeakerID: entity.MustNewSpeakerID(3)}
 
 	err := uc.Run(context.Background(), params)
 	if err != nil {
@@ -220,7 +220,7 @@ func TestSayUsecase_Run_DryRun_SkipsClientAndPlayerAndLogs(t *testing.T) {
 	uc := app.NewSayUsecase(client, player, app.WithSayLogger(logger))
 	params := app.SayParams{
 		Text:       "こんにちは",
-		SpeakerID:  3,
+		SpeakerID:  entity.MustNewSpeakerID(3),
 		Speed:      &speed,
 		Pitch:      &pitch,
 		Intonation: &intonation,
@@ -275,7 +275,7 @@ func TestSayUsecase_Run_DryRun_NoHealthCheck(t *testing.T) {
 	uc := app.NewSayUsecase(client, player)
 	params := app.SayParams{
 		Text:      "こんにちは",
-		SpeakerID: 3,
+		SpeakerID: entity.MustNewSpeakerID(3),
 		DryRun:    true,
 	}
 
@@ -295,7 +295,7 @@ func TestSayUsecase_Run_CancelledContext_ReturnsNil(t *testing.T) {
 	player := &mockAudioPlayer{}
 
 	uc := app.NewSayUsecase(client, player)
-	params := app.SayParams{Text: "こんにちは", SpeakerID: 3}
+	params := app.SayParams{Text: "こんにちは", SpeakerID: entity.MustNewSpeakerID(3)}
 
 	err := uc.Run(ctx, params)
 	// キャンセル済みcontextの場合、グレースフルシャットダウンとしてnilを返すべき
@@ -336,7 +336,7 @@ func TestSayUsecase_Run_SaveWav_SavesFile(t *testing.T) {
 	uc := app.NewSayUsecase(client, player, app.WithWavSaver(saver))
 	params := app.SayParams{
 		Text:        "こんにちは",
-		SpeakerID:   3,
+		SpeakerID:   entity.MustNewSpeakerID(3),
 		SaveWavPath: "/tmp/test.wav",
 	}
 
@@ -369,7 +369,7 @@ func TestSayUsecase_Run_SaveWav_EmptyPath_NotSaved(t *testing.T) {
 	uc := app.NewSayUsecase(client, player, app.WithWavSaver(saver))
 	params := app.SayParams{
 		Text:        "こんにちは",
-		SpeakerID:   3,
+		SpeakerID:   entity.MustNewSpeakerID(3),
 		SaveWavPath: "",
 	}
 
@@ -392,7 +392,7 @@ func TestSayUsecase_Run_SaveWav_DryRun_NotSaved(t *testing.T) {
 	uc := app.NewSayUsecase(client, player, app.WithWavSaver(saver))
 	params := app.SayParams{
 		Text:        "こんにちは",
-		SpeakerID:   3,
+		SpeakerID:   entity.MustNewSpeakerID(3),
 		SaveWavPath: "/tmp/test.wav",
 		DryRun:      true,
 	}
@@ -416,7 +416,7 @@ func TestSayUsecase_Run_SaveWav_SaveError_ReturnsError(t *testing.T) {
 	uc := app.NewSayUsecase(client, player, app.WithWavSaver(saver))
 	params := app.SayParams{
 		Text:        "こんにちは",
-		SpeakerID:   3,
+		SpeakerID:   entity.MustNewSpeakerID(3),
 		SaveWavPath: "/tmp/test.wav",
 	}
 

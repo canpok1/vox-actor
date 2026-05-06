@@ -64,10 +64,18 @@ func runScriptWrite(cmd *cobra.Command, args []string, deps *ScriptWriteDeps) er
 
 	scripts := make([]entity.Script, len(inputs))
 	for i, in := range inputs {
+		var speakerID *entity.SpeakerID
+		if in.Speaker != nil {
+			id, err := entity.NewSpeakerID(*in.Speaker)
+			if err != nil {
+				return fmt.Errorf("%w: inputs[%d].speaker: %v", ErrUsage, i, err)
+			}
+			speakerID = &id
+		}
 		scripts[i] = entity.Script{
 			Text:      in.Text,
 			IsEmpty:   in.Text == "",
-			SpeakerID: in.Speaker,
+			SpeakerID: speakerID,
 			Overrides: entity.SynthOverrides{
 				Speed:      in.Speed,
 				Pitch:      in.Pitch,

@@ -152,9 +152,14 @@ type jsonScriptOut struct {
 }
 
 func toJSONScript(script entity.Script) jsonScriptOut {
+	var speaker *int
+	if script.SpeakerID != nil {
+		v := script.SpeakerID.Value()
+		speaker = &v
+	}
 	return jsonScriptOut{
 		Text:            script.Text,
-		Speaker:         script.SpeakerID,
+		Speaker:         speaker,
 		SpeedScale:      script.Overrides.Speed,
 		PitchScale:      script.Overrides.Pitch,
 		IntonationScale: script.Overrides.Intonation,

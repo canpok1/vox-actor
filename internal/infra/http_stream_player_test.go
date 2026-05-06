@@ -676,7 +676,7 @@ func TestHTTPStreamPlayer_Play_ClipEventResolvesSpeakerName(t *testing.T) {
 	events := subscribeSSE(t, baseURL)
 	time.Sleep(50 * time.Millisecond)
 
-	if err := p.Play(context.Background(), []byte("RIFFx"), app.PlayMeta{Text: "やっほー", SpeakerID: 3}); err != nil {
+	if err := p.Play(context.Background(), []byte("RIFFx"), app.PlayMeta{Text: "やっほー", SpeakerID: entity.MustNewSpeakerID(3)}); err != nil {
 		t.Fatalf("Play: %v", err)
 	}
 
@@ -708,7 +708,7 @@ func TestHTTPStreamPlayer_Play_ClipEventFallbackForUnknownSpeaker(t *testing.T) 
 	events := subscribeSSE(t, baseURL)
 	time.Sleep(50 * time.Millisecond)
 
-	if err := p.Play(context.Background(), []byte("RIFFx"), app.PlayMeta{Text: "未知", SpeakerID: 999}); err != nil {
+	if err := p.Play(context.Background(), []byte("RIFFx"), app.PlayMeta{Text: "未知", SpeakerID: entity.MustNewSpeakerID(999)}); err != nil {
 		t.Fatalf("Play: %v", err)
 	}
 
@@ -788,7 +788,7 @@ func TestHTTPStreamPlayer_Play_ClipEventNoLookup(t *testing.T) {
 	events := subscribeSSE(t, baseURL)
 	time.Sleep(50 * time.Millisecond)
 
-	if err := p.Play(context.Background(), []byte("RIFFx"), app.PlayMeta{SpeakerID: 3}); err != nil {
+	if err := p.Play(context.Background(), []byte("RIFFx"), app.PlayMeta{SpeakerID: entity.MustNewSpeakerID(3)}); err != nil {
 		t.Fatalf("Play: %v", err)
 	}
 
@@ -1159,7 +1159,7 @@ func TestHTTPStreamPlayer_PlayText_EmptyURLAndSilentInterval(t *testing.T) {
 	time.Sleep(50 * time.Millisecond) // 購読確立待ち
 
 	start := time.Now()
-	if err := p.PlayText(context.Background(), app.PlayMeta{Text: "こんにちは", SpeakerID: 3}); err != nil {
+	if err := p.PlayText(context.Background(), app.PlayMeta{Text: "こんにちは", SpeakerID: entity.MustNewSpeakerID(3)}); err != nil {
 		t.Fatalf("PlayText: %v", err)
 	}
 	elapsed := time.Since(start)
@@ -1194,7 +1194,7 @@ func TestHTTPStreamPlayer_PlayText_CtxCancelled(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if err := p.PlayText(ctx, app.PlayMeta{Text: "x", SpeakerID: 3}); err == nil {
+	if err := p.PlayText(ctx, app.PlayMeta{Text: "x", SpeakerID: entity.MustNewSpeakerID(3)}); err == nil {
 		t.Fatal("expected error for cancelled ctx")
 	}
 }
@@ -1231,7 +1231,7 @@ func TestHTTPStreamPlayer_PlayText_UnknownSpeakerFallback(t *testing.T) {
 	baseURL := "http://" + p.Addr()
 	events := subscribeSSE(t, baseURL)
 	time.Sleep(50 * time.Millisecond)
-	if err := p.PlayText(context.Background(), app.PlayMeta{Text: "hello", SpeakerID: 42}); err != nil {
+	if err := p.PlayText(context.Background(), app.PlayMeta{Text: "hello", SpeakerID: entity.MustNewSpeakerID(42)}); err != nil {
 		t.Fatalf("PlayText: %v", err)
 	}
 	select {
@@ -1268,11 +1268,11 @@ type testVoicevoxClient struct {
 }
 
 func (c *testVoicevoxClient) HealthCheck(_ context.Context) error { return nil }
-func (c *testVoicevoxClient) CreateQuery(ctx context.Context, text string, speakerID int) (*entity.AudioQuery, error) {
+func (c *testVoicevoxClient) CreateQuery(ctx context.Context, text string, speakerID entity.SpeakerID) (*entity.AudioQuery, error) {
 	c.mu.Lock()
 	c.createQueryCall++
 	c.capturedText = text
-	c.capturedSpeaker = speakerID
+	c.capturedSpeaker = speakerID.Value()
 	block := c.createQueryBlock
 	c.mu.Unlock()
 	if block != nil {
@@ -1290,7 +1290,7 @@ func (c *testVoicevoxClient) CreateQuery(ctx context.Context, text string, speak
 	}
 	return &entity.AudioQuery{}, nil
 }
-func (c *testVoicevoxClient) Synthesize(_ context.Context, _ *entity.AudioQuery, _ int) ([]byte, error) {
+func (c *testVoicevoxClient) Synthesize(_ context.Context, _ *entity.AudioQuery, _ entity.SpeakerID) ([]byte, error) {
 	c.mu.Lock()
 	c.synthesizeCall++
 	n := c.synthesizeCall
@@ -1329,7 +1329,7 @@ func TestHTTPStreamPlayer_BroadcastError_SynthesisCategory(t *testing.T) {
 		Message:   "synthesize failed",
 		Path:      "/tmp/script.txt",
 		Text:      "こんにちは",
-		SpeakerID: 3,
+		SpeakerID: entity.MustNewSpeakerID(3),
 	})
 
 	select {
@@ -2175,7 +2175,7 @@ func TestHTTPStreamPlayer_History_WritesClipOnPlay(t *testing.T) {
 	})
 
 	if err := p.Play(context.Background(), []byte("RIFFwavdata"), app.PlayMeta{
-		Text: "テストセリフ", SpeakerID: 3,
+		Text: "テストセリフ", SpeakerID: entity.MustNewSpeakerID(3),
 	}); err != nil {
 		t.Fatalf("Play: %v", err)
 	}
@@ -2232,7 +2232,7 @@ func TestHTTPStreamPlayer_History_WritesClipOnPlayText(t *testing.T) {
 	p.silentInterval = 1 * time.Millisecond
 
 	if err := p.PlayText(context.Background(), app.PlayMeta{
-		Text: "サイレントセリフ", SpeakerID: 3,
+		Text: "サイレントセリフ", SpeakerID: entity.MustNewSpeakerID(3),
 	}); err != nil {
 		t.Fatalf("PlayText: %v", err)
 	}
@@ -3441,7 +3441,7 @@ func TestHTTPStreamPlayer_History_WritesParamsOnPlay(t *testing.T) {
 	pitch := 0.05
 	intonation := 1.3
 	if err := p.Play(context.Background(), []byte("RIFFwavdata"), app.PlayMeta{
-		Text: "パラメータテスト", SpeakerID: 3,
+		Text: "パラメータテスト", SpeakerID: entity.MustNewSpeakerID(3),
 		Speed: &speed, Pitch: &pitch, Intonation: &intonation,
 	}); err != nil {
 		t.Fatalf("Play: %v", err)
@@ -3502,7 +3502,7 @@ func TestHTTPStreamPlayer_History_WritesParamsOnPlayText(t *testing.T) {
 	pitch := -0.05
 	intonation := 0.8
 	if err := p.PlayText(context.Background(), app.PlayMeta{
-		Text: "サイレントパラメータ", SpeakerID: 3,
+		Text: "サイレントパラメータ", SpeakerID: entity.MustNewSpeakerID(3),
 		Speed: &speed, Pitch: &pitch, Intonation: &intonation,
 	}); err != nil {
 		t.Fatalf("PlayText: %v", err)
@@ -3621,7 +3621,7 @@ func TestHTTPStreamPlayer_APIHistory_IncludesParams(t *testing.T) {
 	speed := 1.1
 	intonation := 1.4
 	if err := p.Play(context.Background(), []byte("RIFFwavdata"), app.PlayMeta{
-		Text: "APIレスポンステスト", SpeakerID: 3,
+		Text: "APIレスポンステスト", SpeakerID: entity.MustNewSpeakerID(3),
 		Speed: &speed, Intonation: &intonation,
 	}); err != nil {
 		t.Fatalf("Play: %v", err)

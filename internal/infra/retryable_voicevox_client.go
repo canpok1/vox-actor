@@ -144,7 +144,7 @@ func (c *RetryableVoicevoxClient) HealthCheck(ctx context.Context) error {
 }
 
 // CreateQuery はテキストから音声合成用クエリを生成する。失敗時は指数バックオフでリトライを行う。
-func (c *RetryableVoicevoxClient) CreateQuery(ctx context.Context, text string, speakerID int) (*entity.AudioQuery, error) {
+func (c *RetryableVoicevoxClient) CreateQuery(ctx context.Context, text string, speakerID entity.SpeakerID) (*entity.AudioQuery, error) {
 	var result *entity.AudioQuery
 	err := c.retryWithBackoff(ctx, func() error {
 		var err error
@@ -155,7 +155,7 @@ func (c *RetryableVoicevoxClient) CreateQuery(ctx context.Context, text string, 
 }
 
 // Synthesize は音声合成を実行し、WAV形式のバイト列を返す。失敗時は指数バックオフでリトライを行う。
-func (c *RetryableVoicevoxClient) Synthesize(ctx context.Context, query *entity.AudioQuery, speakerID int) ([]byte, error) {
+func (c *RetryableVoicevoxClient) Synthesize(ctx context.Context, query *entity.AudioQuery, speakerID entity.SpeakerID) ([]byte, error) {
 	var result []byte
 	err := c.retryWithBackoff(ctx, func() error {
 		var err error

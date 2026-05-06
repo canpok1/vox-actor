@@ -61,15 +61,15 @@ func (m *mockVoicevoxClient) HealthCheck(_ context.Context) error {
 	return m.healthCheckErr
 }
 
-func (m *mockVoicevoxClient) CreateQuery(_ context.Context, _ string, speakerID int) (*entity.AudioQuery, error) {
+func (m *mockVoicevoxClient) CreateQuery(_ context.Context, _ string, speakerID entity.SpeakerID) (*entity.AudioQuery, error) {
 	m.createQueryCalls++
-	m.createQueryCallArgs = append(m.createQueryCallArgs, createQueryCallArgs{speakerID: speakerID})
+	m.createQueryCallArgs = append(m.createQueryCallArgs, createQueryCallArgs{speakerID: speakerID.Value()})
 	return m.query, m.createQueryErr
 }
 
-func (m *mockVoicevoxClient) Synthesize(_ context.Context, query *entity.AudioQuery, speakerID int) ([]byte, error) {
+func (m *mockVoicevoxClient) Synthesize(_ context.Context, query *entity.AudioQuery, speakerID entity.SpeakerID) ([]byte, error) {
 	m.synthesizeCalls++
-	m.synthesizeArgs = append(m.synthesizeArgs, synthesizeCallArgs{query: query, speakerID: speakerID})
+	m.synthesizeArgs = append(m.synthesizeArgs, synthesizeCallArgs{query: query, speakerID: speakerID.Value()})
 	return m.wavData, m.synthesizeErr
 }
 
@@ -106,7 +106,7 @@ func TestActUsecase_Run_PlayReceivesScriptText(t *testing.T) {
 	player := &mockAudioPlayer{}
 
 	uc := app.NewActUsecase(reader, client, player)
-	params := app.ActParams{Path: "scripts/", SpeakerID: 3}
+	params := app.ActParams{Path: "scripts/", SpeakerID: entity.MustNewSpeakerID(3)}
 
 	if err := uc.Run(context.Background(), params); err != nil {
 		t.Fatalf("expected no error, got: %v", err)
@@ -118,13 +118,13 @@ func TestActUsecase_Run_PlayReceivesScriptText(t *testing.T) {
 	if player.playMetas[0].Text != "おはようなのだ" || player.playMetas[1].Text != "さようならなのだ" {
 		t.Errorf("expected PlayMeta.Text in script order, got: %+v", player.playMetas)
 	}
-	if player.playMetas[0].SpeakerID != 3 || player.playMetas[1].SpeakerID != 3 {
+	if player.playMetas[0].SpeakerID.Value() != 3 || player.playMetas[1].SpeakerID.Value() != 3 {
 		t.Errorf("expected PlayMeta.SpeakerID=3 for both calls (default), got: %+v", player.playMetas)
 	}
 }
 
 func TestActUsecase_Run_PlayReceivesScriptResolvedSpeakerID(t *testing.T) {
-	overrideID := 7
+	overrideID := entity.MustNewSpeakerID(7)
 	reader := &mockScriptReader{
 		scripts: []entity.Script{
 			{Path: "a.txt", Text: "default", IsEmpty: false},
@@ -138,7 +138,7 @@ func TestActUsecase_Run_PlayReceivesScriptResolvedSpeakerID(t *testing.T) {
 	player := &mockAudioPlayer{}
 
 	uc := app.NewActUsecase(reader, client, player)
-	params := app.ActParams{Path: "scripts/", SpeakerID: 3}
+	params := app.ActParams{Path: "scripts/", SpeakerID: entity.MustNewSpeakerID(3)}
 
 	if err := uc.Run(context.Background(), params); err != nil {
 		t.Fatalf("expected no error, got: %v", err)
@@ -147,10 +147,10 @@ func TestActUsecase_Run_PlayReceivesScriptResolvedSpeakerID(t *testing.T) {
 	if len(player.playMetas) != 2 {
 		t.Fatalf("expected 2 Play calls, got: %d", len(player.playMetas))
 	}
-	if player.playMetas[0].SpeakerID != 3 {
+	if player.playMetas[0].SpeakerID.Value() != 3 {
 		t.Errorf("expected first PlayMeta.SpeakerID=3 (default), got: %d", player.playMetas[0].SpeakerID)
 	}
-	if player.playMetas[1].SpeakerID != 7 {
+	if player.playMetas[1].SpeakerID.Value() != 7 {
 		t.Errorf("expected second PlayMeta.SpeakerID=7 (script override), got: %d", player.playMetas[1].SpeakerID)
 	}
 }
@@ -170,7 +170,7 @@ func TestActUsecase_Run_SingleScript_Success(t *testing.T) {
 	uc := app.NewActUsecase(reader, client, player)
 	params := app.ActParams{
 		Path:      "test.txt",
-		SpeakerID: 3,
+		SpeakerID: entity.MustNewSpeakerID(3),
 	}
 
 	err := uc.Run(context.Background(), params)
@@ -196,7 +196,7 @@ func TestActUsecase_Run_MultipleScripts_Success(t *testing.T) {
 	uc := app.NewActUsecase(reader, client, player)
 	params := app.ActParams{
 		Path:      "scripts/",
-		SpeakerID: 3,
+		SpeakerID: entity.MustNewSpeakerID(3),
 	}
 
 	err := uc.Run(context.Background(), params)
@@ -228,7 +228,7 @@ func TestActUsecase_Run_EmptyScript_Skipped(t *testing.T) {
 	player := &mockAudioPlayer{}
 
 	uc := app.NewActUsecase(reader, client, player)
-	params := app.ActParams{Path: "empty.txt", SpeakerID: 3}
+	params := app.ActParams{Path: "empty.txt", SpeakerID: entity.MustNewSpeakerID(3)}
 
 	err := uc.Run(context.Background(), params)
 	if err != nil {
@@ -258,7 +258,7 @@ func TestActUsecase_Run_MixedEmptyAndNonEmpty(t *testing.T) {
 	player := &mockAudioPlayer{}
 
 	uc := app.NewActUsecase(reader, client, player)
-	params := app.ActParams{Path: "scripts/", SpeakerID: 3}
+	params := app.ActParams{Path: "scripts/", SpeakerID: entity.MustNewSpeakerID(3)}
 
 	err := uc.Run(context.Background(), params)
 	if err != nil {
@@ -292,7 +292,7 @@ func TestActUsecase_Run_WithOptions(t *testing.T) {
 	uc := app.NewActUsecase(reader, client, player)
 	params := app.ActParams{
 		Path:       "test.txt",
-		SpeakerID:  3,
+		SpeakerID:  entity.MustNewSpeakerID(3),
 		Speed:      &speed,
 		Pitch:      &pitch,
 		Intonation: &intonation,
@@ -327,7 +327,7 @@ func TestActUsecase_Run_HealthCheckError(t *testing.T) {
 	player := &mockAudioPlayer{}
 
 	uc := app.NewActUsecase(reader, client, player)
-	params := app.ActParams{Path: "test.txt", SpeakerID: 3}
+	params := app.ActParams{Path: "test.txt", SpeakerID: entity.MustNewSpeakerID(3)}
 
 	err := uc.Run(context.Background(), params)
 	if err == nil {
@@ -343,7 +343,7 @@ func TestActUsecase_Run_ReadError(t *testing.T) {
 	player := &mockAudioPlayer{}
 
 	uc := app.NewActUsecase(reader, client, player)
-	params := app.ActParams{Path: "notexist.txt", SpeakerID: 3}
+	params := app.ActParams{Path: "notexist.txt", SpeakerID: entity.MustNewSpeakerID(3)}
 
 	err := uc.Run(context.Background(), params)
 	if err == nil {
@@ -363,7 +363,7 @@ func TestActUsecase_Run_CreateQueryError(t *testing.T) {
 	player := &mockAudioPlayer{}
 
 	uc := app.NewActUsecase(reader, client, player)
-	params := app.ActParams{Path: "test.txt", SpeakerID: 3}
+	params := app.ActParams{Path: "test.txt", SpeakerID: entity.MustNewSpeakerID(3)}
 
 	err := uc.Run(context.Background(), params)
 	if err == nil {
@@ -387,7 +387,7 @@ func TestActUsecase_Run_SynthesizeError(t *testing.T) {
 	player := &mockAudioPlayer{}
 
 	uc := app.NewActUsecase(reader, client, player)
-	params := app.ActParams{Path: "test.txt", SpeakerID: 3}
+	params := app.ActParams{Path: "test.txt", SpeakerID: entity.MustNewSpeakerID(3)}
 
 	err := uc.Run(context.Background(), params)
 	if err == nil {
@@ -413,7 +413,7 @@ func TestActUsecase_Run_PlayError(t *testing.T) {
 	}
 
 	uc := app.NewActUsecase(reader, client, player)
-	params := app.ActParams{Path: "test.txt", SpeakerID: 3}
+	params := app.ActParams{Path: "test.txt", SpeakerID: entity.MustNewSpeakerID(3)}
 
 	err := uc.Run(context.Background(), params)
 	if err == nil {
@@ -445,7 +445,7 @@ func TestActUsecase_Run_CancelledContext_SkipsRemainingScripts(t *testing.T) {
 	}
 
 	uc := app.NewActUsecase(reader, client, player)
-	params := app.ActParams{Path: "scripts/", SpeakerID: 3}
+	params := app.ActParams{Path: "scripts/", SpeakerID: entity.MustNewSpeakerID(3)}
 
 	err := uc.Run(ctx, params)
 
@@ -479,7 +479,7 @@ func TestActUsecase_Run_CancelDuringCreateQuery_ReturnsNil(t *testing.T) {
 	player := &mockAudioPlayer{}
 
 	uc := app.NewActUsecase(reader, client, player)
-	params := app.ActParams{Path: "scripts/", SpeakerID: 3}
+	params := app.ActParams{Path: "scripts/", SpeakerID: entity.MustNewSpeakerID(3)}
 
 	err := uc.Run(ctx, params)
 
@@ -507,7 +507,7 @@ func (m *cancellingVoicevoxClient) HealthCheck(_ context.Context) error {
 	return nil
 }
 
-func (m *cancellingVoicevoxClient) CreateQuery(_ context.Context, _ string, _ int) (*entity.AudioQuery, error) {
+func (m *cancellingVoicevoxClient) CreateQuery(_ context.Context, _ string, _ entity.SpeakerID) (*entity.AudioQuery, error) {
 	m.createQueryCalls++
 	if m.createQueryCalls > m.cancelAfterCreateQuery {
 		m.cancelFunc()
@@ -516,7 +516,7 @@ func (m *cancellingVoicevoxClient) CreateQuery(_ context.Context, _ string, _ in
 	return m.query, nil
 }
 
-func (m *cancellingVoicevoxClient) Synthesize(_ context.Context, _ *entity.AudioQuery, _ int) ([]byte, error) {
+func (m *cancellingVoicevoxClient) Synthesize(_ context.Context, _ *entity.AudioQuery, _ entity.SpeakerID) ([]byte, error) {
 	return m.wavData, nil
 }
 
@@ -557,7 +557,7 @@ func TestActUsecase_Run_LogsProcessingStatus(t *testing.T) {
 	uc := app.NewActUsecase(reader, client, player, app.WithLogger(logger))
 	params := app.ActParams{
 		Path:      "test.txt",
-		SpeakerID: 3,
+		SpeakerID: entity.MustNewSpeakerID(3),
 	}
 
 	err := uc.Run(context.Background(), params)
@@ -591,7 +591,7 @@ func TestActUsecase_Run_VerboseLogsDebugInfo(t *testing.T) {
 	uc := app.NewActUsecase(reader, client, player, app.WithLogger(logger))
 	params := app.ActParams{
 		Path:      "test.txt",
-		SpeakerID: 3,
+		SpeakerID: entity.MustNewSpeakerID(3),
 		Speed:     &speed,
 	}
 
@@ -623,7 +623,7 @@ func TestActUsecase_Run_NilLogger_NoPanic(t *testing.T) {
 	uc := app.NewActUsecase(reader, client, player)
 	params := app.ActParams{
 		Path:      "test.txt",
-		SpeakerID: 3,
+		SpeakerID: entity.MustNewSpeakerID(3),
 	}
 
 	err := uc.Run(context.Background(), params)
@@ -648,7 +648,7 @@ func TestActUsecase_Run_SynthesisCompletedLoggedAtInfoLevel(t *testing.T) {
 	logger := slog.New(logging.NewHumanHandler(&buf, &logging.HumanHandlerOptions{Level: slog.LevelInfo, NoColor: true}))
 
 	uc := app.NewActUsecase(reader, client, player, app.WithLogger(logger))
-	params := app.ActParams{Path: "test.txt", SpeakerID: 3}
+	params := app.ActParams{Path: "test.txt", SpeakerID: entity.MustNewSpeakerID(3)}
 
 	err := uc.Run(context.Background(), params)
 	if err != nil {
@@ -681,7 +681,7 @@ func TestActUsecase_Run_LogsProgressCounter(t *testing.T) {
 	logger := slog.New(logging.NewHumanHandler(&buf, &logging.HumanHandlerOptions{Level: slog.LevelInfo, NoColor: true}))
 
 	uc := app.NewActUsecase(reader, client, player, app.WithLogger(logger))
-	params := app.ActParams{Path: "scripts/", SpeakerID: 3}
+	params := app.ActParams{Path: "scripts/", SpeakerID: entity.MustNewSpeakerID(3)}
 
 	err := uc.Run(context.Background(), params)
 	if err != nil {
@@ -717,7 +717,7 @@ func TestActUsecase_Run_WithNilLogger_NoPanic(t *testing.T) {
 	uc := app.NewActUsecase(reader, client, player, app.WithLogger(nil))
 	params := app.ActParams{
 		Path:      "test.txt",
-		SpeakerID: 3,
+		SpeakerID: entity.MustNewSpeakerID(3),
 	}
 
 	err := uc.Run(context.Background(), params)
@@ -752,7 +752,7 @@ func TestActUsecase_Run_DryRun_SkipsClientAndPlayerAndLogs(t *testing.T) {
 	uc := app.NewActUsecase(reader, client, player, app.WithLogger(logger))
 	params := app.ActParams{
 		Path:      "scripts/",
-		SpeakerID: 3,
+		SpeakerID: entity.MustNewSpeakerID(3),
 		DryRun:    true,
 	}
 
@@ -819,7 +819,7 @@ func TestActUsecase_Run_DryRun_NoHealthCheck(t *testing.T) {
 	uc := app.NewActUsecase(reader, client, player)
 	params := app.ActParams{
 		Path:      "scripts/",
-		SpeakerID: 3,
+		SpeakerID: entity.MustNewSpeakerID(3),
 		DryRun:    true,
 	}
 
@@ -838,7 +838,7 @@ func TestActUsecase_Run_DryRun_NoHealthCheck(t *testing.T) {
 // DONE: 複数スクリプトでパラメータが異なる場合、それぞれのスクリプトに対応するパラメータが使われる
 
 func TestActUsecase_Run_ScriptSpeakerID(t *testing.T) {
-	scriptSpeaker := 7
+	scriptSpeaker := entity.MustNewSpeakerID(7)
 	reader := &mockScriptReader{
 		scripts: []entity.Script{
 			{Path: "script.json", Text: "こんにちは", IsEmpty: false, SpeakerID: &scriptSpeaker},
@@ -853,7 +853,7 @@ func TestActUsecase_Run_ScriptSpeakerID(t *testing.T) {
 	uc := app.NewActUsecase(reader, client, player)
 	params := app.ActParams{
 		Path:      "script.json",
-		SpeakerID: 3, // デフォルトは3だがスクリプトで7が指定されている
+		SpeakerID: entity.MustNewSpeakerID(3), // デフォルトは3だがスクリプトで7が指定されている
 	}
 
 	err := uc.Run(context.Background(), params)
@@ -902,7 +902,7 @@ func TestActUsecase_Run_ScriptEmotionParams(t *testing.T) {
 	uc := app.NewActUsecase(reader, client, player)
 	params := app.ActParams{
 		Path:      "script.json",
-		SpeakerID: 3,
+		SpeakerID: entity.MustNewSpeakerID(3),
 	}
 
 	err := uc.Run(context.Background(), params)
@@ -948,7 +948,7 @@ func TestActUsecase_Run_ScriptParamsOverrideGlobal(t *testing.T) {
 	uc := app.NewActUsecase(reader, client, player)
 	params := app.ActParams{
 		Path:      "script.json",
-		SpeakerID: 3,
+		SpeakerID: entity.MustNewSpeakerID(3),
 		Speed:     &globalSpeed,
 	}
 
@@ -983,7 +983,7 @@ func TestActUsecase_Run_ScriptNoParams_UsesGlobal(t *testing.T) {
 	uc := app.NewActUsecase(reader, client, player)
 	params := app.ActParams{
 		Path:      "script.txt",
-		SpeakerID: 3,
+		SpeakerID: entity.MustNewSpeakerID(3),
 		Speed:     &globalSpeed,
 	}
 
@@ -1003,7 +1003,7 @@ func TestActUsecase_Run_ScriptNoParams_UsesGlobal(t *testing.T) {
 }
 
 func TestActUsecase_Run_MultipleScriptsWithDifferentParams(t *testing.T) {
-	speaker5 := 5
+	speaker5 := entity.MustNewSpeakerID(5)
 	speed1 := 0.8
 	speed2 := 1.5
 	reader := &mockScriptReader{
@@ -1022,7 +1022,7 @@ func TestActUsecase_Run_MultipleScriptsWithDifferentParams(t *testing.T) {
 	uc := app.NewActUsecase(reader, client, player)
 	params := app.ActParams{
 		Path:      "scripts/",
-		SpeakerID: 3,
+		SpeakerID: entity.MustNewSpeakerID(3),
 	}
 
 	err := uc.Run(context.Background(), params)

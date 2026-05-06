@@ -346,7 +346,7 @@ func TestFileReader_Read_JSONFile_AllParams(t *testing.T) {
 	if s.Text != "感情込めて" {
 		t.Errorf("expected text %q, got %q", "感情込めて", s.Text)
 	}
-	if s.SpeakerID == nil || *s.SpeakerID != 5 {
+	if s.SpeakerID == nil || s.SpeakerID.Value() != 5 {
 		t.Errorf("expected SpeakerID 5, got %v", s.SpeakerID)
 	}
 	if s.Overrides.Speed == nil || *s.Overrides.Speed != 1.5 {
@@ -572,7 +572,7 @@ func TestFileReader_Read_JSONLFile_AllParams(t *testing.T) {
 	if s.Text != "感情込めて" {
 		t.Errorf("expected text %q, got %q", "感情込めて", s.Text)
 	}
-	if s.SpeakerID == nil || *s.SpeakerID != 5 {
+	if s.SpeakerID == nil || s.SpeakerID.Value() != 5 {
 		t.Errorf("expected SpeakerID 5, got %v", s.SpeakerID)
 	}
 	if s.Overrides.Speed == nil || *s.Overrides.Speed != 1.5 {

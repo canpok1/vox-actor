@@ -45,8 +45,12 @@ func runScriptAppend(cmd *cobra.Command, args []string, deps *ScriptAppendDeps) 
 
 	script := entity.Script{Text: text, IsEmpty: text == ""}
 	if cmd.Flags().Changed("speaker") {
-		v, _ := cmd.Flags().GetInt("speaker")
-		script.SpeakerID = &v
+		vInt, _ := cmd.Flags().GetInt("speaker")
+		id, err := entity.NewSpeakerID(vInt)
+		if err != nil {
+			return fmt.Errorf("%w: --speaker: %v", ErrUsage, err)
+		}
+		script.SpeakerID = &id
 	}
 	if cmd.Flags().Changed("speed") {
 		v, _ := cmd.Flags().GetFloat64("speed")

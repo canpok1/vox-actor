@@ -40,10 +40,10 @@ func formatFloatPtr(v *float64) string {
 
 // dryRunPlaybackAttrs はdry-runモードの playback completed ログに付与する属性セットを返す。
 // 呼び出し側で path などの属性を前後に追加できるよう []any を返す。
-func dryRunPlaybackAttrs(text string, speakerID int, overrides entity.SynthOverrides) []any {
+func dryRunPlaybackAttrs(text string, speakerID entity.SpeakerID, overrides entity.SynthOverrides) []any {
 	return []any{
 		"text", truncateAndEscapeText(text),
-		"speaker", speakerID,
+		"speaker", speakerID.Value(),
 		"speed", formatFloatPtr(overrides.Speed),
 		"pitch", formatFloatPtr(overrides.Pitch),
 		"intonation", formatFloatPtr(overrides.Intonation),

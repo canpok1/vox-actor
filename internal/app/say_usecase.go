@@ -11,7 +11,7 @@ import (
 // SayParams はsayユースケースのパラメータ。
 type SayParams struct {
 	Text       string
-	SpeakerID  int
+	SpeakerID  entity.SpeakerID
 	Speed      *float64
 	Pitch      *float64
 	Intonation *float64

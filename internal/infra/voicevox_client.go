@@ -76,7 +76,7 @@ func (c *VoicevoxClient) HealthCheck(ctx context.Context) error {
 }
 
 // CreateQuery はテキストから音声合成用クエリを生成する。
-func (c *VoicevoxClient) CreateQuery(ctx context.Context, text string, speakerID int) (*entity.AudioQuery, error) {
+func (c *VoicevoxClient) CreateQuery(ctx context.Context, text string, speakerID entity.SpeakerID) (*entity.AudioQuery, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/audio_query", nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
@@ -84,7 +84,7 @@ func (c *VoicevoxClient) CreateQuery(ctx context.Context, text string, speakerID
 
 	q := req.URL.Query()
 	q.Set("text", text)
-	q.Set("speaker", strconv.Itoa(speakerID))
+	q.Set("speaker", strconv.Itoa(speakerID.Value()))
 	req.URL.RawQuery = q.Encode()
 
 	resp, err := c.httpClient.Do(req)
@@ -111,7 +111,7 @@ func (c *VoicevoxClient) CreateQuery(ctx context.Context, text string, speakerID
 }
 
 // Synthesize は音声合成を実行し、WAV形式のバイト列を返す。
-func (c *VoicevoxClient) Synthesize(ctx context.Context, query *entity.AudioQuery, speakerID int) ([]byte, error) {
+func (c *VoicevoxClient) Synthesize(ctx context.Context, query *entity.AudioQuery, speakerID entity.SpeakerID) ([]byte, error) {
 	jsonBody, err := json.Marshal(query)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal audio query: %w", err)
@@ -124,7 +124,7 @@ func (c *VoicevoxClient) Synthesize(ctx context.Context, query *entity.AudioQuer
 	req.Header.Set("Content-Type", "application/json")
 
 	params := req.URL.Query()
-	params.Set("speaker", strconv.Itoa(speakerID))
+	params.Set("speaker", strconv.Itoa(speakerID.Value()))
 	req.URL.RawQuery = params.Encode()
 
 	resp, err := c.httpClient.Do(req)

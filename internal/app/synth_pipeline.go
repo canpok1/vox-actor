@@ -34,7 +34,7 @@ type synthResult struct {
 
 // synthPipelineConfig はstartSynthPipelineの設定。
 type synthPipelineConfig struct {
-	defaultSpeakerID int
+	defaultSpeakerID entity.SpeakerID
 	defaultOverrides entity.SynthOverrides
 	// synthesisLogLevel は "synthesis completed" ログの出力レベル。
 	synthesisLogLevel slog.Level
