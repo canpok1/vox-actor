@@ -135,6 +135,7 @@ func (u *ActUsecase) Run(ctx context.Context, params ActParams) error {
 // runDryRun はDryRunモードのactユースケースを実行する。
 // VOICEVOXエンジン/音声再生は一切呼ばず、既存のログ互換性を保ったまま逐次出力する。
 func (u *ActUsecase) runDryRun(ctx context.Context, scripts []entity.Script, total int, params ActParams) error {
+	defaultOverrides := entity.SynthOverrides{Speed: params.Speed, Pitch: params.Pitch, Intonation: params.Intonation}
 	current := 0
 	for _, script := range scripts {
 		if ctx.Err() != nil {
@@ -148,14 +149,10 @@ func (u *ActUsecase) runDryRun(ctx context.Context, scripts []entity.Script, tot
 		u.logger.Info(fmt.Sprintf("[%d/%d] processing script", current, total), "path", script.Path)
 
 		speakerID := script.ResolveSpeakerID(params.SpeakerID)
-		overrides := script.ResolveOverrides(entity.SynthOverrides{
-			Speed:      params.Speed,
-			Pitch:      params.Pitch,
-			Intonation: params.Intonation,
-		})
+		overrides := script.ResolveOverrides(defaultOverrides)
 
 		u.logger.Info("synthesis completed", "path", script.Path, "wavSize", 0)
-		attrs := append([]any{"path", script.Path}, dryRunPlaybackAttrs(script.Text, speakerID, overrides.Speed, overrides.Pitch, overrides.Intonation)...)
+		attrs := append([]any{"path", script.Path}, dryRunPlaybackAttrs(script.Text, speakerID, overrides)...)
 		u.logger.Info("playback completed", attrs...)
 	}
 	u.logger.Info("all scripts processed")

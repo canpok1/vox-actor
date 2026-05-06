@@ -391,6 +391,7 @@ func (u *WatchUsecase) processScriptsSilent(ctx context.Context, scripts []entit
 // processScriptsDryRun はDryRunモードで1ファイル分のスクリプト群を処理する。
 // VOICEVOXエンジン/音声再生は一切呼ばず、既存のログ互換性を保ったまま逐次出力する。
 func (u *WatchUsecase) processScriptsDryRun(ctx context.Context, scripts []entity.Script, total int, params WatchParams) {
+	defaultOverrides := entity.SynthOverrides{Speed: params.Speed, Pitch: params.Pitch, Intonation: params.Intonation}
 	current := 0
 	for _, script := range scripts {
 		if ctx.Err() != nil {
@@ -403,13 +404,9 @@ func (u *WatchUsecase) processScriptsDryRun(ctx context.Context, scripts []entit
 		current++
 
 		speakerID := script.ResolveSpeakerID(params.SpeakerID)
-		overrides := script.ResolveOverrides(entity.SynthOverrides{
-			Speed:      params.Speed,
-			Pitch:      params.Pitch,
-			Intonation: params.Intonation,
-		})
+		overrides := script.ResolveOverrides(defaultOverrides)
 
-		attrs := dryRunPlaybackAttrs(script.Text, speakerID, overrides.Speed, overrides.Pitch, overrides.Intonation)
+		attrs := dryRunPlaybackAttrs(script.Text, speakerID, overrides)
 		u.logger.Info(fmt.Sprintf("[%d/%d] playback completed", current, total), attrs...)
 	}
 }
