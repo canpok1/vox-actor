@@ -76,13 +76,13 @@ test.describe("配信タブ: SSE と Timeline", () => {
       });
     }
 
-    // 最初の clip（baseTs）は破棄されているはず
-    const firstItem = page.locator(`[data-clip-timestamp="${baseTs}"]`);
-    await expect(firstItem).not.toBeVisible();
-
-    // 最後の clip（baseTs+20）は表示されているはず
+    // 最後の clip（baseTs+20）が表示されるまで待つ（21 件全受信・リングバッファ適用済みを確認）
     const lastItem = page.locator(`[data-clip-timestamp="${baseTs + 20}"]`);
     await expect(lastItem).toBeVisible();
+
+    // 最初の clip（baseTs）はリングバッファで破棄されているはず
+    const firstItem = page.locator(`[data-clip-timestamp="${baseTs}"]`);
+    await expect(firstItem).not.toBeVisible();
   });
 
   test("複数ブラウザへの同時 SSE 配信", async ({ browser, request }) => {
