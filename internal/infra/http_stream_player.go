@@ -94,8 +94,8 @@ type HTTPStreamPlayer struct {
 
 	// playbackMu は playbacks マップの排他制御。
 	playbackMu sync.Mutex
-	// playbacks は playback_id → state の in-memory store。TTL 1 時間で GC される。
-	playbacks map[string]*playbackStateRecord
+	// playbacks は playback_id → Playback エンティティの in-memory store。TTL 1 時間で GC される。
+	playbacks map[string]*entity.Playback
 }
 
 var (
@@ -134,31 +134,10 @@ const (
 	playbackGCInterval = 5 * time.Minute
 )
 
-// playbackStatus は playback の処理状態。
-type playbackStatus string
-
-const (
-	playbackStatusPending   playbackStatus = "pending"
-	playbackStatusPlaying   playbackStatus = "playing"
-	playbackStatusCompleted playbackStatus = "completed"
-	playbackStatusFailed    playbackStatus = "failed"
-)
-
-// playbackStateRecord は 1 バッチの処理状態を保持する。
-type playbackStateRecord struct {
-	status         playbackStatus
-	reason         string
-	createdAt      time.Time
-	clipCount      int
-	completedClips int
-	startedAt      *int64 // Unix milliseconds
-	finishedAt     *int64 // Unix milliseconds
-}
-
 // playBatch は worker への投入単位。
 type playBatch struct {
 	playbackID string
-	clips      []ViewerClip
+	clips      []entity.Clip
 }
 
 var (
@@ -340,7 +319,7 @@ func NewHTTPStreamPlayer(addr string, staticFS fs.FS, opts ...HTTPStreamOption) 
 		nowFunc:          time.Now,
 		silentInterval:   defaultSilentInterval,
 		batchQueue:       make(chan playBatch, batchQueueCapacity),
-		playbacks:        make(map[string]*playbackStateRecord),
+		playbacks:        make(map[string]*entity.Playback),
 		prefetchLeadTime: defaultPrefetchLeadTime,
 	}
 	for _, opt := range opts {
@@ -481,11 +460,11 @@ func (p *HTTPStreamPlayer) SetSilent(reason string) {
 	p.silentReason = reason
 }
 
-// clipToPlayMeta は ViewerClip を app.PlayMeta に変換する。
-func clipToPlayMeta(clip ViewerClip) app.PlayMeta {
+// clipToPlayMeta は entity.Clip を app.PlayMeta に変換する。
+func clipToPlayMeta(clip entity.Clip) app.PlayMeta {
 	return app.PlayMeta{
 		Text:       clip.Text,
-		SpeakerID:  entity.MustNewSpeakerID(clip.SpeakerID),
+		SpeakerID:  clip.SpeakerID,
 		Speed:      clip.Speed,
 		Pitch:      clip.Pitch,
 		Intonation: clip.Intonation,
@@ -982,15 +961,18 @@ func (p *HTTPStreamPlayer) handleAPIPlay(w http.ResponseWriter, r *http.Request)
 		http.Error(w, fmt.Sprintf("clips count exceeds limit %d", maxClipsPerBatch), http.StatusBadRequest)
 		return
 	}
-	for i, clip := range req.Clips {
-		if clip.Text == "" {
+	clips := make([]entity.Clip, len(req.Clips))
+	for i, c := range req.Clips {
+		if c.Text == "" {
 			http.Error(w, fmt.Sprintf("clips[%d].text must not be empty", i), http.StatusBadRequest)
 			return
 		}
-		if _, err := entity.NewSpeakerID(clip.SpeakerID); err != nil {
+		speakerID, err := entity.NewSpeakerID(c.SpeakerID)
+		if err != nil {
 			http.Error(w, fmt.Sprintf("clips[%d].speaker_id: %v", i, err), http.StatusBadRequest)
 			return
 		}
+		clips[i] = entity.NewClip(c.Text, speakerID, c.Speed, c.Pitch, c.Intonation)
 	}
 
 	playbackID, err := newUUIDv4()
@@ -1009,7 +991,7 @@ func (p *HTTPStreamPlayer) handleAPIPlay(w http.ResponseWriter, r *http.Request)
 	p.initPlayback(playbackID, clipCount)
 
 	if silent {
-		p.setPlaybackStatus(playbackID, playbackStatusCompleted, "")
+		p.completePlayback(playbackID)
 		resp := ViewerPlayResponse{
 			PlaybackID:   playbackID,
 			ClipCount:    clipCount,
@@ -1021,7 +1003,7 @@ func (p *HTTPStreamPlayer) handleAPIPlay(w http.ResponseWriter, r *http.Request)
 		_, _ = w.Write(payload)
 		return
 	}
-	batch := playBatch{playbackID: playbackID, clips: req.Clips}
+	batch := playBatch{playbackID: playbackID, clips: clips}
 	select {
 	case p.batchQueue <- batch:
 	default:
@@ -1088,37 +1070,47 @@ func (p *HTTPStreamPlayer) handleAPIPreviewClip(w http.ResponseWriter, r *http.R
 func (p *HTTPStreamPlayer) initPlayback(id string, clipCount int) {
 	p.playbackMu.Lock()
 	defer p.playbackMu.Unlock()
-	p.playbacks[id] = &playbackStateRecord{
-		createdAt: p.nowFunc(),
-		clipCount: clipCount,
-		status:    playbackStatusPending,
-	}
+	p.playbacks[id] = entity.NewPlayback(clipCount, p.nowFunc())
 }
 
-func (p *HTTPStreamPlayer) setPlaybackStatus(id string, status playbackStatus, reason string) {
+// startPlayback/completePlayback/failPlayback は TTL GC で pruned されたエントリへの
+// 遅延更新を無視するため、遷移エラーを破棄している。
+
+func (p *HTTPStreamPlayer) startPlayback(id string) {
 	p.playbackMu.Lock()
 	defer p.playbackMu.Unlock()
-	state, ok := p.playbacks[id]
+	pb, ok := p.playbacks[id]
 	if !ok {
-		// pruned or unregistered; ignore late updates from workers.
 		return
 	}
-	state.status = status
-	state.reason = reason
-	now := p.nowFunc().UnixMilli()
-	if status == playbackStatusPlaying && state.startedAt == nil {
-		state.startedAt = &now
+	_ = pb.MarkPlaying(p.nowFunc().UnixMilli())
+}
+
+func (p *HTTPStreamPlayer) completePlayback(id string) {
+	p.playbackMu.Lock()
+	defer p.playbackMu.Unlock()
+	pb, ok := p.playbacks[id]
+	if !ok {
+		return
 	}
-	if (status == playbackStatusCompleted || status == playbackStatusFailed) && state.finishedAt == nil {
-		state.finishedAt = &now
+	_ = pb.MarkCompleted(p.nowFunc().UnixMilli())
+}
+
+func (p *HTTPStreamPlayer) failPlayback(id string, reason string) {
+	p.playbackMu.Lock()
+	defer p.playbackMu.Unlock()
+	pb, ok := p.playbacks[id]
+	if !ok {
+		return
 	}
+	_ = pb.MarkFailed(reason, p.nowFunc().UnixMilli())
 }
 
 func (p *HTTPStreamPlayer) incrementCompletedClips(id string) {
 	p.playbackMu.Lock()
 	defer p.playbackMu.Unlock()
-	if state, ok := p.playbacks[id]; ok {
-		state.completedClips++
+	if pb, ok := p.playbacks[id]; ok {
+		pb.IncrementCompletedClips()
 	}
 }
 
@@ -1145,12 +1137,12 @@ func (p *HTTPStreamPlayer) handleAPIPlayback(w http.ResponseWriter, r *http.Requ
 	} else {
 		resp = ViewerPlaybackResponse{
 			ID:             id,
-			Status:         string(state.status),
-			ClipCount:      state.clipCount,
-			CompletedClips: state.completedClips,
-			StartedAt:      state.startedAt,
-			FinishedAt:     state.finishedAt,
-			FailedReason:   state.reason,
+			Status:         string(state.Status()),
+			ClipCount:      state.ClipCount(),
+			CompletedClips: state.CompletedClips(),
+			StartedAt:      state.StartedAt(),
+			FinishedAt:     state.FinishedAt(),
+			FailedReason:   state.Reason(),
 		}
 	}
 	p.playbackMu.Unlock()
@@ -1185,7 +1177,7 @@ type synthResult struct {
 // タイミングで前倒し broadcast する。
 // メモリ増加: 最大 1 本分の追加 WAV バッファを保持する（VOICEVOX 負荷も +1 並列）。
 func (p *HTTPStreamPlayer) processBatch(ctx context.Context, batch playBatch) {
-	p.setPlaybackStatus(batch.playbackID, playbackStatusPlaying, "")
+	p.startPlayback(batch.playbackID)
 
 	// 前のイテレーションで前倒し broadcast 済みの WAV（nil なら通常合成）。
 	var prefetchedWAV []byte
@@ -1216,14 +1208,13 @@ func (p *HTTPStreamPlayer) processBatch(ctx context.Context, batch playBatch) {
 			nextClip := batch.clips[i+1]
 			nextSynthCh = make(chan synthResult, 1)
 			go func() {
-				nextSpeakerID := entity.MustNewSpeakerID(nextClip.SpeakerID)
-				q2, err := p.voicevoxClient.CreateQuery(ctx, nextClip.Text, nextSpeakerID)
+				q2, err := p.voicevoxClient.CreateQuery(ctx, nextClip.Text, nextClip.SpeakerID)
 				if err != nil {
 					nextSynthCh <- synthResult{err: err}
 					return
 				}
 				q2o := q2.WithOverrides(entity.SynthOverrides{Speed: nextClip.Speed, Pitch: nextClip.Pitch, Intonation: nextClip.Intonation})
-				w, err := p.voicevoxClient.Synthesize(ctx, &q2o, nextSpeakerID)
+				w, err := p.voicevoxClient.Synthesize(ctx, &q2o, nextClip.SpeakerID)
 				nextSynthCh <- synthResult{wav: w, err: err}
 			}()
 		}
@@ -1251,25 +1242,24 @@ func (p *HTTPStreamPlayer) processBatch(ctx context.Context, batch playBatch) {
 		p.incrementCompletedClips(batch.playbackID)
 	}
 
-	p.setPlaybackStatus(batch.playbackID, playbackStatusCompleted, "")
+	p.completePlayback(batch.playbackID)
 }
 
 // synthesizeAndPlay は clip を合成して Play() でブロードキャストする。
 // エラー時は playback を failed に遷移させて error を返す。
-func (p *HTTPStreamPlayer) synthesizeAndPlay(ctx context.Context, playbackID string, clip ViewerClip) ([]byte, error) {
-	clipSpeakerID := entity.MustNewSpeakerID(clip.SpeakerID)
-	query, err := p.voicevoxClient.CreateQuery(ctx, clip.Text, clipSpeakerID)
+func (p *HTTPStreamPlayer) synthesizeAndPlay(ctx context.Context, playbackID string, clip entity.Clip) ([]byte, error) {
+	query, err := p.voicevoxClient.CreateQuery(ctx, clip.Text, clip.SpeakerID)
 	if err != nil {
-		p.logger.Error("worker CreateQuery failed", "playbackID", playbackID, "speakerID", clip.SpeakerID, "error", err)
-		p.setPlaybackStatus(playbackID, playbackStatusFailed, err.Error())
+		p.logger.Error("worker CreateQuery failed", "playbackID", playbackID, "speakerID", clip.SpeakerID.Value(), "error", err)
+		p.failPlayback(playbackID, err.Error())
 		return nil, err
 	}
 
 	q := query.WithOverrides(entity.SynthOverrides{Speed: clip.Speed, Pitch: clip.Pitch, Intonation: clip.Intonation})
-	wav, err := p.voicevoxClient.Synthesize(ctx, &q, clipSpeakerID)
+	wav, err := p.voicevoxClient.Synthesize(ctx, &q, clip.SpeakerID)
 	if err != nil {
-		p.logger.Error("worker Synthesize failed", "playbackID", playbackID, "speakerID", clip.SpeakerID, "error", err)
-		p.setPlaybackStatus(playbackID, playbackStatusFailed, err.Error())
+		p.logger.Error("worker Synthesize failed", "playbackID", playbackID, "speakerID", clip.SpeakerID.Value(), "error", err)
+		p.failPlayback(playbackID, err.Error())
 		return nil, err
 	}
 
@@ -1277,8 +1267,8 @@ func (p *HTTPStreamPlayer) synthesizeAndPlay(ctx context.Context, playbackID str
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
 		}
-		p.logger.Error("worker Play failed", "playbackID", playbackID, "speakerID", clip.SpeakerID, "error", pErr)
-		p.setPlaybackStatus(playbackID, playbackStatusFailed, pErr.Error())
+		p.logger.Error("worker Play failed", "playbackID", playbackID, "speakerID", clip.SpeakerID.Value(), "error", pErr)
+		p.failPlayback(playbackID, pErr.Error())
 		return nil, pErr
 	}
 	return wav, nil
@@ -1288,7 +1278,7 @@ func (p *HTTPStreamPlayer) synthesizeAndPlay(ctx context.Context, playbackID str
 // nextClip を前倒し broadcast する。broadcast に成功した場合は nextClip の WAV を返す（nil なら
 // タイムアウトで broadcast スキップ）。エラー時は playback を failed に遷移させて error を返す。
 // goroutine leak を防ぐため nextSynthCh は buffered channel (cap=1) であること。
-func (p *HTTPStreamPlayer) prefetchSleep(ctx context.Context, playbackID string, duration time.Duration, nextSynthCh chan synthResult, nextClip ViewerClip) ([]byte, error) {
+func (p *HTTPStreamPlayer) prefetchSleep(ctx context.Context, playbackID string, duration time.Duration, nextSynthCh chan synthResult, nextClip entity.Clip) ([]byte, error) {
 	timer1 := time.NewTimer(duration - p.prefetchLeadTime)
 	select {
 	case <-timer1.C:
@@ -1310,7 +1300,7 @@ func (p *HTTPStreamPlayer) prefetchSleep(ctx context.Context, playbackID string,
 				<-remainTimer.C
 			}
 			p.logger.Error("worker prefetch Synthesize failed", "playbackID", playbackID, "error", result.err)
-			p.setPlaybackStatus(playbackID, playbackStatusFailed, result.err.Error())
+			p.failPlayback(playbackID, result.err.Error())
 			return nil, result.err
 		}
 		if pErr := p.Play(ctx, result.wav, clipToPlayMeta(nextClip)); pErr != nil {
@@ -1321,7 +1311,7 @@ func (p *HTTPStreamPlayer) prefetchSleep(ctx context.Context, playbackID string,
 				return nil, ctx.Err()
 			}
 			p.logger.Error("worker prefetch Play failed", "playbackID", playbackID, "error", pErr)
-			p.setPlaybackStatus(playbackID, playbackStatusFailed, pErr.Error())
+			p.failPlayback(playbackID, pErr.Error())
 			return nil, pErr
 		}
 		select {
@@ -1362,7 +1352,7 @@ func (p *HTTPStreamPlayer) prunePlaybacks() {
 	p.playbackMu.Lock()
 	defer p.playbackMu.Unlock()
 	for id, state := range p.playbacks {
-		if state.createdAt.Before(cutoff) {
+		if state.CreatedAt().Before(cutoff) {
 			delete(p.playbacks, id)
 		}
 	}
