@@ -41,7 +41,9 @@ func (js *jsonScript) toScript(path string) entity.Script {
 	var speakerID *entity.SpeakerID
 	if js.Speaker != nil {
 		id, err := entity.NewSpeakerID(*js.Speaker)
-		if err == nil {
+		if err != nil {
+			slog.Warn("invalid speaker in script file, using default", "path", path, "speaker", *js.Speaker)
+		} else {
 			speakerID = &id
 		}
 	}

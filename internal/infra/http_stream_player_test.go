@@ -2800,6 +2800,21 @@ func TestHTTPStreamPlayer_APIPlay_EmptyClipTextRejected(t *testing.T) {
 	}
 }
 
+func TestHTTPStreamPlayer_APIPlay_NegativeSpeakerIDRejected(t *testing.T) {
+	t.Parallel()
+	stub := &testVoicevoxClient{wav: []byte("RIFFx")}
+	p := newStartedPlayerWithOpts(t, WithVoicevoxClient(stub))
+	body := bytes.NewBufferString(`{"clips":[{"text":"hello","speaker_id":-1}]}`)
+	resp, err := http.Post("http://"+p.Addr()+"/api/play", "application/json", body)
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("expected 400 for negative speaker_id, got %d", resp.StatusCode)
+	}
+}
+
 func TestHTTPStreamPlayer_APIPlay_QueueFull(t *testing.T) {
 	t.Parallel()
 	block := make(chan struct{})
