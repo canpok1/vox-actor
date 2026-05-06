@@ -62,22 +62,24 @@ func TestScript_ResolveOverrides_PartialOverride(t *testing.T) {
 }
 
 func TestScript_ResolveSpeakerID_ScriptValueTakesPrecedence(t *testing.T) {
-	id := 5
+	id := entity.MustNewSpeakerID(5)
 	s := entity.Script{SpeakerID: &id}
+	defaultID := entity.MustNewSpeakerID(3)
 
-	got := s.ResolveSpeakerID(3)
+	got := s.ResolveSpeakerID(defaultID)
 
-	if got != 5 {
-		t.Errorf("got %d, want 5", got)
+	if got.Value() != 5 {
+		t.Errorf("got %d, want 5", got.Value())
 	}
 }
 
 func TestScript_ResolveSpeakerID_NilUsesDefault(t *testing.T) {
 	s := entity.Script{}
+	defaultID := entity.MustNewSpeakerID(3)
 
-	got := s.ResolveSpeakerID(3)
+	got := s.ResolveSpeakerID(defaultID)
 
-	if got != 3 {
-		t.Errorf("got %d, want 3", got)
+	if got.Value() != 3 {
+		t.Errorf("got %d, want 3", got.Value())
 	}
 }

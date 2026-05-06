@@ -30,6 +30,10 @@ import (
 
 func ptrInt(v int) *int             { return &v }
 func ptrFloat64(v float64) *float64 { return &v }
+func ptrSpeakerID(v int) *entity.SpeakerID {
+	id := entity.MustNewSpeakerID(v)
+	return &id
+}
 
 func TestFileWriter_Write_JSON_TextOnly(t *testing.T) {
 	t.Parallel()
@@ -81,7 +85,7 @@ func TestFileWriter_Write_JSON_AllParams(t *testing.T) {
 	w := infra.NewFileWriter()
 	script := entity.Script{
 		Text:      "感情込めて",
-		SpeakerID: ptrInt(5),
+		SpeakerID: ptrSpeakerID(5),
 		Overrides: entity.SynthOverrides{Speed: ptrFloat64(1.5), Pitch: ptrFloat64(0.1), Intonation: ptrFloat64(1.8)},
 	}
 	if _, err := w.Write(dest, script); err != nil {
@@ -122,7 +126,7 @@ func TestFileWriter_Write_JSON_OmitNilFields(t *testing.T) {
 	w := infra.NewFileWriter()
 	script := entity.Script{
 		Text:      "部分指定",
-		SpeakerID: ptrInt(2),
+		SpeakerID: ptrSpeakerID(2),
 	}
 	if _, err := w.Write(dest, script); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -157,7 +161,7 @@ func TestFileWriter_Write_JSONL_SingleLine(t *testing.T) {
 	w := infra.NewFileWriter()
 	script := entity.Script{
 		Text:      "JSONL出力",
-		SpeakerID: ptrInt(3),
+		SpeakerID: ptrSpeakerID(3),
 	}
 	if _, err := w.Write(dest, script); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -234,7 +238,7 @@ func TestFileWriter_Write_Txt_WithSpeaker_LogsWarn(t *testing.T) {
 	w := infra.NewFileWriter(infra.WithFileWriterLogger(logger))
 	script := entity.Script{
 		Text:      "本文",
-		SpeakerID: ptrInt(5),
+		SpeakerID: ptrSpeakerID(5),
 	}
 	if _, err := w.Write(dest, script); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -409,7 +413,7 @@ func TestFileWriter_Write_DirectoryTarget_CreatesAutoNamedFile(t *testing.T) {
 	w := infra.NewFileWriter()
 	written, err := w.Write(outDir, entity.Script{
 		Text:      "ディレクトリ指定",
-		SpeakerID: ptrInt(2),
+		SpeakerID: ptrSpeakerID(2),
 		Overrides: entity.SynthOverrides{Speed: ptrFloat64(1.1)},
 	})
 	if err != nil {
@@ -521,8 +525,8 @@ func TestFileWriter_WriteAll_MultipleScripts(t *testing.T) {
 
 	w := infra.NewFileWriter()
 	scripts := []entity.Script{
-		{Text: "おはようなのだ", SpeakerID: ptrInt(3), Overrides: entity.SynthOverrides{Intonation: ptrFloat64(1.1)}},
-		{Text: "今日もがんばるのだ", SpeakerID: ptrInt(3), Overrides: entity.SynthOverrides{Speed: ptrFloat64(1.0)}},
+		{Text: "おはようなのだ", SpeakerID: ptrSpeakerID(3), Overrides: entity.SynthOverrides{Intonation: ptrFloat64(1.1)}},
+		{Text: "今日もがんばるのだ", SpeakerID: ptrSpeakerID(3), Overrides: entity.SynthOverrides{Speed: ptrFloat64(1.0)}},
 	}
 	written, err := w.WriteAll(dest, scripts)
 	if err != nil {

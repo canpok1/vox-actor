@@ -100,7 +100,7 @@ func TestCreateQuery_Success(t *testing.T) {
 	defer server.Close()
 
 	client := infra.NewVoicevoxClient(server.URL)
-	query, err := client.CreateQuery(context.Background(), "こんにちは", 1)
+	query, err := client.CreateQuery(context.Background(), "こんにちは", entity.MustNewSpeakerID(1))
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -142,7 +142,7 @@ func TestCreateQuery_Non200(t *testing.T) {
 	defer server.Close()
 
 	client := infra.NewVoicevoxClient(server.URL)
-	query, err := client.CreateQuery(context.Background(), "test", 1)
+	query, err := client.CreateQuery(context.Background(), "test", entity.MustNewSpeakerID(1))
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -192,7 +192,7 @@ func TestSynthesize_Success(t *testing.T) {
 	}
 
 	client := infra.NewVoicevoxClient(server.URL)
-	wav, err := client.Synthesize(context.Background(), query, 1)
+	wav, err := client.Synthesize(context.Background(), query, entity.MustNewSpeakerID(1))
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -238,7 +238,7 @@ func TestSynthesize_PassesThroughQueryDirectly(t *testing.T) {
 	}
 
 	client := infra.NewVoicevoxClient(server.URL)
-	_, err := client.Synthesize(context.Background(), query, 1)
+	_, err := client.Synthesize(context.Background(), query, entity.MustNewSpeakerID(1))
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -313,7 +313,7 @@ func TestSynthesize_Non200(t *testing.T) {
 	}
 
 	client := infra.NewVoicevoxClient(server.URL)
-	wav, err := client.Synthesize(context.Background(), query, 1)
+	wav, err := client.Synthesize(context.Background(), query, entity.MustNewSpeakerID(1))
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}

@@ -82,7 +82,7 @@ func TestWatchUsecase_Run_ProcessesFilesFromWatcher(t *testing.T) {
 	uc := app.NewWatchUsecase(reader, client, player, mover, watcher)
 	params := app.WatchParams{
 		Paths:     []string{"/tmp/watch"},
-		SpeakerID: 3,
+		SpeakerID: entity.MustNewSpeakerID(3),
 	}
 
 	err := uc.Run(context.Background(), params)
@@ -96,13 +96,13 @@ func TestWatchUsecase_Run_ProcessesFilesFromWatcher(t *testing.T) {
 	if player.playCalls != 1 {
 		t.Errorf("expected 1 Play call, got: %d", player.playCalls)
 	}
-	if len(player.playMetas) != 1 || player.playMetas[0].SpeakerID != 3 {
+	if len(player.playMetas) != 1 || player.playMetas[0].SpeakerID.Value() != 3 {
 		t.Errorf("expected PlayMeta.SpeakerID=3 (default), got: %+v", player.playMetas)
 	}
 }
 
 func TestWatchUsecase_Run_PlayReceivesScriptResolvedSpeakerID(t *testing.T) {
-	overrideID := 11
+	overrideID := entity.MustNewSpeakerID(11)
 	reader := &mockScriptReader{
 		scripts: []entity.Script{
 			{Path: "a.txt", Text: "default", IsEmpty: false},
@@ -120,7 +120,7 @@ func TestWatchUsecase_Run_PlayReceivesScriptResolvedSpeakerID(t *testing.T) {
 	}
 
 	uc := app.NewWatchUsecase(reader, client, player, mover, watcher)
-	params := app.WatchParams{Paths: []string{"/tmp/watch"}, SpeakerID: 3}
+	params := app.WatchParams{Paths: []string{"/tmp/watch"}, SpeakerID: entity.MustNewSpeakerID(3)}
 
 	if err := uc.Run(context.Background(), params); err != nil {
 		t.Fatalf("expected no error, got: %v", err)
@@ -129,10 +129,10 @@ func TestWatchUsecase_Run_PlayReceivesScriptResolvedSpeakerID(t *testing.T) {
 	if len(player.playMetas) != 2 {
 		t.Fatalf("expected 2 Play calls, got: %d", len(player.playMetas))
 	}
-	if player.playMetas[0].SpeakerID != 3 {
+	if player.playMetas[0].SpeakerID.Value() != 3 {
 		t.Errorf("expected first PlayMeta.SpeakerID=3 (default), got: %d", player.playMetas[0].SpeakerID)
 	}
-	if player.playMetas[1].SpeakerID != 11 {
+	if player.playMetas[1].SpeakerID.Value() != 11 {
 		t.Errorf("expected second PlayMeta.SpeakerID=11 (script override), got: %d", player.playMetas[1].SpeakerID)
 	}
 }
@@ -156,7 +156,7 @@ func TestWatchUsecase_Run_MovesFileToDoneAfterProcessing(t *testing.T) {
 	uc := app.NewWatchUsecase(reader, client, player, mover, watcher)
 	params := app.WatchParams{
 		Paths:     []string{"/tmp/watch"},
-		SpeakerID: 3,
+		SpeakerID: entity.MustNewSpeakerID(3),
 	}
 
 	if err := uc.Run(context.Background(), params); err != nil {
@@ -190,7 +190,7 @@ func TestWatchUsecase_Run_EmptyFileSkippedAndMovedToDone(t *testing.T) {
 	uc := app.NewWatchUsecase(reader, client, player, mover, watcher)
 	params := app.WatchParams{
 		Paths:     []string{"/tmp/watch"},
-		SpeakerID: 3,
+		SpeakerID: entity.MustNewSpeakerID(3),
 	}
 
 	if err := uc.Run(context.Background(), params); err != nil {
@@ -224,7 +224,7 @@ func TestWatchUsecase_Run_ReadError_SkipsAndMovesToDone(t *testing.T) {
 	uc := app.NewWatchUsecase(reader, client, player, mover, watcher)
 	params := app.WatchParams{
 		Paths:     []string{"/tmp/watch"},
-		SpeakerID: 3,
+		SpeakerID: entity.MustNewSpeakerID(3),
 	}
 
 	// 不正ファイルはスキップしてエラーにならない
@@ -259,7 +259,7 @@ func TestWatchUsecase_Run_MultipleFiles_ProcessedInOrder(t *testing.T) {
 	uc := app.NewWatchUsecase(reader, client, player, mover, watcher)
 	params := app.WatchParams{
 		Paths:     []string{"/tmp/watch"},
-		SpeakerID: 3,
+		SpeakerID: entity.MustNewSpeakerID(3),
 	}
 
 	if err := uc.Run(context.Background(), params); err != nil {
@@ -298,7 +298,7 @@ func TestWatchUsecase_Run_HealthCheckError(t *testing.T) {
 	watcher := &mockDirWatcher{}
 
 	uc := app.NewWatchUsecase(reader, client, player, mover, watcher)
-	params := app.WatchParams{Paths: []string{"/tmp/watch"}, SpeakerID: 3}
+	params := app.WatchParams{Paths: []string{"/tmp/watch"}, SpeakerID: entity.MustNewSpeakerID(3)}
 
 	err := uc.Run(context.Background(), params)
 	if err == nil {
@@ -327,7 +327,7 @@ func TestWatchUsecase_Run_ContextCancelled_StopsProcessing(t *testing.T) {
 	mover := &mockFileMover{}
 
 	uc := app.NewWatchUsecase(reader, client, player, mover, customWatcher)
-	params := app.WatchParams{Paths: []string{"/tmp/watch"}, SpeakerID: 3}
+	params := app.WatchParams{Paths: []string{"/tmp/watch"}, SpeakerID: entity.MustNewSpeakerID(3)}
 
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -351,7 +351,7 @@ func TestWatchUsecase_Run_ContextCancelled_StopsProcessing(t *testing.T) {
 }
 
 func TestWatchUsecase_Run_ScriptParamsOverrideGlobal(t *testing.T) {
-	scriptSpeaker := 7
+	scriptSpeaker := entity.MustNewSpeakerID(7)
 	scriptSpeed := 0.5
 	globalSpeed := 2.0
 
@@ -379,7 +379,7 @@ func TestWatchUsecase_Run_ScriptParamsOverrideGlobal(t *testing.T) {
 	uc := app.NewWatchUsecase(reader, client, player, mover, watcher)
 	params := app.WatchParams{
 		Paths:     []string{"/tmp/watch"},
-		SpeakerID: 3,
+		SpeakerID: entity.MustNewSpeakerID(3),
 		Speed:     &globalSpeed,
 	}
 
@@ -431,7 +431,7 @@ func TestWatchUsecase_Run_ScriptNoParams_UsesGlobal(t *testing.T) {
 	uc := app.NewWatchUsecase(reader, client, player, mover, watcher)
 	params := app.WatchParams{
 		Paths:     []string{"/tmp/watch"},
-		SpeakerID: 3,
+		SpeakerID: entity.MustNewSpeakerID(3),
 		Speed:     &globalSpeed,
 	}
 
@@ -473,7 +473,7 @@ func TestWatchUsecase_Run_DeleteMode_DeletesFileInsteadOfMove(t *testing.T) {
 	uc := app.NewWatchUsecase(reader, client, player, mover, watcher, app.WithDeleteMode())
 	params := app.WatchParams{
 		Paths:     []string{"/tmp/watch"},
-		SpeakerID: 3,
+		SpeakerID: entity.MustNewSpeakerID(3),
 	}
 
 	if err := uc.Run(context.Background(), params); err != nil {
@@ -513,7 +513,7 @@ func TestWatchUsecase_Run_DefaultMode_MovesToDoneNotDelete(t *testing.T) {
 	uc := app.NewWatchUsecase(reader, client, player, mover, watcher)
 	params := app.WatchParams{
 		Paths:     []string{"/tmp/watch"},
-		SpeakerID: 3,
+		SpeakerID: entity.MustNewSpeakerID(3),
 	}
 
 	if err := uc.Run(context.Background(), params); err != nil {
@@ -550,7 +550,7 @@ func TestWatchUsecase_Run_DeleteMode_FileDeletedSuppressedAtInfoLevel(t *testing
 	logger := slog.New(logging.NewHumanHandler(&buf, &logging.HumanHandlerOptions{Level: slog.LevelInfo, NoColor: true}))
 
 	uc := app.NewWatchUsecase(reader, client, player, mover, watcher, app.WithDeleteMode(), app.WithWatchLogger(logger))
-	params := app.WatchParams{Paths: []string{"/tmp/watch"}, SpeakerID: 3}
+	params := app.WatchParams{Paths: []string{"/tmp/watch"}, SpeakerID: entity.MustNewSpeakerID(3)}
 
 	err := uc.Run(context.Background(), params)
 	if err != nil {
@@ -583,7 +583,7 @@ func TestWatchUsecase_Run_DeleteMode_FileDeletedAppearsAtDebugLevel(t *testing.T
 	logger := slog.New(logging.NewHumanHandler(&buf, &logging.HumanHandlerOptions{Level: slog.LevelDebug, NoColor: true}))
 
 	uc := app.NewWatchUsecase(reader, client, player, mover, watcher, app.WithDeleteMode(), app.WithWatchLogger(logger))
-	params := app.WatchParams{Paths: []string{"/tmp/watch"}, SpeakerID: 3}
+	params := app.WatchParams{Paths: []string{"/tmp/watch"}, SpeakerID: entity.MustNewSpeakerID(3)}
 
 	err := uc.Run(context.Background(), params)
 	if err != nil {
@@ -622,7 +622,7 @@ func TestWatchUsecase_Run_DryRun_SkipsClientAndPlayerAndMovesToDone(t *testing.T
 	uc := app.NewWatchUsecase(reader, client, player, mover, watcher, app.WithWatchLogger(logger))
 	params := app.WatchParams{
 		Paths:     []string{"/tmp/watch"},
-		SpeakerID: 3,
+		SpeakerID: entity.MustNewSpeakerID(3),
 		DryRun:    true,
 	}
 
@@ -692,7 +692,7 @@ func TestWatchUsecase_Run_DryRun_NoHealthCheck(t *testing.T) {
 	uc := app.NewWatchUsecase(reader, client, player, mover, watcher)
 	params := app.WatchParams{
 		Paths:     []string{"/tmp/watch"},
-		SpeakerID: 3,
+		SpeakerID: entity.MustNewSpeakerID(3),
 		DryRun:    true,
 	}
 
@@ -721,7 +721,7 @@ func TestWatchUsecase_Run_DryRun_DeleteModeStillDeletes(t *testing.T) {
 	uc := app.NewWatchUsecase(reader, client, player, mover, watcher, app.WithDeleteMode())
 	params := app.WatchParams{
 		Paths:     []string{"/tmp/watch"},
-		SpeakerID: 3,
+		SpeakerID: entity.MustNewSpeakerID(3),
 		DryRun:    true,
 	}
 
@@ -768,7 +768,7 @@ func TestWatchUsecase_Run_FileMovedToDoneSuppressedAtInfoLevel(t *testing.T) {
 	logger := slog.New(logging.NewHumanHandler(&buf, &logging.HumanHandlerOptions{Level: slog.LevelInfo, NoColor: true}))
 
 	uc := app.NewWatchUsecase(reader, client, player, mover, watcher, app.WithWatchLogger(logger))
-	params := app.WatchParams{Paths: []string{"/tmp/watch"}, SpeakerID: 3}
+	params := app.WatchParams{Paths: []string{"/tmp/watch"}, SpeakerID: entity.MustNewSpeakerID(3)}
 
 	err := uc.Run(context.Background(), params)
 	if err != nil {
@@ -801,7 +801,7 @@ func TestWatchUsecase_Run_SynthesisCompletedSuppressedAtInfoLevel(t *testing.T) 
 	logger := slog.New(logging.NewHumanHandler(&buf, &logging.HumanHandlerOptions{Level: slog.LevelInfo, NoColor: true}))
 
 	uc := app.NewWatchUsecase(reader, client, player, mover, watcher, app.WithWatchLogger(logger))
-	params := app.WatchParams{Paths: []string{"/tmp/watch"}, SpeakerID: 3}
+	params := app.WatchParams{Paths: []string{"/tmp/watch"}, SpeakerID: entity.MustNewSpeakerID(3)}
 
 	err := uc.Run(context.Background(), params)
 	if err != nil {
@@ -835,7 +835,7 @@ func TestWatchUsecase_Run_PlayReceivesScriptText(t *testing.T) {
 	uc := app.NewWatchUsecase(reader, client, player, mover, watcher)
 	params := app.WatchParams{
 		Paths:     []string{"/tmp/watch"},
-		SpeakerID: 3,
+		SpeakerID: entity.MustNewSpeakerID(3),
 	}
 
 	if err := uc.Run(context.Background(), params); err != nil {
@@ -870,7 +870,7 @@ func TestWatchUsecase_Run_PlaybackCompletedAtInfoIncludesProgressAndText(t *test
 	logger := slog.New(logging.NewHumanHandler(&buf, &logging.HumanHandlerOptions{Level: slog.LevelInfo, NoColor: true}))
 
 	uc := app.NewWatchUsecase(reader, client, player, mover, watcher, app.WithWatchLogger(logger))
-	params := app.WatchParams{Paths: []string{"/tmp/watch"}, SpeakerID: 3}
+	params := app.WatchParams{Paths: []string{"/tmp/watch"}, SpeakerID: entity.MustNewSpeakerID(3)}
 
 	if err := uc.Run(context.Background(), params); err != nil {
 		t.Fatalf("expected no error, got: %v", err)
@@ -906,7 +906,7 @@ func TestWatchUsecase_Run_PlaybackCompletedTruncatesLongTextAndEscapesNewlines(t
 	logger := slog.New(logging.NewHumanHandler(&buf, &logging.HumanHandlerOptions{Level: slog.LevelInfo, NoColor: true}))
 
 	uc := app.NewWatchUsecase(reader, client, player, mover, watcher, app.WithWatchLogger(logger))
-	params := app.WatchParams{Paths: []string{"/tmp/watch"}, SpeakerID: 3}
+	params := app.WatchParams{Paths: []string{"/tmp/watch"}, SpeakerID: entity.MustNewSpeakerID(3)}
 
 	if err := uc.Run(context.Background(), params); err != nil {
 		t.Fatalf("expected no error, got: %v", err)
@@ -941,7 +941,7 @@ func TestWatchUsecase_Run_PlaybackCompletedSkipsEmptyAndNumeratesContiguously(t 
 	logger := slog.New(logging.NewHumanHandler(&buf, &logging.HumanHandlerOptions{Level: slog.LevelInfo, NoColor: true}))
 
 	uc := app.NewWatchUsecase(reader, client, player, mover, watcher, app.WithWatchLogger(logger))
-	params := app.WatchParams{Paths: []string{"/tmp/watch"}, SpeakerID: 3}
+	params := app.WatchParams{Paths: []string{"/tmp/watch"}, SpeakerID: entity.MustNewSpeakerID(3)}
 
 	if err := uc.Run(context.Background(), params); err != nil {
 		t.Fatalf("expected no error, got: %v", err)
@@ -977,7 +977,7 @@ func TestWatchUsecase_Run_LogsProcessingStatus(t *testing.T) {
 	uc := app.NewWatchUsecase(reader, client, player, mover, watcher, app.WithWatchLogger(logger))
 	params := app.WatchParams{
 		Paths:     []string{"/tmp/watch"},
-		SpeakerID: 3,
+		SpeakerID: entity.MustNewSpeakerID(3),
 	}
 
 	err := uc.Run(context.Background(), params)
@@ -1017,7 +1017,7 @@ func TestWatchUsecase_Run_WatcherError_LoggedViaLogger(t *testing.T) {
 	uc := app.NewWatchUsecase(reader, client, player, mover, customWatcher, app.WithWatchLogger(logger))
 	params := app.WatchParams{
 		Paths:     []string{"/tmp/watch"},
-		SpeakerID: 3,
+		SpeakerID: entity.MustNewSpeakerID(3),
 	}
 
 	err := uc.Run(context.Background(), params)
@@ -1099,7 +1099,7 @@ func TestWatchUsecase_Run_MultiplePaths_FanIn(t *testing.T) {
 	uc := app.NewWatchUsecase(reader, client, player, mover, watcher)
 	params := app.WatchParams{
 		Paths:     []string{"/tmp/a", "/tmp/b"},
-		SpeakerID: 3,
+		SpeakerID: entity.MustNewSpeakerID(3),
 	}
 
 	if err := uc.Run(context.Background(), params); err != nil {
@@ -1148,7 +1148,7 @@ func TestWatchUsecase_Run_DuplicatePaths_LogsWarningAndMerges(t *testing.T) {
 	uc := app.NewWatchUsecase(reader, client, player, mover, watcher, app.WithWatchLogger(logger))
 	params := app.WatchParams{
 		Paths:     []string{"/tmp/a", "/tmp/a"},
-		SpeakerID: 3,
+		SpeakerID: entity.MustNewSpeakerID(3),
 	}
 
 	if err := uc.Run(context.Background(), params); err != nil {
@@ -1194,7 +1194,7 @@ func TestWatchUsecase_Run_OneWatcherError_OthersContinue(t *testing.T) {
 	uc := app.NewWatchUsecase(reader, client, player, mover, watcher, app.WithWatchLogger(logger))
 	params := app.WatchParams{
 		Paths:     []string{"/tmp/a", "/tmp/b"},
-		SpeakerID: 3,
+		SpeakerID: entity.MustNewSpeakerID(3),
 	}
 
 	if err := uc.Run(context.Background(), params); err != nil {
@@ -1239,7 +1239,7 @@ func (p *silentModePlayer) PlayText(_ context.Context, meta app.PlayMeta) error 
 }
 
 func TestWatchUsecase_Run_SilentMode_SkipsSynthAndCallsPlayText(t *testing.T) {
-	overrideID := 11
+	overrideID := entity.MustNewSpeakerID(11)
 	reader := &mockScriptReader{
 		scripts: []entity.Script{
 			{Path: "a.txt", Text: "default", IsEmpty: false},
@@ -1259,7 +1259,7 @@ func TestWatchUsecase_Run_SilentMode_SkipsSynthAndCallsPlayText(t *testing.T) {
 	uc := app.NewWatchUsecase(reader, client, player, mover, watcher, app.WithSilent())
 	params := app.WatchParams{
 		Paths:     []string{"/tmp/watch"},
-		SpeakerID: 3,
+		SpeakerID: entity.MustNewSpeakerID(3),
 	}
 
 	if err := uc.Run(context.Background(), params); err != nil {
@@ -1281,10 +1281,10 @@ func TestWatchUsecase_Run_SilentMode_SkipsSynthAndCallsPlayText(t *testing.T) {
 	if player.playTextCalls != 2 {
 		t.Fatalf("expected 2 PlayText calls, got: %d", player.playTextCalls)
 	}
-	if player.playTextMetas[0].SpeakerID != 3 || player.playTextMetas[0].Text != "default" {
+	if player.playTextMetas[0].SpeakerID.Value() != 3 || player.playTextMetas[0].Text != "default" {
 		t.Errorf("unexpected meta[0]: %+v", player.playTextMetas[0])
 	}
-	if player.playTextMetas[1].SpeakerID != 11 || player.playTextMetas[1].Text != "override" {
+	if player.playTextMetas[1].SpeakerID.Value() != 11 || player.playTextMetas[1].Text != "override" {
 		t.Errorf("unexpected meta[1]: %+v", player.playTextMetas[1])
 	}
 	// done/ 移動も従来通り行われる
@@ -1306,7 +1306,7 @@ func TestWatchUsecase_Run_SilentMode_SkipsHealthCheck(t *testing.T) {
 	watcher := &mockDirWatcher{files: []string{"/tmp/watch/a.txt"}}
 
 	uc := app.NewWatchUsecase(reader, client, player, mover, watcher, app.WithSilent())
-	params := app.WatchParams{Paths: []string{"/tmp/watch"}, SpeakerID: 3}
+	params := app.WatchParams{Paths: []string{"/tmp/watch"}, SpeakerID: entity.MustNewSpeakerID(3)}
 
 	if err := uc.Run(context.Background(), params); err != nil {
 		t.Fatalf("expected no error in silent mode even with HealthCheck error, got: %v", err)
@@ -1329,7 +1329,7 @@ func TestWatchUsecase_Run_SilentMode_EmptyScriptsSkipped(t *testing.T) {
 	watcher := &mockDirWatcher{files: []string{"/tmp/watch/a.txt"}}
 
 	uc := app.NewWatchUsecase(reader, client, player, mover, watcher, app.WithSilent())
-	params := app.WatchParams{Paths: []string{"/tmp/watch"}, SpeakerID: 3}
+	params := app.WatchParams{Paths: []string{"/tmp/watch"}, SpeakerID: entity.MustNewSpeakerID(3)}
 
 	if err := uc.Run(context.Background(), params); err != nil {
 		t.Fatalf("expected no error, got: %v", err)
@@ -1397,7 +1397,7 @@ func TestWatchUsecase_Run_BroadcastsFileError_OnReadFailure(t *testing.T) {
 	watcher := &mockDirWatcher{files: []string{"/tmp/watch/a.txt"}}
 
 	uc := app.NewWatchUsecase(reader, client, player, mover, watcher)
-	params := app.WatchParams{Paths: []string{"/tmp/watch"}, SpeakerID: 3}
+	params := app.WatchParams{Paths: []string{"/tmp/watch"}, SpeakerID: entity.MustNewSpeakerID(3)}
 
 	if err := uc.Run(context.Background(), params); err != nil {
 		t.Fatalf("Run: %v", err)
@@ -1426,7 +1426,7 @@ func TestWatchUsecase_Run_BroadcastsFileError_OnMoveFailure(t *testing.T) {
 	watcher := &mockDirWatcher{files: []string{"/tmp/watch/a.txt"}}
 
 	uc := app.NewWatchUsecase(reader, client, player, mover, watcher)
-	params := app.WatchParams{Paths: []string{"/tmp/watch"}, SpeakerID: 3}
+	params := app.WatchParams{Paths: []string{"/tmp/watch"}, SpeakerID: entity.MustNewSpeakerID(3)}
 	if err := uc.Run(context.Background(), params); err != nil {
 		t.Fatalf("Run: %v", err)
 	}
@@ -1454,7 +1454,7 @@ func TestWatchUsecase_Run_BroadcastsFileError_OnDeleteFailure(t *testing.T) {
 	watcher := &mockDirWatcher{files: []string{"/tmp/watch/a.txt"}}
 
 	uc := app.NewWatchUsecase(reader, client, player, mover, watcher, app.WithDeleteMode())
-	params := app.WatchParams{Paths: []string{"/tmp/watch"}, SpeakerID: 3}
+	params := app.WatchParams{Paths: []string{"/tmp/watch"}, SpeakerID: entity.MustNewSpeakerID(3)}
 	if err := uc.Run(context.Background(), params); err != nil {
 		t.Fatalf("Run: %v", err)
 	}
@@ -1479,7 +1479,7 @@ func TestWatchUsecase_Run_BroadcastsSynthesisError_OnCreateQueryFailure(t *testi
 	watcher := &mockDirWatcher{files: []string{"/tmp/watch/a.txt"}}
 
 	uc := app.NewWatchUsecase(reader, client, player, mover, watcher)
-	params := app.WatchParams{Paths: []string{"/tmp/watch"}, SpeakerID: 3}
+	params := app.WatchParams{Paths: []string{"/tmp/watch"}, SpeakerID: entity.MustNewSpeakerID(3)}
 	if err := uc.Run(context.Background(), params); err != nil {
 		t.Fatalf("Run: %v", err)
 	}
@@ -1495,7 +1495,7 @@ func TestWatchUsecase_Run_BroadcastsSynthesisError_OnCreateQueryFailure(t *testi
 	if e.Text != "hi" {
 		t.Errorf("expected text=hi, got %q", e.Text)
 	}
-	if e.SpeakerID != 3 {
+	if e.SpeakerID.Value() != 3 {
 		t.Errorf("expected speakerID=3, got %d", e.SpeakerID)
 	}
 	if !strings.Contains(e.Message, "bad query") {
@@ -1513,7 +1513,7 @@ func TestWatchUsecase_Run_BroadcastsSynthesisError_OnSynthesizeFailure(t *testin
 	watcher := &mockDirWatcher{files: []string{"/tmp/watch/a.txt"}}
 
 	uc := app.NewWatchUsecase(reader, client, player, mover, watcher)
-	params := app.WatchParams{Paths: []string{"/tmp/watch"}, SpeakerID: 3}
+	params := app.WatchParams{Paths: []string{"/tmp/watch"}, SpeakerID: entity.MustNewSpeakerID(3)}
 	if err := uc.Run(context.Background(), params); err != nil {
 		t.Fatalf("Run: %v", err)
 	}
@@ -1538,7 +1538,7 @@ func TestWatchUsecase_Run_BroadcastsSynthesisError_OnPlayFailure(t *testing.T) {
 	watcher := &mockDirWatcher{files: []string{"/tmp/watch/a.txt"}}
 
 	uc := app.NewWatchUsecase(reader, client, player, mover, watcher)
-	params := app.WatchParams{Paths: []string{"/tmp/watch"}, SpeakerID: 3}
+	params := app.WatchParams{Paths: []string{"/tmp/watch"}, SpeakerID: entity.MustNewSpeakerID(3)}
 	if err := uc.Run(context.Background(), params); err != nil {
 		t.Fatalf("Run: %v", err)
 	}
@@ -1563,7 +1563,7 @@ func TestWatchUsecase_Run_BroadcastsSynthesisError_OnSilentPlayTextFailure(t *te
 	watcher := &mockDirWatcher{files: []string{"/tmp/watch/a.txt"}}
 
 	uc := app.NewWatchUsecase(reader, client, player, mover, watcher, app.WithSilent())
-	params := app.WatchParams{Paths: []string{"/tmp/watch"}, SpeakerID: 3}
+	params := app.WatchParams{Paths: []string{"/tmp/watch"}, SpeakerID: entity.MustNewSpeakerID(3)}
 	if err := uc.Run(context.Background(), params); err != nil {
 		t.Fatalf("Run: %v", err)
 	}
@@ -1586,7 +1586,7 @@ func TestWatchUsecase_Run_BroadcastsConnectionError_OnHealthCheckFailure(t *test
 	watcher := &mockDirWatcher{}
 
 	uc := app.NewWatchUsecase(reader, client, player, mover, watcher)
-	params := app.WatchParams{Paths: []string{"/tmp/watch"}, SpeakerID: 3}
+	params := app.WatchParams{Paths: []string{"/tmp/watch"}, SpeakerID: entity.MustNewSpeakerID(3)}
 
 	if err := uc.Run(context.Background(), params); err == nil {
 		t.Fatal("expected error from HealthCheck, got nil")
@@ -1694,7 +1694,7 @@ func TestWatchUsecase_Run_SavesWav_WhenSaveWavDirSet(t *testing.T) {
 	)
 	params := app.WatchParams{
 		Paths:      []string{"/tmp/watch"},
-		SpeakerID:  3,
+		SpeakerID:  entity.MustNewSpeakerID(3),
 		SaveWavDir: "/out",
 	}
 	if err := uc.Run(context.Background(), params); err != nil {
@@ -1730,7 +1730,7 @@ func TestWatchUsecase_Run_DoesNotSaveWav_WhenSaveWavDirEmpty(t *testing.T) {
 	)
 	params := app.WatchParams{
 		Paths:      []string{"/tmp/watch"},
-		SpeakerID:  3,
+		SpeakerID:  entity.MustNewSpeakerID(3),
 		SaveWavDir: "",
 	}
 	if err := uc.Run(context.Background(), params); err != nil {
@@ -1759,7 +1759,7 @@ func TestWatchUsecase_Run_DoesNotSaveWav_WhenDryRun(t *testing.T) {
 	)
 	params := app.WatchParams{
 		Paths:      []string{"/tmp/watch"},
-		SpeakerID:  3,
+		SpeakerID:  entity.MustNewSpeakerID(3),
 		SaveWavDir: "/out",
 		DryRun:     true,
 	}
@@ -1790,7 +1790,7 @@ func TestWatchUsecase_Run_DoesNotSaveWav_WhenSilent(t *testing.T) {
 	)
 	params := app.WatchParams{
 		Paths:      []string{"/tmp/watch"},
-		SpeakerID:  3,
+		SpeakerID:  entity.MustNewSpeakerID(3),
 		SaveWavDir: "/out",
 	}
 	if err := uc.Run(context.Background(), params); err != nil {

@@ -470,10 +470,10 @@ func TestActCmd_WatchDeleteFlag_ReturnsMigrationError(t *testing.T) {
 type mockActClient struct{}
 
 func (c *mockActClient) HealthCheck(_ context.Context) error { return nil }
-func (c *mockActClient) CreateQuery(_ context.Context, _ string, _ int) (*entity.AudioQuery, error) {
+func (c *mockActClient) CreateQuery(_ context.Context, _ string, _ entity.SpeakerID) (*entity.AudioQuery, error) {
 	return &entity.AudioQuery{}, nil
 }
-func (c *mockActClient) Synthesize(_ context.Context, _ *entity.AudioQuery, _ int) ([]byte, error) {
+func (c *mockActClient) Synthesize(_ context.Context, _ *entity.AudioQuery, _ entity.SpeakerID) ([]byte, error) {
 	return []byte("RIFFx"), nil
 }
 func (c *mockActClient) GetSpeakers(_ context.Context) ([]entity.Speaker, error) { return nil, nil }

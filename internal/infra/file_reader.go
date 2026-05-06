@@ -38,11 +38,20 @@ type jsonScript struct {
 // toScript は jsonScript を entity.Script に変換する。
 func (js *jsonScript) toScript(path string) entity.Script {
 	text := *js.Text
+	var speakerID *entity.SpeakerID
+	if js.Speaker != nil {
+		id, err := entity.NewSpeakerID(*js.Speaker)
+		if err != nil {
+			slog.Warn("invalid speaker in script file, using default", "path", path, "speaker", *js.Speaker)
+		} else {
+			speakerID = &id
+		}
+	}
 	return entity.Script{
 		Path:      path,
 		Text:      text,
 		IsEmpty:   len(text) == 0,
-		SpeakerID: js.Speaker,
+		SpeakerID: speakerID,
 		Overrides: entity.SynthOverrides{
 			Speed:      js.SpeedScale,
 			Pitch:      js.PitchScale,

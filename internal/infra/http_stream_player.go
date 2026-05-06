@@ -485,7 +485,7 @@ func (p *HTTPStreamPlayer) SetSilent(reason string) {
 func clipToPlayMeta(clip ViewerClip) app.PlayMeta {
 	return app.PlayMeta{
 		Text:       clip.Text,
-		SpeakerID:  clip.SpeakerID,
+		SpeakerID:  entity.MustNewSpeakerID(clip.SpeakerID),
 		Speed:      clip.Speed,
 		Pitch:      clip.Pitch,
 		Intonation: clip.Intonation,
@@ -494,14 +494,14 @@ func clipToPlayMeta(clip ViewerClip) app.PlayMeta {
 
 // newClipEvent は meta と ts から clipEvent を構築する。url は呼び出し元が指定する。
 func (p *HTTPStreamPlayer) newClipEvent(meta app.PlayMeta, ts int64, url string) clipEvent {
-	speakerName, styleName := p.resolveSpeaker(meta.SpeakerID)
+	speakerName, styleName := p.resolveSpeaker(meta.SpeakerID.Value())
 	return clipEvent{
 		URL:         url,
 		Text:        meta.Text,
 		SpeakerName: speakerName,
 		StyleName:   styleName,
 		Timestamp:   ts,
-		SpeakerID:   meta.SpeakerID,
+		SpeakerID:   meta.SpeakerID.Value(),
 		Speed:       meta.Speed,
 		Pitch:       meta.Pitch,
 		Intonation:  meta.Intonation,
@@ -618,7 +618,7 @@ func (p *HTTPStreamPlayer) BroadcastError(e app.StreamError) {
 	case app.StreamErrorCategorySynthesis:
 		ev.Path = e.Path
 		ev.Text = e.Text
-		ev.SpeakerName, ev.StyleName = p.resolveSpeaker(e.SpeakerID)
+		ev.SpeakerName, ev.StyleName = p.resolveSpeaker(e.SpeakerID.Value())
 	case app.StreamErrorCategoryFile:
 		ev.Path = e.Path
 	case app.StreamErrorCategoryConnection:
@@ -987,6 +987,10 @@ func (p *HTTPStreamPlayer) handleAPIPlay(w http.ResponseWriter, r *http.Request)
 			http.Error(w, fmt.Sprintf("clips[%d].text must not be empty", i), http.StatusBadRequest)
 			return
 		}
+		if _, err := entity.NewSpeakerID(clip.SpeakerID); err != nil {
+			http.Error(w, fmt.Sprintf("clips[%d].speaker_id: %v", i, err), http.StatusBadRequest)
+			return
+		}
 	}
 
 	playbackID, err := newUUIDv4()
@@ -1057,14 +1061,20 @@ func (p *HTTPStreamPlayer) handleAPIPreviewClip(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	query, err := p.voicevoxClient.CreateQuery(r.Context(), req.Text, req.SpeakerID)
+	speakerID, err := entity.NewSpeakerID(req.SpeakerID)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("invalid speaker_id: %v", err), http.StatusBadRequest)
+		return
+	}
+
+	query, err := p.voicevoxClient.CreateQuery(r.Context(), req.Text, speakerID)
 	if err != nil {
 		p.logger.Error("/api/preview-clip CreateQuery failed", "speakerID", req.SpeakerID, "error", err)
 		http.Error(w, "synthesis failed", http.StatusBadGateway)
 		return
 	}
 	q := query.WithOverrides(entity.SynthOverrides{Speed: req.Speed, Pitch: req.Pitch, Intonation: req.Intonation})
-	wav, err := p.voicevoxClient.Synthesize(r.Context(), &q, req.SpeakerID)
+	wav, err := p.voicevoxClient.Synthesize(r.Context(), &q, speakerID)
 	if err != nil {
 		p.logger.Error("/api/preview-clip Synthesize failed", "speakerID", req.SpeakerID, "error", err)
 		http.Error(w, "synthesis failed", http.StatusBadGateway)
@@ -1206,13 +1216,14 @@ func (p *HTTPStreamPlayer) processBatch(ctx context.Context, batch playBatch) {
 			nextClip := batch.clips[i+1]
 			nextSynthCh = make(chan synthResult, 1)
 			go func() {
-				q2, err := p.voicevoxClient.CreateQuery(ctx, nextClip.Text, nextClip.SpeakerID)
+				nextSpeakerID := entity.MustNewSpeakerID(nextClip.SpeakerID)
+				q2, err := p.voicevoxClient.CreateQuery(ctx, nextClip.Text, nextSpeakerID)
 				if err != nil {
 					nextSynthCh <- synthResult{err: err}
 					return
 				}
 				q2o := q2.WithOverrides(entity.SynthOverrides{Speed: nextClip.Speed, Pitch: nextClip.Pitch, Intonation: nextClip.Intonation})
-				w, err := p.voicevoxClient.Synthesize(ctx, &q2o, nextClip.SpeakerID)
+				w, err := p.voicevoxClient.Synthesize(ctx, &q2o, nextSpeakerID)
 				nextSynthCh <- synthResult{wav: w, err: err}
 			}()
 		}
@@ -1246,7 +1257,8 @@ func (p *HTTPStreamPlayer) processBatch(ctx context.Context, batch playBatch) {
 // synthesizeAndPlay は clip を合成して Play() でブロードキャストする。
 // エラー時は playback を failed に遷移させて error を返す。
 func (p *HTTPStreamPlayer) synthesizeAndPlay(ctx context.Context, playbackID string, clip ViewerClip) ([]byte, error) {
-	query, err := p.voicevoxClient.CreateQuery(ctx, clip.Text, clip.SpeakerID)
+	clipSpeakerID := entity.MustNewSpeakerID(clip.SpeakerID)
+	query, err := p.voicevoxClient.CreateQuery(ctx, clip.Text, clipSpeakerID)
 	if err != nil {
 		p.logger.Error("worker CreateQuery failed", "playbackID", playbackID, "speakerID", clip.SpeakerID, "error", err)
 		p.setPlaybackStatus(playbackID, playbackStatusFailed, err.Error())
@@ -1254,7 +1266,7 @@ func (p *HTTPStreamPlayer) synthesizeAndPlay(ctx context.Context, playbackID str
 	}
 
 	q := query.WithOverrides(entity.SynthOverrides{Speed: clip.Speed, Pitch: clip.Pitch, Intonation: clip.Intonation})
-	wav, err := p.voicevoxClient.Synthesize(ctx, &q, clip.SpeakerID)
+	wav, err := p.voicevoxClient.Synthesize(ctx, &q, clipSpeakerID)
 	if err != nil {
 		p.logger.Error("worker Synthesize failed", "playbackID", playbackID, "speakerID", clip.SpeakerID, "error", err)
 		p.setPlaybackStatus(playbackID, playbackStatusFailed, err.Error())

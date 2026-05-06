@@ -9,13 +9,13 @@ type Script struct {
 	// IsEmpty はファイルが空であるかを示す。
 	IsEmpty bool
 	// SpeakerID はセリフ単位のキャラクターID（nilの場合はデフォルト値を使用）。
-	SpeakerID *int
+	SpeakerID *SpeakerID
 	// Overrides はセリフ単位の合成パラメータ（nilフィールドの場合はデフォルト値を使用）。
 	Overrides SynthOverrides
 }
 
 // ResolveSpeakerID はセリフ単位のSpeakerIDがあればそれを、なければデフォルト値を返す。
-func (s Script) ResolveSpeakerID(defaultID int) int {
+func (s Script) ResolveSpeakerID(defaultID SpeakerID) SpeakerID {
 	if s.SpeakerID != nil {
 		return *s.SpeakerID
 	}

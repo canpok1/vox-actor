@@ -41,10 +41,10 @@ type pipelineMockClient struct {
 
 func (m *pipelineMockClient) HealthCheck(_ context.Context) error { return nil }
 
-func (m *pipelineMockClient) CreateQuery(_ context.Context, text string, speakerID int) (*entity.AudioQuery, error) {
+func (m *pipelineMockClient) CreateQuery(_ context.Context, text string, speakerID entity.SpeakerID) (*entity.AudioQuery, error) {
 	m.mu.Lock()
 	callIndex := len(m.createQueryCalls)
-	m.createQueryCalls = append(m.createQueryCalls, pipelineCreateQueryArgs{text: text, speakerID: speakerID})
+	m.createQueryCalls = append(m.createQueryCalls, pipelineCreateQueryArgs{text: text, speakerID: speakerID.Value()})
 	err := m.createQueryErrs[callIndex]
 	m.mu.Unlock()
 
@@ -54,10 +54,10 @@ func (m *pipelineMockClient) CreateQuery(_ context.Context, text string, speaker
 	return &entity.AudioQuery{}, nil
 }
 
-func (m *pipelineMockClient) Synthesize(_ context.Context, query *entity.AudioQuery, speakerID int) ([]byte, error) {
+func (m *pipelineMockClient) Synthesize(_ context.Context, query *entity.AudioQuery, speakerID entity.SpeakerID) ([]byte, error) {
 	m.mu.Lock()
 	callIndex := len(m.synthesizeCalls)
-	m.synthesizeCalls = append(m.synthesizeCalls, pipelineSynthesizeArgs{query: query, speakerID: speakerID})
+	m.synthesizeCalls = append(m.synthesizeCalls, pipelineSynthesizeArgs{query: query, speakerID: speakerID.Value()})
 	delay := m.synthesizeDelay
 	err := m.synthesizeErrs[callIndex]
 	m.mu.Unlock()
@@ -82,7 +82,7 @@ func TestStartSynthPipeline_ForwardsScriptsInOrder(t *testing.T) {
 		{Path: "b.txt", Text: "B", IsEmpty: false},
 		{Path: "c.txt", Text: "C", IsEmpty: false},
 	}
-	cfg := synthPipelineConfig{defaultSpeakerID: 3, synthesisLogLevel: slog.LevelInfo}
+	cfg := synthPipelineConfig{defaultSpeakerID: entity.MustNewSpeakerID(3), synthesisLogLevel: slog.LevelInfo}
 
 	ch := startSynthPipeline(context.Background(), client, discardLogger(), scripts, cfg)
 
@@ -117,7 +117,7 @@ func TestStartSynthPipeline_SkipsEmptyScripts_IndexCountsNonEmptyOnly(t *testing
 		{Path: "empty.txt", Text: "", IsEmpty: true},
 		{Path: "b.txt", Text: "B", IsEmpty: false},
 	}
-	cfg := synthPipelineConfig{defaultSpeakerID: 3, synthesisLogLevel: slog.LevelInfo}
+	cfg := synthPipelineConfig{defaultSpeakerID: entity.MustNewSpeakerID(3), synthesisLogLevel: slog.LevelInfo}
 
 	ch := startSynthPipeline(context.Background(), client, discardLogger(), scripts, cfg)
 
@@ -149,7 +149,7 @@ func TestStartSynthPipeline_PropagatesCreateQueryError(t *testing.T) {
 		{Path: "a.txt", Text: "A", IsEmpty: false},
 		{Path: "b.txt", Text: "B", IsEmpty: false},
 	}
-	cfg := synthPipelineConfig{defaultSpeakerID: 3, synthesisLogLevel: slog.LevelInfo}
+	cfg := synthPipelineConfig{defaultSpeakerID: entity.MustNewSpeakerID(3), synthesisLogLevel: slog.LevelInfo}
 
 	ch := startSynthPipeline(context.Background(), client, discardLogger(), scripts, cfg)
 
@@ -180,7 +180,7 @@ func TestStartSynthPipeline_PropagatesSynthesizeError(t *testing.T) {
 	scripts := []entity.Script{
 		{Path: "a.txt", Text: "A", IsEmpty: false},
 	}
-	cfg := synthPipelineConfig{defaultSpeakerID: 3, synthesisLogLevel: slog.LevelInfo}
+	cfg := synthPipelineConfig{defaultSpeakerID: entity.MustNewSpeakerID(3), synthesisLogLevel: slog.LevelInfo}
 
 	ch := startSynthPipeline(context.Background(), client, discardLogger(), scripts, cfg)
 
@@ -208,7 +208,7 @@ func TestStartSynthPipeline_ContextCancel_ExitsProducerWithoutLeak(t *testing.T)
 		{Path: "b.txt", Text: "B", IsEmpty: false},
 		{Path: "c.txt", Text: "C", IsEmpty: false},
 	}
-	cfg := synthPipelineConfig{defaultSpeakerID: 3, synthesisLogLevel: slog.LevelInfo}
+	cfg := synthPipelineConfig{defaultSpeakerID: entity.MustNewSpeakerID(3), synthesisLogLevel: slog.LevelInfo}
 
 	goroutinesBefore := runtime.NumGoroutine()
 
@@ -249,7 +249,7 @@ func TestStartSynthPipeline_ContextAlreadyCancelled_ClosesChannelImmediately(t *
 	scripts := []entity.Script{
 		{Path: "a.txt", Text: "A", IsEmpty: false},
 	}
-	cfg := synthPipelineConfig{defaultSpeakerID: 3, synthesisLogLevel: slog.LevelInfo}
+	cfg := synthPipelineConfig{defaultSpeakerID: entity.MustNewSpeakerID(3), synthesisLogLevel: slog.LevelInfo}
 
 	ch := startSynthPipeline(ctx, client, discardLogger(), scripts, cfg)
 
@@ -275,7 +275,7 @@ func TestStartSynthPipeline_LogsSynthesisCompletedAtConfiguredLevel(t *testing.T
 	scripts := []entity.Script{
 		{Path: "a.txt", Text: "A", IsEmpty: false},
 	}
-	cfg := synthPipelineConfig{defaultSpeakerID: 3, synthesisLogLevel: slog.LevelInfo}
+	cfg := synthPipelineConfig{defaultSpeakerID: entity.MustNewSpeakerID(3), synthesisLogLevel: slog.LevelInfo}
 
 	ch := startSynthPipeline(context.Background(), client, logger, scripts, cfg)
 	drainPipeline(ch)
@@ -295,7 +295,7 @@ func TestStartSynthPipeline_MultipleInvocations_NoGoroutineLeak(t *testing.T) {
 	goroutinesBefore := runtime.NumGoroutine()
 
 	client := &pipelineMockClient{}
-	cfg := synthPipelineConfig{defaultSpeakerID: 3, synthesisLogLevel: slog.LevelDebug}
+	cfg := synthPipelineConfig{defaultSpeakerID: entity.MustNewSpeakerID(3), synthesisLogLevel: slog.LevelDebug}
 
 	for range 20 {
 		scripts := []entity.Script{

@@ -9,6 +9,7 @@ import (
 	"syscall"
 
 	"github.com/canpok1/vox-actor/internal/app"
+	"github.com/canpok1/vox-actor/internal/domain/entity"
 	"github.com/canpok1/vox-actor/internal/infra"
 	"github.com/spf13/cobra"
 )
@@ -84,14 +85,19 @@ func runSay(cmd *cobra.Command, args []string, deps *SayDeps) error {
 
 	engineURL, _ := cmd.Flags().GetString("engine-url")
 	viewerURL, _ := cmd.Flags().GetString("viewer-url")
-	speakerID, _ := cmd.Flags().GetInt("speaker")
+	speakerIDInt, _ := cmd.Flags().GetInt("speaker")
 	speed, _ := cmd.Flags().GetFloat64("speed")
 	pitch, _ := cmd.Flags().GetFloat64("pitch")
 	intonation, _ := cmd.Flags().GetFloat64("intonation")
 
+	speakerID, err := entity.NewSpeakerID(speakerIDInt)
+	if err != nil {
+		return fmt.Errorf("%w: --speaker: %v", ErrUsage, err)
+	}
+
 	clip := infra.ViewerClip{
 		Text:       args[0],
-		SpeakerID:  speakerID,
+		SpeakerID:  speakerIDInt,
 		Speed:      &speed,
 		Pitch:      &pitch,
 		Intonation: &intonation,

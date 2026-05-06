@@ -324,7 +324,6 @@ func TestSayE2E_BoundaryValues_DryRun_ExitsZero(t *testing.T) {
 		name string
 		args []string
 	}{
-		{"speaker negative", []string{"say", "--dry-run", "--speaker", "-1", "テスト"}},
 		{"speed large", []string{"say", "--dry-run", "--speed", "999.0", "テスト"}},
 		{"pitch large", []string{"say", "--dry-run", "--pitch", "1.0", "テスト"}},
 		{"intonation large", []string{"say", "--dry-run", "--intonation", "999.0", "テスト"}},
@@ -337,6 +336,14 @@ func TestSayE2E_BoundaryValues_DryRun_ExitsZero(t *testing.T) {
 				t.Errorf("expected exit 0 for boundary value %q, got %d\nstderr:\n%s", tc.name, exitCode, stderr)
 			}
 		})
+	}
+}
+
+func TestSayE2E_NegativeSpeaker_ExitsNonZero(t *testing.T) {
+	t.Parallel()
+	_, stderr, exitCode := runCLI(t, nil, "say", "--dry-run", "--speaker", "-1", "テスト")
+	if exitCode == 0 {
+		t.Errorf("expected non-zero exit for --speaker -1, got 0\nstderr:\n%s", stderr)
 	}
 }
 

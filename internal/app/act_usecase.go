@@ -12,7 +12,7 @@ import (
 // ActParams はactユースケースのパラメータ。
 type ActParams struct {
 	Path       string
-	SpeakerID  int
+	SpeakerID  entity.SpeakerID
 	Speed      *float64
 	Pitch      *float64
 	Intonation *float64

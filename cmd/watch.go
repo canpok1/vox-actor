@@ -9,6 +9,7 @@ import (
 	"syscall"
 
 	"github.com/canpok1/vox-actor/internal/app"
+	"github.com/canpok1/vox-actor/internal/domain/entity"
 	"github.com/canpok1/vox-actor/internal/infra"
 	"github.com/spf13/cobra"
 )
@@ -94,7 +95,7 @@ func (p *viewerWatchPlayer) playViaViewer(ctx context.Context, meta app.PlayMeta
 	_, err := p.vc.Play(ctx, infra.ViewerPlayRequest{
 		Clips: []infra.ViewerClip{{
 			Text:       meta.Text,
-			SpeakerID:  meta.SpeakerID,
+			SpeakerID:  meta.SpeakerID.Value(),
 			Speed:      p.speed,
 			Pitch:      p.pitch,
 			Intonation: p.intonation,
@@ -165,12 +166,17 @@ func runWatch(cmd *cobra.Command, args []string, deps *WatchDeps) error {
 
 	deleteMode, _ := cmd.Flags().GetBool("delete")
 	engineURL, _ := cmd.Flags().GetString("engine-url")
-	speakerID, _ := cmd.Flags().GetInt("speaker")
+	speakerIDInt, _ := cmd.Flags().GetInt("speaker")
 	speed, _ := cmd.Flags().GetFloat64("speed")
 	pitch, _ := cmd.Flags().GetFloat64("pitch")
 	intonation, _ := cmd.Flags().GetFloat64("intonation")
 	dryRun, _ := cmd.Flags().GetBool("dry-run")
 	saveWavDir, _ := cmd.Flags().GetString("save-wav-dir")
+
+	speakerID, err := entity.NewSpeakerID(speakerIDInt)
+	if err != nil {
+		return fmt.Errorf("%w: --speaker: %v", ErrUsage, err)
+	}
 
 	if deps == nil || deps.ClientFactory == nil || deps.Reader == nil || deps.Player == nil || deps.Mover == nil || deps.DirWatcherFactory == nil {
 		return fmt.Errorf("watch command dependencies are not initialized")

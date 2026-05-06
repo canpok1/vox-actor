@@ -66,7 +66,7 @@ func actViaViewer(
 	cmd *cobra.Command,
 	vc *infra.ViewerAPIClient,
 	scripts []entity.Script,
-	speakerID int, speed, pitch, intonation float64,
+	speakerID entity.SpeakerID, speed, pitch, intonation float64,
 	logger *slog.Logger,
 ) error {
 	defaults := entity.SynthOverrides{Speed: &speed, Pitch: &pitch, Intonation: &intonation}
@@ -78,7 +78,7 @@ func actViaViewer(
 		resolved := script.ResolveOverrides(defaults)
 		clips = append(clips, infra.ViewerClip{
 			Text:       script.Text,
-			SpeakerID:  script.ResolveSpeakerID(speakerID),
+			SpeakerID:  script.ResolveSpeakerID(speakerID).Value(),
 			Speed:      resolved.Speed,
 			Pitch:      resolved.Pitch,
 			Intonation: resolved.Intonation,
@@ -118,11 +118,16 @@ func runAct(cmd *cobra.Command, args []string, deps *ActDeps) error {
 	defer stop()
 
 	engineURL, _ := cmd.Flags().GetString("engine-url")
-	speakerID, _ := cmd.Flags().GetInt("speaker")
+	speakerIDInt, _ := cmd.Flags().GetInt("speaker")
 	speed, _ := cmd.Flags().GetFloat64("speed")
 	pitch, _ := cmd.Flags().GetFloat64("pitch")
 	intonation, _ := cmd.Flags().GetFloat64("intonation")
 	dryRun, _ := cmd.Flags().GetBool("dry-run")
+
+	speakerID, err := entity.NewSpeakerID(speakerIDInt)
+	if err != nil {
+		return fmt.Errorf("%w: --speaker: %v", ErrUsage, err)
+	}
 
 	var logger *slog.Logger
 	if deps.Logger != nil {

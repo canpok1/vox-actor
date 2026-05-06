@@ -35,7 +35,7 @@ func GenerateWavFilename(text string, nowMs int64) string {
 // WatchParams はWatchUsecaseのパラメータ。
 type WatchParams struct {
 	Paths      []string
-	SpeakerID  int
+	SpeakerID  entity.SpeakerID
 	Speed      *float64
 	Pitch      *float64
 	Intonation *float64
@@ -102,7 +102,7 @@ func (u *WatchUsecase) broadcastError(e StreamError) {
 }
 
 // broadcastSynthesisError は synthesis カテゴリのエラーを対象スクリプト情報付きで配信する。
-func (u *WatchUsecase) broadcastSynthesisError(script entity.Script, speakerID int, err error) {
+func (u *WatchUsecase) broadcastSynthesisError(script entity.Script, speakerID entity.SpeakerID, err error) {
 	u.broadcastError(StreamError{
 		Category:  StreamErrorCategorySynthesis,
 		Message:   err.Error(),
