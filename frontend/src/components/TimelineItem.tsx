@@ -8,6 +8,7 @@ interface TimelineItemProps {
   showStyleName: boolean;
   showTimestamp: boolean;
   highlightPlaying?: boolean;
+  anyPlaying?: boolean;
   onReplay?: () => void;
 }
 
@@ -29,6 +30,7 @@ export function TimelineItem({
   showStyleName,
   showTimestamp,
   highlightPlaying = true,
+  anyPlaying = false,
   onReplay,
 }: TimelineItemProps) {
   const ref = useRef<HTMLLIElement>(null);
@@ -121,7 +123,7 @@ export function TimelineItem({
           {playing && highlightPlaying ? "▶" : ""}
         </span>
         <span>{entry.text}</span>
-        {onReplay && (
+        {onReplay && !anyPlaying && (
           <button
             type="button"
             onClick={onReplay}

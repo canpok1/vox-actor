@@ -77,6 +77,7 @@ export function Timeline({
             showStyleName={isCharacterMode ? false : showStyleName}
             showTimestamp={isCharacterMode ? false : showTimestamp}
             highlightPlaying={!isCharacterMode}
+            anyPlaying={playingClipTimestamp !== null}
             onReplay={
               onReplay && entry.kind === "clip"
                 ? () => onReplay(entry)

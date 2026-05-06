@@ -91,12 +91,29 @@ Feature: TimelineItem の個別 UI 要素
 
   # ── TimelineItem: 再生ボタン ────────────────────────────────────
 
-  Scenario: clip アイテムに「再生」ボタンが表示される
+  Scenario: アイドル時は clip アイテムに「再生」ボタンが表示される
     Given viewer フロントエンドが起動している
     When ページを開く
     And clip イベントを受信する
     Then タイムラインアイテムに「再生」ボタンが表示される
     # test: frontend/test/e2e/timeline-item.spec.ts::"clip アイテムに「再生」ボタンが表示される"
+
+  Scenario: 再生中はすべての clip アイテムの「再生」ボタンが非表示になる
+    Given viewer フロントエンドが起動している
+    When ページを開く
+    And clip イベントを受信する
+    And クリップが再生中である
+    Then タイムラインアイテムに「再生」ボタンが表示されない
+    # test: frontend/src/components/TimelineItem.test.tsx::"anyPlaying=true のとき onReplay が渡されていても「再生」ボタンが表示されない"
+
+  Scenario: 再生が終わるとすべての clip アイテムの「再生」ボタンが再び表示される
+    Given viewer フロントエンドが起動している
+    When ページを開く
+    And clip イベントを受信する
+    And クリップが再生中である
+    And 再生が終わりアイドル状態に戻る
+    Then タイムラインアイテムに「再生」ボタンが表示される
+    # test: frontend/src/components/TimelineItem.test.tsx::"anyPlaying=false のとき onReplay が渡されていれば「再生」ボタンが表示される"
 
   Scenario: 「再生」ボタン押下で POST /api/preview-clip に正しい clip パラメータが送信される
     Given viewer フロントエンドが起動している

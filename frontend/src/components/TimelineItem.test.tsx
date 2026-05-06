@@ -233,4 +233,22 @@ describe("TimelineItem - replay button", () => {
     render(<TimelineItem {...defaultProps} entry={errorEntry} onReplay={onReplay} />);
     expect(screen.queryByRole("button", { name: "再生" })).not.toBeInTheDocument();
   });
+
+  it("anyPlaying=true のとき onReplay が渡されていても「再生」ボタンが表示されない", () => {
+    const onReplay = vi.fn();
+    render(<TimelineItem {...defaultProps} onReplay={onReplay} anyPlaying={true} />);
+    expect(screen.queryByRole("button", { name: "再生" })).not.toBeInTheDocument();
+  });
+
+  it("anyPlaying=false のとき onReplay が渡されていれば「再生」ボタンが表示される", () => {
+    const onReplay = vi.fn();
+    render(<TimelineItem {...defaultProps} onReplay={onReplay} anyPlaying={false} />);
+    expect(screen.getByRole("button", { name: "再生" })).toBeInTheDocument();
+  });
+
+  it("anyPlaying=true のとき playing=true のハイライト（▶ と背景色）には影響しない", () => {
+    render(<TimelineItem {...defaultProps} playing={true} anyPlaying={true} />);
+    expect(screen.getByText("▶")).toBeInTheDocument();
+    expect(screen.getByRole("listitem")).toHaveClass("bg-ctp-overlay");
+  });
 });
