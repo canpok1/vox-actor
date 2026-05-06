@@ -123,13 +123,13 @@ func (w *FileWriter) warnUnsavedParams(path string, script entity.Script) {
 	if script.SpeakerID != nil {
 		dropped = append(dropped, "speaker")
 	}
-	if script.SpeedScale != nil {
+	if script.Overrides.Speed != nil {
 		dropped = append(dropped, "speed")
 	}
-	if script.PitchScale != nil {
+	if script.Overrides.Pitch != nil {
 		dropped = append(dropped, "pitch")
 	}
-	if script.IntonationScale != nil {
+	if script.Overrides.Intonation != nil {
 		dropped = append(dropped, "intonation")
 	}
 	if len(dropped) == 0 {
@@ -155,9 +155,9 @@ func toJSONScript(script entity.Script) jsonScriptOut {
 	return jsonScriptOut{
 		Text:            script.Text,
 		Speaker:         script.SpeakerID,
-		SpeedScale:      script.SpeedScale,
-		PitchScale:      script.PitchScale,
-		IntonationScale: script.IntonationScale,
+		SpeedScale:      script.Overrides.Speed,
+		PitchScale:      script.Overrides.Pitch,
+		IntonationScale: script.Overrides.Intonation,
 	}
 }
 

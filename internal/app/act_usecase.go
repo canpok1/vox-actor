@@ -92,10 +92,12 @@ func (u *ActUsecase) Run(ctx context.Context, params ActParams) error {
 	}
 
 	cfg := synthPipelineConfig{
-		defaultSpeakerID:  params.SpeakerID,
-		defaultSpeed:      params.Speed,
-		defaultPitch:      params.Pitch,
-		defaultIntonation: params.Intonation,
+		defaultSpeakerID: params.SpeakerID,
+		defaultOverrides: entity.SynthOverrides{
+			Speed:      params.Speed,
+			Pitch:      params.Pitch,
+			Intonation: params.Intonation,
+		},
 		synthesisLogLevel: slog.LevelInfo,
 	}
 	ch := startSynthPipeline(ctx, u.client, u.logger, scripts, cfg)
@@ -146,12 +148,14 @@ func (u *ActUsecase) runDryRun(ctx context.Context, scripts []entity.Script, tot
 		u.logger.Info(fmt.Sprintf("[%d/%d] processing script", current, total), "path", script.Path)
 
 		speakerID := script.ResolveSpeakerID(params.SpeakerID)
-		speed := script.ResolveSpeed(params.Speed)
-		pitch := script.ResolvePitch(params.Pitch)
-		intonation := script.ResolveIntonation(params.Intonation)
+		overrides := script.ResolveOverrides(entity.SynthOverrides{
+			Speed:      params.Speed,
+			Pitch:      params.Pitch,
+			Intonation: params.Intonation,
+		})
 
 		u.logger.Info("synthesis completed", "path", script.Path, "wavSize", 0)
-		attrs := append([]any{"path", script.Path}, dryRunPlaybackAttrs(script.Text, speakerID, speed, pitch, intonation)...)
+		attrs := append([]any{"path", script.Path}, dryRunPlaybackAttrs(script.Text, speakerID, overrides.Speed, overrides.Pitch, overrides.Intonation)...)
 		u.logger.Info("playback completed", attrs...)
 	}
 	u.logger.Info("all scripts processed")

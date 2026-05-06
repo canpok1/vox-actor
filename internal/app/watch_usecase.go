@@ -310,10 +310,12 @@ func (u *WatchUsecase) processFile(ctx context.Context, path string, params Watc
 	}
 
 	cfg := synthPipelineConfig{
-		defaultSpeakerID:  params.SpeakerID,
-		defaultSpeed:      params.Speed,
-		defaultPitch:      params.Pitch,
-		defaultIntonation: params.Intonation,
+		defaultSpeakerID: params.SpeakerID,
+		defaultOverrides: entity.SynthOverrides{
+			Speed:      params.Speed,
+			Pitch:      params.Pitch,
+			Intonation: params.Intonation,
+		},
 		synthesisLogLevel: slog.LevelDebug,
 	}
 	ch := startSynthPipeline(ctx, u.client, u.logger, scripts, cfg)
@@ -401,11 +403,13 @@ func (u *WatchUsecase) processScriptsDryRun(ctx context.Context, scripts []entit
 		current++
 
 		speakerID := script.ResolveSpeakerID(params.SpeakerID)
-		speed := script.ResolveSpeed(params.Speed)
-		pitch := script.ResolvePitch(params.Pitch)
-		intonation := script.ResolveIntonation(params.Intonation)
+		overrides := script.ResolveOverrides(entity.SynthOverrides{
+			Speed:      params.Speed,
+			Pitch:      params.Pitch,
+			Intonation: params.Intonation,
+		})
 
-		attrs := dryRunPlaybackAttrs(script.Text, speakerID, speed, pitch, intonation)
+		attrs := dryRunPlaybackAttrs(script.Text, speakerID, overrides.Speed, overrides.Pitch, overrides.Intonation)
 		u.logger.Info(fmt.Sprintf("[%d/%d] playback completed", current, total), attrs...)
 	}
 }

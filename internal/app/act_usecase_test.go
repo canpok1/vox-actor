@@ -885,12 +885,10 @@ func TestActUsecase_Run_ScriptEmotionParams(t *testing.T) {
 	reader := &mockScriptReader{
 		scripts: []entity.Script{
 			{
-				Path:            "script.json",
-				Text:            "感情込めて",
-				IsEmpty:         false,
-				SpeedScale:      &speed,
-				PitchScale:      &pitch,
-				IntonationScale: &intonation,
+				Path:      "script.json",
+				Text:      "感情込めて",
+				IsEmpty:   false,
+				Overrides: entity.SynthOverrides{Speed: &speed, Pitch: &pitch, Intonation: &intonation},
 			},
 		},
 	}
@@ -934,10 +932,10 @@ func TestActUsecase_Run_ScriptParamsOverrideGlobal(t *testing.T) {
 	reader := &mockScriptReader{
 		scripts: []entity.Script{
 			{
-				Path:       "script.json",
-				Text:       "ゆっくり",
-				IsEmpty:    false,
-				SpeedScale: &scriptSpeed,
+				Path:      "script.json",
+				Text:      "ゆっくり",
+				IsEmpty:   false,
+				Overrides: entity.SynthOverrides{Speed: &scriptSpeed},
 			},
 		},
 	}
@@ -1010,9 +1008,9 @@ func TestActUsecase_Run_MultipleScriptsWithDifferentParams(t *testing.T) {
 	speed2 := 1.5
 	reader := &mockScriptReader{
 		scripts: []entity.Script{
-			{Path: "a.json", Text: "ゆっくり", IsEmpty: false, SpeakerID: &speaker5, SpeedScale: &speed1},
+			{Path: "a.json", Text: "ゆっくり", IsEmpty: false, SpeakerID: &speaker5, Overrides: entity.SynthOverrides{Speed: &speed1}},
 			{Path: "b.txt", Text: "普通", IsEmpty: false},
-			{Path: "c.json", Text: "はやく", IsEmpty: false, SpeedScale: &speed2},
+			{Path: "c.json", Text: "はやく", IsEmpty: false, Overrides: entity.SynthOverrides{Speed: &speed2}},
 		},
 	}
 	client := &mockVoicevoxClient{

@@ -1063,7 +1063,7 @@ func (p *HTTPStreamPlayer) handleAPIPreviewClip(w http.ResponseWriter, r *http.R
 		http.Error(w, "synthesis failed", http.StatusBadGateway)
 		return
 	}
-	q := query.WithOverrides(req.Speed, req.Pitch, req.Intonation)
+	q := query.WithOverrides(entity.SynthOverrides{Speed: req.Speed, Pitch: req.Pitch, Intonation: req.Intonation})
 	wav, err := p.voicevoxClient.Synthesize(r.Context(), &q, req.SpeakerID)
 	if err != nil {
 		p.logger.Error("/api/preview-clip Synthesize failed", "speakerID", req.SpeakerID, "error", err)
@@ -1211,7 +1211,7 @@ func (p *HTTPStreamPlayer) processBatch(ctx context.Context, batch playBatch) {
 					nextSynthCh <- synthResult{err: err}
 					return
 				}
-				q2o := q2.WithOverrides(nextClip.Speed, nextClip.Pitch, nextClip.Intonation)
+				q2o := q2.WithOverrides(entity.SynthOverrides{Speed: nextClip.Speed, Pitch: nextClip.Pitch, Intonation: nextClip.Intonation})
 				w, err := p.voicevoxClient.Synthesize(ctx, &q2o, nextClip.SpeakerID)
 				nextSynthCh <- synthResult{wav: w, err: err}
 			}()
@@ -1253,7 +1253,7 @@ func (p *HTTPStreamPlayer) synthesizeAndPlay(ctx context.Context, playbackID str
 		return nil, err
 	}
 
-	q := query.WithOverrides(clip.Speed, clip.Pitch, clip.Intonation)
+	q := query.WithOverrides(entity.SynthOverrides{Speed: clip.Speed, Pitch: clip.Pitch, Intonation: clip.Intonation})
 	wav, err := p.voicevoxClient.Synthesize(ctx, &q, clip.SpeakerID)
 	if err != nil {
 		p.logger.Error("worker Synthesize failed", "playbackID", playbackID, "speakerID", clip.SpeakerID, "error", err)

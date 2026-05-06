@@ -80,11 +80,9 @@ func TestFileWriter_Write_JSON_AllParams(t *testing.T) {
 
 	w := infra.NewFileWriter()
 	script := entity.Script{
-		Text:            "感情込めて",
-		SpeakerID:       ptrInt(5),
-		SpeedScale:      ptrFloat64(1.5),
-		PitchScale:      ptrFloat64(0.1),
-		IntonationScale: ptrFloat64(1.8),
+		Text:      "感情込めて",
+		SpeakerID: ptrInt(5),
+		Overrides: entity.SynthOverrides{Speed: ptrFloat64(1.5), Pitch: ptrFloat64(0.1), Intonation: ptrFloat64(1.8)},
 	}
 	if _, err := w.Write(dest, script); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -410,9 +408,9 @@ func TestFileWriter_Write_DirectoryTarget_CreatesAutoNamedFile(t *testing.T) {
 
 	w := infra.NewFileWriter()
 	written, err := w.Write(outDir, entity.Script{
-		Text:       "ディレクトリ指定",
-		SpeakerID:  ptrInt(2),
-		SpeedScale: ptrFloat64(1.1),
+		Text:      "ディレクトリ指定",
+		SpeakerID: ptrInt(2),
+		Overrides: entity.SynthOverrides{Speed: ptrFloat64(1.1)},
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -523,8 +521,8 @@ func TestFileWriter_WriteAll_MultipleScripts(t *testing.T) {
 
 	w := infra.NewFileWriter()
 	scripts := []entity.Script{
-		{Text: "おはようなのだ", SpeakerID: ptrInt(3), IntonationScale: ptrFloat64(1.1)},
-		{Text: "今日もがんばるのだ", SpeakerID: ptrInt(3), SpeedScale: ptrFloat64(1.0)},
+		{Text: "おはようなのだ", SpeakerID: ptrInt(3), Overrides: entity.SynthOverrides{Intonation: ptrFloat64(1.1)}},
+		{Text: "今日もがんばるのだ", SpeakerID: ptrInt(3), Overrides: entity.SynthOverrides{Speed: ptrFloat64(1.0)}},
 	}
 	written, err := w.WriteAll(dest, scripts)
 	if err != nil {

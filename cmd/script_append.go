@@ -50,15 +50,15 @@ func runScriptAppend(cmd *cobra.Command, args []string, deps *ScriptAppendDeps) 
 	}
 	if cmd.Flags().Changed("speed") {
 		v, _ := cmd.Flags().GetFloat64("speed")
-		script.SpeedScale = &v
+		script.Overrides.Speed = &v
 	}
 	if cmd.Flags().Changed("pitch") {
 		v, _ := cmd.Flags().GetFloat64("pitch")
-		script.PitchScale = &v
+		script.Overrides.Pitch = &v
 	}
 	if cmd.Flags().Changed("intonation") {
 		v, _ := cmd.Flags().GetFloat64("intonation")
-		script.IntonationScale = &v
+		script.Overrides.Intonation = &v
 	}
 
 	logger := buildLoggerFromFlags(cmd)

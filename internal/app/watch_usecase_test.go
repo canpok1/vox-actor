@@ -358,11 +358,11 @@ func TestWatchUsecase_Run_ScriptParamsOverrideGlobal(t *testing.T) {
 	reader := &mockScriptReader{
 		scripts: []entity.Script{
 			{
-				Path:       "script.json",
-				Text:       "ゆっくり",
-				IsEmpty:    false,
-				SpeakerID:  &scriptSpeaker,
-				SpeedScale: &scriptSpeed,
+				Path:      "script.json",
+				Text:      "ゆっくり",
+				IsEmpty:   false,
+				SpeakerID: &scriptSpeaker,
+				Overrides: entity.SynthOverrides{Speed: &scriptSpeed},
 			},
 		},
 	}

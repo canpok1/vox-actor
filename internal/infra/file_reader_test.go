@@ -311,14 +311,14 @@ func TestFileReader_Read_JSONFile_TextOnly(t *testing.T) {
 	if s.SpeakerID != nil {
 		t.Errorf("expected SpeakerID nil, got %v", *s.SpeakerID)
 	}
-	if s.SpeedScale != nil {
-		t.Errorf("expected SpeedScale nil, got %v", *s.SpeedScale)
+	if s.Overrides.Speed != nil {
+		t.Errorf("expected Overrides.Speed nil, got %v", *s.Overrides.Speed)
 	}
-	if s.PitchScale != nil {
-		t.Errorf("expected PitchScale nil, got %v", *s.PitchScale)
+	if s.Overrides.Pitch != nil {
+		t.Errorf("expected Overrides.Pitch nil, got %v", *s.Overrides.Pitch)
 	}
-	if s.IntonationScale != nil {
-		t.Errorf("expected IntonationScale nil, got %v", *s.IntonationScale)
+	if s.Overrides.Intonation != nil {
+		t.Errorf("expected Overrides.Intonation nil, got %v", *s.Overrides.Intonation)
 	}
 }
 
@@ -349,14 +349,14 @@ func TestFileReader_Read_JSONFile_AllParams(t *testing.T) {
 	if s.SpeakerID == nil || *s.SpeakerID != 5 {
 		t.Errorf("expected SpeakerID 5, got %v", s.SpeakerID)
 	}
-	if s.SpeedScale == nil || *s.SpeedScale != 1.5 {
-		t.Errorf("expected SpeedScale 1.5, got %v", s.SpeedScale)
+	if s.Overrides.Speed == nil || *s.Overrides.Speed != 1.5 {
+		t.Errorf("expected Overrides.Speed 1.5, got %v", s.Overrides.Speed)
 	}
-	if s.PitchScale == nil || *s.PitchScale != 0.1 {
-		t.Errorf("expected PitchScale 0.1, got %v", s.PitchScale)
+	if s.Overrides.Pitch == nil || *s.Overrides.Pitch != 0.1 {
+		t.Errorf("expected Overrides.Pitch 0.1, got %v", s.Overrides.Pitch)
 	}
-	if s.IntonationScale == nil || *s.IntonationScale != 1.8 {
-		t.Errorf("expected IntonationScale 1.8, got %v", s.IntonationScale)
+	if s.Overrides.Intonation == nil || *s.Overrides.Intonation != 1.8 {
+		t.Errorf("expected Overrides.Intonation 1.8, got %v", s.Overrides.Intonation)
 	}
 }
 
@@ -537,14 +537,14 @@ func TestFileReader_Read_JSONLFile_TextOnly(t *testing.T) {
 	if s.SpeakerID != nil {
 		t.Errorf("expected SpeakerID nil, got %v", *s.SpeakerID)
 	}
-	if s.SpeedScale != nil {
-		t.Errorf("expected SpeedScale nil, got %v", *s.SpeedScale)
+	if s.Overrides.Speed != nil {
+		t.Errorf("expected Overrides.Speed nil, got %v", *s.Overrides.Speed)
 	}
-	if s.PitchScale != nil {
-		t.Errorf("expected PitchScale nil, got %v", *s.PitchScale)
+	if s.Overrides.Pitch != nil {
+		t.Errorf("expected Overrides.Pitch nil, got %v", *s.Overrides.Pitch)
 	}
-	if s.IntonationScale != nil {
-		t.Errorf("expected IntonationScale nil, got %v", *s.IntonationScale)
+	if s.Overrides.Intonation != nil {
+		t.Errorf("expected Overrides.Intonation nil, got %v", *s.Overrides.Intonation)
 	}
 }
 
@@ -575,14 +575,14 @@ func TestFileReader_Read_JSONLFile_AllParams(t *testing.T) {
 	if s.SpeakerID == nil || *s.SpeakerID != 5 {
 		t.Errorf("expected SpeakerID 5, got %v", s.SpeakerID)
 	}
-	if s.SpeedScale == nil || *s.SpeedScale != 1.5 {
-		t.Errorf("expected SpeedScale 1.5, got %v", s.SpeedScale)
+	if s.Overrides.Speed == nil || *s.Overrides.Speed != 1.5 {
+		t.Errorf("expected Overrides.Speed 1.5, got %v", s.Overrides.Speed)
 	}
-	if s.PitchScale == nil || *s.PitchScale != 0.1 {
-		t.Errorf("expected PitchScale 0.1, got %v", s.PitchScale)
+	if s.Overrides.Pitch == nil || *s.Overrides.Pitch != 0.1 {
+		t.Errorf("expected Overrides.Pitch 0.1, got %v", s.Overrides.Pitch)
 	}
-	if s.IntonationScale == nil || *s.IntonationScale != 1.8 {
-		t.Errorf("expected IntonationScale 1.8, got %v", s.IntonationScale)
+	if s.Overrides.Intonation == nil || *s.Overrides.Intonation != 1.8 {
+		t.Errorf("expected Overrides.Intonation 1.8, got %v", s.Overrides.Intonation)
 	}
 }
 

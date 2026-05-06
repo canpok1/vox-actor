@@ -24,17 +24,17 @@ type AccentPhrase struct {
 	IsInterrogative bool   `json:"is_interrogative"`
 }
 
-// WithOverrides は指定されたパラメータでAudioQueryのフィールドを上書きした新しいAudioQueryを返す。
-// nilのパラメータは上書きしない。値レシーバのため元のAudioQueryは変更されない。
-func (q AudioQuery) WithOverrides(speed, pitch, intonation *float64) AudioQuery {
-	if speed != nil {
-		q.SpeedScale = *speed
+// WithOverrides はSynthOverridesのパラメータでAudioQueryのフィールドを上書きした新しいAudioQueryを返す。
+// nilフィールドは上書きしない。値レシーバのため元のAudioQueryは変更されない。
+func (q AudioQuery) WithOverrides(overrides SynthOverrides) AudioQuery {
+	if overrides.Speed != nil {
+		q.SpeedScale = *overrides.Speed
 	}
-	if pitch != nil {
-		q.PitchScale = *pitch
+	if overrides.Pitch != nil {
+		q.PitchScale = *overrides.Pitch
 	}
-	if intonation != nil {
-		q.IntonationScale = *intonation
+	if overrides.Intonation != nil {
+		q.IntonationScale = *overrides.Intonation
 	}
 	return q
 }

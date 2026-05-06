@@ -39,13 +39,15 @@ type jsonScript struct {
 func (js *jsonScript) toScript(path string) entity.Script {
 	text := *js.Text
 	return entity.Script{
-		Path:            path,
-		Text:            text,
-		IsEmpty:         len(text) == 0,
-		SpeakerID:       js.Speaker,
-		SpeedScale:      js.SpeedScale,
-		PitchScale:      js.PitchScale,
-		IntonationScale: js.IntonationScale,
+		Path:      path,
+		Text:      text,
+		IsEmpty:   len(text) == 0,
+		SpeakerID: js.Speaker,
+		Overrides: entity.SynthOverrides{
+			Speed:      js.SpeedScale,
+			Pitch:      js.PitchScale,
+			Intonation: js.IntonationScale,
+		},
 	}
 }
 

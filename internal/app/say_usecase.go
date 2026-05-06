@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+
+	"github.com/canpok1/vox-actor/internal/domain/entity"
 )
 
 // SayParams はsayユースケースのパラメータ。
@@ -92,7 +94,7 @@ func (u *SayUsecase) Run(ctx context.Context, params SayParams) error {
 	}
 	u.logger.Debug("query created")
 
-	q := query.WithOverrides(params.Speed, params.Pitch, params.Intonation)
+	q := query.WithOverrides(entity.SynthOverrides{Speed: params.Speed, Pitch: params.Pitch, Intonation: params.Intonation})
 	wavData, err := u.client.Synthesize(ctx, &q, params.SpeakerID)
 	if err != nil {
 		if ctx.Err() != nil {
