@@ -17,10 +17,10 @@ set -euo pipefail
 
 input="$(cat)"
 
-# 未知フィールドを記録して仕様確認に役立てる（初回実行時に stderr で確認可能）
-printf '[worktree-create] input JSON: %s\n' "$input" >&2
+# DEBUG=1 時のみ入力 JSON を stderr に出力（フィールド構成の実機確認用）
+[ "${DEBUG:-}" = "1" ] && printf '[worktree-create] input JSON: %s\n' "$input" >&2
 
-name="$(printf '%s' "$input" | jq -r '.name // empty')"
+name="$(jq -r '.name // empty' <<< "$input")"
 
 if [ -z "$name" ]; then
   printf '[worktree-create] Error: "name" field missing or empty in input JSON\n' >&2
