@@ -834,4 +834,88 @@ describe("useCharacterStage", () => {
       expect(result.current.lastClipTimestamp).toBeNull();
     });
   });
+
+  describe("preview 経由再生（timestamp あり）でのキャラクター表示", () => {
+    it("playingClipTimestamp が entries に存在するタイムスタンプのとき、対応するキャラクターがスロットに表示される", async () => {
+      const charA = makeChar("キャラA");
+      const entry1 = makeClipEntry(1, "キャラA");
+
+      const { result, rerender } = renderHook(
+        ({
+          playingClipTimestamp,
+          entries,
+          characters,
+        }: {
+          playingClipTimestamp: number | null;
+          entries: TimelineEntry[];
+          characters: CharacterEntry[];
+        }) => useCharacterStage(playingClipTimestamp, entries, characters),
+        {
+          initialProps: {
+            playingClipTimestamp: null,
+            entries: [entry1],
+            characters: [charA],
+          },
+        },
+      );
+
+      await act(async () => {
+        rerender({
+          playingClipTimestamp: entry1.timestamp as number,
+          entries: [entry1],
+          characters: [charA],
+        });
+      });
+
+      expect(result.current.slots[0]).toEqual({ character: charA });
+    });
+
+    it("playingClipTimestamp が null に戻るとキャラクターはステージから消えない（タイマー待ち）", async () => {
+      const charA = makeChar("キャラA");
+      const entry1 = makeClipEntry(1, "キャラA");
+
+      const { result, rerender } = renderHook(
+        ({
+          playingClipTimestamp,
+          entries,
+          characters,
+        }: {
+          playingClipTimestamp: number | null;
+          entries: TimelineEntry[];
+          characters: CharacterEntry[];
+        }) => useCharacterStage(playingClipTimestamp, entries, characters),
+        {
+          initialProps: {
+            playingClipTimestamp: null,
+            entries: [entry1],
+            characters: [charA],
+          },
+        },
+      );
+
+      await act(async () => {
+        rerender({
+          playingClipTimestamp: entry1.timestamp as number,
+          entries: [entry1],
+          characters: [charA],
+        });
+      });
+      expect(result.current.slots[0]).toEqual({ character: charA });
+
+      await act(async () => {
+        rerender({
+          playingClipTimestamp: null,
+          entries: [entry1],
+          characters: [charA],
+        });
+      });
+      // タイマー経過前はまだ表示
+      expect(result.current.slots[0]).toEqual({ character: charA });
+
+      await act(async () => {
+        vi.advanceTimersByTime(QUEUE_EMPTY_MS);
+      });
+      expect(result.current.slots[0]).toBeNull();
+    });
+  });
 });
