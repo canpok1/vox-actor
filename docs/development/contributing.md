@@ -165,6 +165,32 @@ VOX_STUB_PORT=18080 PLAYWRIGHT_BASE_URL=http://127.0.0.1:15173 \
 | `POST /__stub/api-status` | `/api/status` の応答を上書き |
 | `POST /__stub/reset` | 内部状態を初期化 |
 
+## Claude Code の worktree フック
+
+### WorktreeCreate hook
+
+`.claude/settings.json` に `WorktreeCreate` フックが設定されており、Claude Code が worktree を作成するたびに `.claude/scripts/worktree-create.sh` が自動実行されます。
+
+**フックの動作:**
+
+1. `git worktree add .claude/worktrees/<name> -b <name>` で worktree を作成
+2. `make build` を実行（`npm ci` → `npm run build` → `go build` を内包）
+3. stdout に worktree パスを出力（Claude Code のフック仕様上必須）
+
+**目的:** worktree 着手直後に `frontend/node_modules`・`frontend/dist`・バイナリが揃った状態になるため、「`npm install` 忘れ」や `frontend/dist` 不在による `go:embed` 系 e2e 落ちを防ぎます。
+
+**設定の置き場所:**
+
+プロジェクト設定（`.claude/settings.json`）に追加しています。全チームメンバーが同じ環境で worktree を作成できるよう、ユーザー設定ではなくプロジェクト設定に入れています。
+
+**フェイルセーフ:**
+
+スクリプトは `set -euo pipefail` で動作しています。`git worktree add` または `make build` が失敗すると非ゼロ終了となり、Claude Code はフック仕様に従って worktree 作成を失敗扱いにします（中途半端な worktree が残りません）。
+
+**hook 入力 JSON の確認:**
+
+スクリプトは起動のたびに受信した JSON を stderr に出力します（`[worktree-create] input JSON: ...`）。初回実行後に stderr を確認することで実際のフィールド構成を把握できます。
+
 ## アーキテクチャ
 
 レイヤー構成と責務ルールは [layer-rules.md](./layer-rules.md) を参照してください。
