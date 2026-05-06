@@ -987,6 +987,10 @@ func (p *HTTPStreamPlayer) handleAPIPlay(w http.ResponseWriter, r *http.Request)
 			http.Error(w, fmt.Sprintf("clips[%d].text must not be empty", i), http.StatusBadRequest)
 			return
 		}
+		if _, err := entity.NewSpeakerID(clip.SpeakerID); err != nil {
+			http.Error(w, fmt.Sprintf("clips[%d].speaker_id: %v", i, err), http.StatusBadRequest)
+			return
+		}
 	}
 
 	playbackID, err := newUUIDv4()
