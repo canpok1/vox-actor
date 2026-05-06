@@ -69,17 +69,19 @@ func actViaViewer(
 	speakerID int, speed, pitch, intonation float64,
 	logger *slog.Logger,
 ) error {
+	defaults := entity.SynthOverrides{Speed: &speed, Pitch: &pitch, Intonation: &intonation}
 	var clips []infra.ViewerClip
 	for _, script := range scripts {
 		if script.IsEmpty {
 			continue
 		}
+		resolved := script.ResolveOverrides(defaults)
 		clips = append(clips, infra.ViewerClip{
 			Text:       script.Text,
 			SpeakerID:  script.ResolveSpeakerID(speakerID),
-			Speed:      script.ResolveSpeed(&speed),
-			Pitch:      script.ResolvePitch(&pitch),
-			Intonation: script.ResolveIntonation(&intonation),
+			Speed:      resolved.Speed,
+			Pitch:      resolved.Pitch,
+			Intonation: resolved.Intonation,
 		})
 	}
 	if len(clips) == 0 {

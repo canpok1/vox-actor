@@ -34,10 +34,8 @@ type synthResult struct {
 
 // synthPipelineConfig はstartSynthPipelineの設定。
 type synthPipelineConfig struct {
-	defaultSpeakerID  int
-	defaultSpeed      *float64
-	defaultPitch      *float64
-	defaultIntonation *float64
+	defaultSpeakerID int
+	defaultOverrides entity.SynthOverrides
 	// synthesisLogLevel は "synthesis completed" ログの出力レベル。
 	synthesisLogLevel slog.Level
 }
@@ -70,9 +68,7 @@ func startSynthPipeline(
 			index++
 
 			speakerID := script.ResolveSpeakerID(cfg.defaultSpeakerID)
-			speed := script.ResolveSpeed(cfg.defaultSpeed)
-			pitch := script.ResolvePitch(cfg.defaultPitch)
-			intonation := script.ResolveIntonation(cfg.defaultIntonation)
+			overrides := script.ResolveOverrides(cfg.defaultOverrides)
 
 			result := synthResult{script: script, index: index}
 
@@ -90,7 +86,7 @@ func startSynthPipeline(
 			}
 			logger.Debug("query created", "path", script.Path)
 
-			q := query.WithOverrides(speed, pitch, intonation)
+			q := query.WithOverrides(overrides)
 			wavData, err := client.Synthesize(ctx, &q, speakerID)
 			if err != nil {
 				if ctx.Err() != nil {

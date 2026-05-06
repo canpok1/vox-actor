@@ -278,13 +278,13 @@ func TestScriptAppendCmd_FlagsPassedToWriter(t *testing.T) {
 	if s.SpeakerID == nil || *s.SpeakerID != 5 {
 		t.Errorf("expected SpeakerID=5, got: %v", s.SpeakerID)
 	}
-	if s.SpeedScale == nil || *s.SpeedScale != 1.2 {
-		t.Errorf("expected SpeedScale=1.2, got: %v", s.SpeedScale)
+	if s.Overrides.Speed == nil || *s.Overrides.Speed != 1.2 {
+		t.Errorf("expected Overrides.Speed=1.2, got: %v", s.Overrides.Speed)
 	}
-	if s.PitchScale == nil || *s.PitchScale != 0.05 {
-		t.Errorf("expected PitchScale=0.05, got: %v", s.PitchScale)
+	if s.Overrides.Pitch == nil || *s.Overrides.Pitch != 0.05 {
+		t.Errorf("expected Overrides.Pitch=0.05, got: %v", s.Overrides.Pitch)
 	}
-	if s.IntonationScale == nil || *s.IntonationScale != 1.5 {
-		t.Errorf("expected IntonationScale=1.5, got: %v", s.IntonationScale)
+	if s.Overrides.Intonation == nil || *s.Overrides.Intonation != 1.5 {
+		t.Errorf("expected Overrides.Intonation=1.5, got: %v", s.Overrides.Intonation)
 	}
 }

@@ -3,6 +3,8 @@ package app
 import (
 	"strconv"
 	"strings"
+
+	"github.com/canpok1/vox-actor/internal/domain/entity"
 )
 
 // logTextMaxRunes はログ出力時にtextを切り詰めるrune数の上限。
@@ -38,12 +40,12 @@ func formatFloatPtr(v *float64) string {
 
 // dryRunPlaybackAttrs はdry-runモードの playback completed ログに付与する属性セットを返す。
 // 呼び出し側で path などの属性を前後に追加できるよう []any を返す。
-func dryRunPlaybackAttrs(text string, speakerID int, speed, pitch, intonation *float64) []any {
+func dryRunPlaybackAttrs(text string, speakerID int, overrides entity.SynthOverrides) []any {
 	return []any{
 		"text", truncateAndEscapeText(text),
 		"speaker", speakerID,
-		"speed", formatFloatPtr(speed),
-		"pitch", formatFloatPtr(pitch),
-		"intonation", formatFloatPtr(intonation),
+		"speed", formatFloatPtr(overrides.Speed),
+		"pitch", formatFloatPtr(overrides.Pitch),
+		"intonation", formatFloatPtr(overrides.Intonation),
 	}
 }

@@ -13,7 +13,7 @@ func TestAudioQuery_WithOverrides_AllNil(t *testing.T) {
 		IntonationScale: 1.0,
 	}
 
-	result := q.WithOverrides(nil, nil, nil)
+	result := q.WithOverrides(entity.SynthOverrides{})
 
 	if result.SpeedScale != 1.0 {
 		t.Errorf("expected SpeedScale 1.0, got %f", result.SpeedScale)
@@ -33,8 +33,7 @@ func TestAudioQuery_WithOverrides_SpeedOnly(t *testing.T) {
 		IntonationScale: 1.0,
 	}
 
-	speed := 1.5
-	result := q.WithOverrides(&speed, nil, nil)
+	result := q.WithOverrides(entity.SynthOverrides{Speed: ptr(1.5)})
 
 	if result.SpeedScale != 1.5 {
 		t.Errorf("expected SpeedScale 1.5, got %f", result.SpeedScale)
@@ -54,8 +53,7 @@ func TestAudioQuery_WithOverrides_PitchOnly(t *testing.T) {
 		IntonationScale: 1.0,
 	}
 
-	pitch := 0.5
-	result := q.WithOverrides(nil, &pitch, nil)
+	result := q.WithOverrides(entity.SynthOverrides{Pitch: ptr(0.5)})
 
 	if result.SpeedScale != 1.0 {
 		t.Errorf("expected SpeedScale 1.0, got %f", result.SpeedScale)
@@ -75,8 +73,7 @@ func TestAudioQuery_WithOverrides_IntonationOnly(t *testing.T) {
 		IntonationScale: 1.0,
 	}
 
-	intonation := 2.0
-	result := q.WithOverrides(nil, nil, &intonation)
+	result := q.WithOverrides(entity.SynthOverrides{Intonation: ptr(2.0)})
 
 	if result.SpeedScale != 1.0 {
 		t.Errorf("expected SpeedScale 1.0, got %f", result.SpeedScale)
@@ -97,10 +94,7 @@ func TestAudioQuery_WithOverrides_AllParams(t *testing.T) {
 		VolumeScale:     1.0,
 	}
 
-	speed := 1.5
-	pitch := 0.5
-	intonation := 2.0
-	result := q.WithOverrides(&speed, &pitch, &intonation)
+	result := q.WithOverrides(entity.SynthOverrides{Speed: ptr(1.5), Pitch: ptr(0.5), Intonation: ptr(2.0)})
 
 	if result.SpeedScale != 1.5 {
 		t.Errorf("expected SpeedScale 1.5, got %f", result.SpeedScale)
@@ -124,10 +118,7 @@ func TestAudioQuery_WithOverrides_DoesNotModifyOriginal(t *testing.T) {
 		IntonationScale: 1.0,
 	}
 
-	speed := 1.5
-	pitch := 0.5
-	intonation := 2.0
-	_ = q.WithOverrides(&speed, &pitch, &intonation)
+	_ = q.WithOverrides(entity.SynthOverrides{Speed: ptr(1.5), Pitch: ptr(0.5), Intonation: ptr(2.0)})
 
 	// 元のAudioQueryが変更されていないことを確認
 	if q.SpeedScale != 1.0 {

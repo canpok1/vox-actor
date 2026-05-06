@@ -310,10 +310,12 @@ func (u *WatchUsecase) processFile(ctx context.Context, path string, params Watc
 	}
 
 	cfg := synthPipelineConfig{
-		defaultSpeakerID:  params.SpeakerID,
-		defaultSpeed:      params.Speed,
-		defaultPitch:      params.Pitch,
-		defaultIntonation: params.Intonation,
+		defaultSpeakerID: params.SpeakerID,
+		defaultOverrides: entity.SynthOverrides{
+			Speed:      params.Speed,
+			Pitch:      params.Pitch,
+			Intonation: params.Intonation,
+		},
 		synthesisLogLevel: slog.LevelDebug,
 	}
 	ch := startSynthPipeline(ctx, u.client, u.logger, scripts, cfg)
@@ -389,6 +391,7 @@ func (u *WatchUsecase) processScriptsSilent(ctx context.Context, scripts []entit
 // processScriptsDryRun はDryRunモードで1ファイル分のスクリプト群を処理する。
 // VOICEVOXエンジン/音声再生は一切呼ばず、既存のログ互換性を保ったまま逐次出力する。
 func (u *WatchUsecase) processScriptsDryRun(ctx context.Context, scripts []entity.Script, total int, params WatchParams) {
+	defaultOverrides := entity.SynthOverrides{Speed: params.Speed, Pitch: params.Pitch, Intonation: params.Intonation}
 	current := 0
 	for _, script := range scripts {
 		if ctx.Err() != nil {
@@ -401,11 +404,9 @@ func (u *WatchUsecase) processScriptsDryRun(ctx context.Context, scripts []entit
 		current++
 
 		speakerID := script.ResolveSpeakerID(params.SpeakerID)
-		speed := script.ResolveSpeed(params.Speed)
-		pitch := script.ResolvePitch(params.Pitch)
-		intonation := script.ResolveIntonation(params.Intonation)
+		overrides := script.ResolveOverrides(defaultOverrides)
 
-		attrs := dryRunPlaybackAttrs(script.Text, speakerID, speed, pitch, intonation)
+		attrs := dryRunPlaybackAttrs(script.Text, speakerID, overrides)
 		u.logger.Info(fmt.Sprintf("[%d/%d] playback completed", current, total), attrs...)
 	}
 }
