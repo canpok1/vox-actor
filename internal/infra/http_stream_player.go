@@ -161,6 +161,36 @@ type historyRecord struct {
 	Intonation  *float64 `json:"intonation,omitempty"`
 }
 
+// historyEntryFromClipEvent は clipEvent を entity.HistoryEntry に変換する。
+// clipEvent.SpeakerID は entity.SpeakerID.Value() から派生するため常に非負であり、
+// NewSpeakerID のエラーは無視して安全に使用できる。
+func historyEntryFromClipEvent(ev clipEvent) entity.HistoryEntry {
+	speakerID, _ := entity.NewSpeakerID(ev.SpeakerID)
+	return entity.NewHistoryEntry(ev.Text, ev.SpeakerName, ev.StyleName, ev.Timestamp, speakerID, ev.Speed, ev.Pitch, ev.Intonation)
+}
+
+// toDomain は historyRecord を entity.HistoryEntry に変換する。
+// 旧形式（SpeakerID=0, Speed/Pitch/Intonation=nil）は json.Unmarshal で
+// ゼロ値・nil として読み込まれた値をそのまま entity.HistoryEntry に格納する。
+func (r historyRecord) toDomain() entity.HistoryEntry {
+	speakerID, _ := entity.NewSpeakerID(r.SpeakerID)
+	return entity.NewHistoryEntry(r.Text, r.SpeakerName, r.StyleName, r.Timestamp, speakerID, r.Speed, r.Pitch, r.Intonation)
+}
+
+// historyRecordFromDomain は entity.HistoryEntry を historyRecord に変換する。
+func historyRecordFromDomain(e entity.HistoryEntry) historyRecord {
+	return historyRecord{
+		Text:        e.Text,
+		SpeakerName: e.SpeakerName,
+		StyleName:   e.StyleName,
+		Timestamp:   e.Timestamp,
+		SpeakerID:   e.SpeakerID.Value(),
+		Speed:       e.Speed,
+		Pitch:       e.Pitch,
+		Intonation:  e.Intonation,
+	}
+}
+
 // apiHistoryResponse は GET /api/history のレスポンスペイロード。
 type apiHistoryResponse struct {
 	Entries []historyRecord `json:"entries"`
@@ -516,7 +546,7 @@ func (p *HTTPStreamPlayer) PlayText(ctx context.Context, meta app.PlayMeta) erro
 		p.logger.Warn("stream clip dropped for slow subscribers", "clipTimestamp", ts, "dropped", dropped)
 	}
 	p.logger.Info("stream clip delivered (silent)", "clipTimestamp", ts, "subscribers", n)
-	p.appendHistory(ev)
+	p.appendHistory(historyEntryFromClipEvent(ev))
 
 	if p.silentInterval <= 0 {
 		return nil
@@ -577,7 +607,7 @@ func (p *HTTPStreamPlayer) Play(ctx context.Context, wavData []byte, meta app.Pl
 		p.logger.Warn("stream clip dropped for slow subscribers", "clipTimestamp", ts, "dropped", dropped)
 	}
 	p.logger.Info("stream clip delivered", "clipTimestamp", ts, "subscribers", n)
-	p.appendHistory(ev)
+	p.appendHistory(historyEntryFromClipEvent(ev))
 	return nil
 }
 
@@ -922,11 +952,12 @@ func (p *HTTPStreamPlayer) handleAPICharacters(w http.ResponseWriter, _ *http.Re
 }
 
 func (p *HTTPStreamPlayer) handleAPIHistory(w http.ResponseWriter, _ *http.Request) {
-	entries := p.loadHistory(historyLoadSize)
-	if entries == nil {
-		entries = []historyRecord{}
+	domainEntries := p.loadHistory(historyLoadSize)
+	records := make([]historyRecord, 0, len(domainEntries))
+	for _, e := range domainEntries {
+		records = append(records, historyRecordFromDomain(e))
 	}
-	payload, err := json.Marshal(apiHistoryResponse{Entries: entries})
+	payload, err := json.Marshal(apiHistoryResponse{Entries: records})
 	if err != nil {
 		p.logger.Warn("failed to marshal api history", "error", err)
 		http.Error(w, "internal server error", http.StatusInternalServerError)
@@ -1370,7 +1401,7 @@ func newUUIDv4() (string, error) {
 }
 
 // loadHistory は今日の履歴ファイルから末尾 n 件を読み込む。
-func (p *HTTPStreamPlayer) loadHistory(n int) []historyRecord {
+func (p *HTTPStreamPlayer) loadHistory(n int) []entity.HistoryEntry {
 	if p.historyDir == "" {
 		return nil
 	}
@@ -1387,7 +1418,7 @@ func (p *HTTPStreamPlayer) loadHistory(n int) []historyRecord {
 	if len(lines) > n {
 		start = len(lines) - n
 	}
-	records := make([]historyRecord, 0, len(lines)-start)
+	entries := make([]entity.HistoryEntry, 0, len(lines)-start)
 	for _, line := range lines[start:] {
 		if line == "" {
 			continue
@@ -1397,9 +1428,9 @@ func (p *HTTPStreamPlayer) loadHistory(n int) []historyRecord {
 			p.logger.Warn("failed to parse history line", "error", err)
 			continue
 		}
-		records = append(records, r)
+		entries = append(entries, r.toDomain())
 	}
-	return records
+	return entries
 }
 
 // pruneOldHistory は historyDir 配下の 30日より古い *.jsonl を削除する（ベストエフォート）。
@@ -1437,21 +1468,12 @@ func (p *HTTPStreamPlayer) pruneOldHistory() {
 	}
 }
 
-// appendHistory は clip イベントを今日の履歴ファイルに追記する（ベストエフォート）。
-func (p *HTTPStreamPlayer) appendHistory(ev clipEvent) {
+// appendHistory は履歴エントリを今日の履歴ファイルに追記する（ベストエフォート）。
+func (p *HTTPStreamPlayer) appendHistory(entry entity.HistoryEntry) {
 	if p.historyDir == "" {
 		return
 	}
-	record := historyRecord{
-		Text:        ev.Text,
-		SpeakerName: ev.SpeakerName,
-		StyleName:   ev.StyleName,
-		Timestamp:   ev.Timestamp,
-		SpeakerID:   ev.SpeakerID,
-		Speed:       ev.Speed,
-		Pitch:       ev.Pitch,
-		Intonation:  ev.Intonation,
-	}
+	record := historyRecordFromDomain(entry)
 	data, err := json.Marshal(record)
 	if err != nil {
 		p.logger.Warn("failed to marshal history record", "error", err)
