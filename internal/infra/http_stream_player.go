@@ -961,15 +961,18 @@ func (p *HTTPStreamPlayer) handleAPIPlay(w http.ResponseWriter, r *http.Request)
 		http.Error(w, fmt.Sprintf("clips count exceeds limit %d", maxClipsPerBatch), http.StatusBadRequest)
 		return
 	}
-	for i, clip := range req.Clips {
-		if clip.Text == "" {
+	clips := make([]entity.Clip, len(req.Clips))
+	for i, c := range req.Clips {
+		if c.Text == "" {
 			http.Error(w, fmt.Sprintf("clips[%d].text must not be empty", i), http.StatusBadRequest)
 			return
 		}
-		if _, err := entity.NewSpeakerID(clip.SpeakerID); err != nil {
+		speakerID, err := entity.NewSpeakerID(c.SpeakerID)
+		if err != nil {
 			http.Error(w, fmt.Sprintf("clips[%d].speaker_id: %v", i, err), http.StatusBadRequest)
 			return
 		}
+		clips[i] = entity.NewClip(c.Text, speakerID, c.Speed, c.Pitch, c.Intonation)
 	}
 
 	playbackID, err := newUUIDv4()
@@ -999,10 +1002,6 @@ func (p *HTTPStreamPlayer) handleAPIPlay(w http.ResponseWriter, r *http.Request)
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		_, _ = w.Write(payload)
 		return
-	}
-	clips := make([]entity.Clip, len(req.Clips))
-	for i, c := range req.Clips {
-		clips[i] = entity.NewClip(c.Text, entity.MustNewSpeakerID(c.SpeakerID), c.Speed, c.Pitch, c.Intonation)
 	}
 	batch := playBatch{playbackID: playbackID, clips: clips}
 	select {
@@ -1073,6 +1072,9 @@ func (p *HTTPStreamPlayer) initPlayback(id string, clipCount int) {
 	defer p.playbackMu.Unlock()
 	p.playbacks[id] = entity.NewPlayback(clipCount, p.nowFunc())
 }
+
+// startPlayback/completePlayback/failPlayback は TTL GC で pruned されたエントリへの
+// 遅延更新を無視するため、遷移エラーを破棄している。
 
 func (p *HTTPStreamPlayer) startPlayback(id string) {
 	p.playbackMu.Lock()

@@ -46,7 +46,6 @@ func (p *Playback) MarkPlaying(nowMs int64) error {
 }
 
 // MarkCompleted は pending または playing → completed へ遷移する。
-// pending からの遷移は無音モード（silent）での即時完了を想定する。
 func (p *Playback) MarkCompleted(nowMs int64) error {
 	switch p.status {
 	case PlaybackStatusPending, PlaybackStatusPlaying:
