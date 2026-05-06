@@ -258,7 +258,7 @@ describe("usePlaybackQueue", () => {
     expect(result.current.playingClipTimestamp).toBeNull();
   });
 
-  it("timeline と preview を混在キューに積んだ場合、順次再生され timeline のみ playingClipTimestamp が更新される", async () => {
+  it("timeline と timestamp なし preview を混在キューに積んだ場合、順次再生され timeline のみ playingClipTimestamp が更新される", async () => {
     const { result } = renderHook(() => usePlaybackQueue(audioRef));
     // timeline → preview → timeline の順でキューに積む
     await act(async () => {
@@ -341,5 +341,27 @@ describe("usePlaybackQueue", () => {
       unmount();
     });
     expect(mockPause).toHaveBeenCalled();
+  });
+
+  it("enqueuePreview with timestamp: playingClipTimestamp が指定した値に設定される", async () => {
+    const { result } = renderHook(() => usePlaybackQueue(audioRef));
+    await act(async () => {
+      result.current.enqueuePreview(makePreviewBody(1), 9000);
+    });
+    expect(mockPlay).toHaveBeenCalled();
+    expect(result.current.playingClipTimestamp).toBe(9000);
+  });
+
+  it("enqueuePreview with timestamp: 再生終了後に playingClipTimestamp が null に戻る", async () => {
+    const { result } = renderHook(() => usePlaybackQueue(audioRef));
+    await act(async () => {
+      result.current.enqueuePreview(makePreviewBody(1), 9000);
+    });
+    expect(result.current.playingClipTimestamp).toBe(9000);
+    setAudioEnded(audio, true);
+    await act(async () => {
+      audio.dispatchEvent(new Event("timeupdate"));
+    });
+    expect(result.current.playingClipTimestamp).toBeNull();
   });
 });

@@ -17,12 +17,17 @@ export interface PreviewBody {
 
 type QueueItem =
   | { kind: "timeline"; clip: ClipEvent }
-  | { kind: "preview"; body: PreviewBody };
+  | { kind: "preview"; body: PreviewBody; timestamp?: number };
+
+function resolveTimestamp(item: QueueItem): number | null {
+  if (item.kind === "timeline") return item.clip.timestamp;
+  return item.timestamp ?? null;
+}
 
 interface PlaybackQueue {
   playingClipTimestamp: number | null;
   enqueue: (clip: ClipEvent) => void;
-  enqueuePreview: (body: PreviewBody) => void;
+  enqueuePreview: (body: PreviewBody, timestamp?: number) => void;
 }
 
 interface ReadyItem {
@@ -80,7 +85,7 @@ export function usePlaybackQueue(
           playingObjUrlRef.current = null;
         }
         isPlayingRef.current = false;
-        if (item.kind === "timeline") {
+        if (resolveTimestamp(item) !== null) {
           setPlayingClipTimestamp(null);
         }
         startNextRef.current();
@@ -109,8 +114,9 @@ export function usePlaybackQueue(
       if (oldUrl) URL.revokeObjectURL(oldUrl);
       playingObjUrlRef.current = ready.objectUrl;
       isPlayingRef.current = true;
-      if (ready.item.kind === "timeline") {
-        setPlayingClipTimestamp(ready.item.clip.timestamp);
+      const ts = resolveTimestamp(ready.item);
+      if (ts !== null) {
+        setPlayingClipTimestamp(ts);
       }
       audio.src = ready.objectUrl;
       audio.play().catch((err: unknown) => {
@@ -121,7 +127,7 @@ export function usePlaybackQueue(
         }
         clearWatchdog();
         isPlayingRef.current = false;
-        if (ready.item.kind === "timeline") {
+        if (resolveTimestamp(ready.item) !== null) {
           setPlayingClipTimestamp(null);
         }
         startNextRef.current();
@@ -188,8 +194,8 @@ export function usePlaybackQueue(
   );
 
   const enqueuePreview = useCallback(
-    (body: PreviewBody): void => {
-      waitingRef.current.push({ kind: "preview", body });
+    (body: PreviewBody, timestamp?: number): void => {
+      waitingRef.current.push({ kind: "preview", body, timestamp });
       startNext();
     },
     [startNext],

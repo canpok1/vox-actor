@@ -343,13 +343,16 @@ export function App() {
 
   const handleReplay = useCallback(
     (entry: ClipEvent & { kind: "clip" }): void => {
-      enqueuePreview({
-        text: entry.text,
-        speaker_id: entry.speakerId,
-        ...(entry.speed !== undefined && { speed: entry.speed }),
-        ...(entry.pitch !== undefined && { pitch: entry.pitch }),
-        ...(entry.intonation !== undefined && { intonation: entry.intonation }),
-      });
+      enqueuePreview(
+        {
+          text: entry.text,
+          speaker_id: entry.speakerId,
+          ...(entry.speed !== undefined && { speed: entry.speed }),
+          ...(entry.pitch !== undefined && { pitch: entry.pitch }),
+          ...(entry.intonation !== undefined && { intonation: entry.intonation }),
+        },
+        entry.timestamp,
+      );
     },
     [enqueuePreview],
   );
