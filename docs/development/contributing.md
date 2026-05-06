@@ -189,7 +189,7 @@ VOX_STUB_PORT=18080 PLAYWRIGHT_BASE_URL=http://127.0.0.1:15173 \
 
 **hook 入力 JSON の確認:**
 
-スクリプトは起動のたびに受信した JSON を stderr に出力します（`[worktree-create] input JSON: ...`）。初回実行後に stderr を確認することで実際のフィールド構成を把握できます。
+`DEBUG=1` を設定して worktree を作成すると、受信した入力 JSON が stderr に出力されます（`[worktree-create] input JSON: ...`）。フィールド構成の確認が必要な場合に利用してください。
 
 ## アーキテクチャ
 
