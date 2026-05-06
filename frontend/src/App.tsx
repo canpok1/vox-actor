@@ -228,7 +228,8 @@ export function App() {
           pitch: e.pitch,
           intonation: e.intonation,
         }));
-        setEntries(historyEntries);
+        // SSE クリップが先に届いていた場合は上書きしない。
+        setEntries((prev) => (prev.length === 0 ? historyEntries : prev));
       } catch (err) {
         console.error("failed to load api history", err);
       }
