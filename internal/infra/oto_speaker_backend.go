@@ -57,14 +57,16 @@ func (b *otoSpeakerBackend) PlayAndWait(ctx context.Context, s beep.Streamer) er
 	defer func() { _ = player.Close() }()
 	player.Play()
 
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+
 	select {
 	case <-done:
-		// バッファに残っているサンプルの再生が完了するまで待機する
 		for player.IsPlaying() {
 			select {
 			case <-ctx.Done():
 				return fmt.Errorf("playback cancelled: %w", ctx.Err())
-			case <-time.After(10 * time.Millisecond):
+			case <-ticker.C:
 			}
 		}
 		return player.Err()
@@ -80,7 +82,7 @@ type otoSampleReader struct {
 }
 
 func (r *otoSampleReader) Read(buf []byte) (int, error) {
-	const bytesPerSample = 4 // 2ch * 2bytes(int16)
+	const bytesPerSample = 4
 	if len(buf)%bytesPerSample != 0 {
 		return 0, fmt.Errorf("read size not aligned with samples")
 	}
