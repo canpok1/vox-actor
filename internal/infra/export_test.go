@@ -1,6 +1,9 @@
 package infra
 
-import "time"
+import (
+	"sync"
+	"time"
+)
 
 // ClientTimeout はテスト用にHTTPクライアントのタイムアウト値を返す。
 func (c *VoicevoxClient) ClientTimeout() time.Duration {
@@ -21,4 +24,11 @@ func (p *HTTPStreamPlayer) PlaybackStatus(id string) (string, bool) {
 // PrunePlaybacks はテスト用に TTL 切れの playback state を削除する。
 func (p *HTTPStreamPlayer) PrunePlaybacks() {
 	p.prunePlaybacks()
+}
+
+// ResetOtoContext はテスト用にotoコンテキストのシングルトン状態をリセットする。
+func ResetOtoContext() {
+	otoCtxOnce = sync.Once{}
+	otoCtxVal = nil
+	otoCtxErr = nil
 }
