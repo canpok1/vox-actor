@@ -10,15 +10,18 @@ package infra_test
 // - POST /api/play 成功 → ViewerAPIClient.Play が PlayResponse を返す      → TestViewerAPIClient_Play_Success
 // - POST /api/play 無音モード応答 → ViewerAPIClient.Play が silent=true    → TestViewerAPIClient_Play_Silent
 // - POST /api/play で非 200 応答 → ViewerAPIClient.Play がエラーを返す     → TestViewerAPIClient_Play_Error
+// - POST /api/play で 400 + body → エラーメッセージに body を含む         → TestViewerAPIClient_Play_ErrorWithBody
 // #481 --viewer-url:
 // - NewViewerAPIClientFromURL でフル URL 指定 → POST /api/play が成功する  → TestViewerAPIClientFromURL_Play_Success
 // - NewViewerAPIClientFromURL でフル URL に trailing slash → POST が成功   → TestViewerAPIClientFromURL_Play_TrailingSlash
+// - GET /api/playback/{id} で非 200 + body → エラーメッセージに body を含む → TestViewerAPIClient_GetPlayback_ErrorWithBody
 
 import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/canpok1/vox-actor/internal/infra"
@@ -195,6 +198,24 @@ func TestViewerAPIClient_Play_Error(t *testing.T) {
 	}
 }
 
+func TestViewerAPIClient_Play_ErrorWithBody(t *testing.T) {
+	t.Parallel()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte("clips[0].speaker_id: unknown speaker id 9999"))
+	}))
+	defer srv.Close()
+
+	client := infra.NewViewerAPIClient(srv.Listener.Addr().String())
+	_, err := client.Play(t.Context(), infra.ViewerPlayRequest{Clips: []infra.ViewerClip{{Text: "test", SpeakerID: 9999}}})
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "unknown speaker id 9999") {
+		t.Errorf("expected error to contain body, got: %v", err)
+	}
+}
+
 func TestViewerAPIClientFromURL_Play_Success(t *testing.T) {
 	t.Parallel()
 	var capturedReq infra.ViewerPlayRequest
@@ -291,5 +312,24 @@ func TestViewerAPIClient_GetPlayback_Error(t *testing.T) {
 	_, err := client.GetPlayback(t.Context(), "00000000-0000-4000-8000-000000000001")
 	if err == nil {
 		t.Fatal("expected error for non-200 response")
+	}
+}
+
+func TestViewerAPIClient_GetPlayback_ErrorWithBody(t *testing.T) {
+	t.Parallel()
+	id := "00000000-0000-4000-8000-000000000002"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte("playback not found"))
+	}))
+	defer srv.Close()
+
+	client := infra.NewViewerAPIClient(srv.Listener.Addr().String())
+	_, err := client.GetPlayback(t.Context(), id)
+	if err == nil {
+		t.Fatal("expected error for non-200 response")
+	}
+	if !strings.Contains(err.Error(), "playback not found") {
+		t.Errorf("expected error to contain body, got: %v", err)
 	}
 }

@@ -5,12 +5,20 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"time"
 )
 
+const maxErrorBodySize = 1024
+
 const viewerDetectTimeout = 500 * time.Millisecond
+
+func readErrorBody(r io.Reader) string {
+	b, _ := io.ReadAll(io.LimitReader(r, maxErrorBodySize))
+	return strings.TrimSpace(string(b))
+}
 
 // DetectViewer checks if a viewer is running by reading the lock file and probing /api/status.
 // Returns (addr, true) if the viewer is reachable, ("", false) otherwise.
@@ -111,6 +119,9 @@ func (c *ViewerAPIClient) GetPlayback(ctx context.Context, id string) (*ViewerPl
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
+		if msg := readErrorBody(resp.Body); msg != "" {
+			return nil, fmt.Errorf("GET /api/playback/%s returned %d: %s", id, resp.StatusCode, msg)
+		}
 		return nil, fmt.Errorf("GET /api/playback/%s returned %d", id, resp.StatusCode)
 	}
 
@@ -141,6 +152,9 @@ func (c *ViewerAPIClient) Play(ctx context.Context, req ViewerPlayRequest) (*Vie
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
+		if msg := readErrorBody(resp.Body); msg != "" {
+			return nil, fmt.Errorf("POST /api/play returned %d: %s", resp.StatusCode, msg)
+		}
 		return nil, fmt.Errorf("POST /api/play returned %d", resp.StatusCode)
 	}
 
