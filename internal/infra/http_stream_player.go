@@ -1003,6 +1003,12 @@ func (p *HTTPStreamPlayer) handleAPIPlay(w http.ResponseWriter, r *http.Request)
 			http.Error(w, fmt.Sprintf("clips[%d].speaker_id: %v", i, err), http.StatusBadRequest)
 			return
 		}
+		if len(p.speakerLookup) > 0 {
+			if _, ok := p.speakerLookup[speakerID.Value()]; !ok {
+				http.Error(w, fmt.Sprintf("clips[%d].speaker_id: unknown speaker id %d", i, c.SpeakerID), http.StatusBadRequest)
+				return
+			}
+		}
 		clips[i] = entity.NewClip(c.Text, speakerID, c.Speed, c.Pitch, c.Intonation)
 	}
 
