@@ -2986,6 +2986,105 @@ func TestHTTPStreamPlayer_APIPlay_SilentModeSkipsBroadcast(t *testing.T) {
 	}
 }
 
+// --- #571 /api/play での未知 speaker_id バリデーション ---
+//
+// DONE: 未知 speaker_id を含む単一クリップで 400 + unknown speaker id  → TestHTTPStreamPlayer_APIPlay_UnknownSpeakerIDRejected
+// DONE: バッチ内 1 件のみ未知 ID で 400（playbackID 発行なし）          → TestHTTPStreamPlayer_APIPlay_BatchWithUnknownSpeakerIDRejected
+// DONE: speakerLookup 空では未知 ID でも 400 にならず silent レスポンス → TestHTTPStreamPlayer_APIPlay_EmptyLookupSkipsValidation
+// DONE: 既知 speaker_id では従来どおり 200 + playbackID               → TestHTTPStreamPlayer_APIPlay_KnownSpeakerIDAccepted
+
+func TestHTTPStreamPlayer_APIPlay_UnknownSpeakerIDRejected(t *testing.T) {
+	t.Parallel()
+	stub := &testVoicevoxClient{wav: []byte("RIFFx")}
+	lookup := map[int]entity.SpeakerStyleInfo{
+		3: {SpeakerName: "ずんだもん", StyleName: "ノーマル"},
+	}
+	p := newStartedPlayerWithOpts(t, WithVoicevoxClient(stub), WithSpeakerLookup(lookup))
+	body := bytes.NewBufferString(`{"clips":[{"text":"hello","speaker_id":9999}]}`)
+	resp, err := http.Post("http://"+p.Addr()+"/api/play", "application/json", body)
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("expected 400 for unknown speaker_id, got %d", resp.StatusCode)
+	}
+	respBody, _ := io.ReadAll(resp.Body)
+	if !strings.Contains(string(respBody), "unknown speaker id") {
+		t.Errorf("expected body to contain 'unknown speaker id', got: %s", respBody)
+	}
+}
+
+func TestHTTPStreamPlayer_APIPlay_BatchWithUnknownSpeakerIDRejected(t *testing.T) {
+	t.Parallel()
+	stub := &testVoicevoxClient{wav: []byte("RIFFx")}
+	lookup := map[int]entity.SpeakerStyleInfo{
+		3: {SpeakerName: "ずんだもん", StyleName: "ノーマル"},
+	}
+	p := newStartedPlayerWithOpts(t, WithVoicevoxClient(stub), WithSpeakerLookup(lookup))
+	body := bytes.NewBufferString(`{"clips":[{"text":"first","speaker_id":3},{"text":"second","speaker_id":9999}]}`)
+	resp, err := http.Post("http://"+p.Addr()+"/api/play", "application/json", body)
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("expected 400 for batch with unknown speaker_id, got %d", resp.StatusCode)
+	}
+	respBody, _ := io.ReadAll(resp.Body)
+	if !strings.Contains(string(respBody), "unknown speaker id") {
+		t.Errorf("expected body to contain 'unknown speaker id', got: %s", respBody)
+	}
+}
+
+func TestHTTPStreamPlayer_APIPlay_EmptyLookupSkipsValidation(t *testing.T) {
+	t.Parallel()
+	stub := &testVoicevoxClient{wav: []byte("RIFFx")}
+	p := newStartedPlayerWithOpts(t, WithVoicevoxClient(stub))
+	p.SetSilent("VOICEVOX接続失敗")
+	body := bytes.NewBufferString(`{"clips":[{"text":"hello","speaker_id":9999}]}`)
+	resp, err := http.Post("http://"+p.Addr()+"/api/play", "application/json", body)
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected 200 (silent response), got %d", resp.StatusCode)
+	}
+	var result ViewerPlayResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if !result.Silent {
+		t.Errorf("expected silent=true")
+	}
+}
+
+func TestHTTPStreamPlayer_APIPlay_KnownSpeakerIDAccepted(t *testing.T) {
+	t.Parallel()
+	stub := &testVoicevoxClient{wav: []byte("RIFFx")}
+	lookup := map[int]entity.SpeakerStyleInfo{
+		3: {SpeakerName: "ずんだもん", StyleName: "ノーマル"},
+	}
+	p := newStartedPlayerWithOpts(t, WithVoicevoxClient(stub), WithSpeakerLookup(lookup))
+	body := bytes.NewBufferString(`{"clips":[{"text":"hello","speaker_id":3}]}`)
+	resp, err := http.Post("http://"+p.Addr()+"/api/play", "application/json", body)
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected 200 for known speaker_id, got %d", resp.StatusCode)
+	}
+	var result ViewerPlayResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if result.PlaybackID == "" {
+		t.Errorf("expected non-empty playback_id")
+	}
+}
+
 // --- #488 GET /api/playback/{id} エンドポイント ---
 //
 // TODO: 未知 ID で unknown を返す                         → TestHTTPStreamPlayer_APIPlayback_UnknownID

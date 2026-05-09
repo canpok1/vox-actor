@@ -993,6 +993,7 @@ func (p *HTTPStreamPlayer) handleAPIPlay(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	clips := make([]entity.Clip, len(req.Clips))
+	validateSpeaker := len(p.speakerLookup) > 0
 	for i, c := range req.Clips {
 		if c.Text == "" {
 			http.Error(w, fmt.Sprintf("clips[%d].text must not be empty", i), http.StatusBadRequest)
@@ -1002,6 +1003,12 @@ func (p *HTTPStreamPlayer) handleAPIPlay(w http.ResponseWriter, r *http.Request)
 		if err != nil {
 			http.Error(w, fmt.Sprintf("clips[%d].speaker_id: %v", i, err), http.StatusBadRequest)
 			return
+		}
+		if validateSpeaker {
+			if _, ok := p.speakerLookup[speakerID.Value()]; !ok {
+				http.Error(w, fmt.Sprintf("clips[%d].speaker_id: unknown speaker id %d", i, c.SpeakerID), http.StatusBadRequest)
+				return
+			}
 		}
 		clips[i] = entity.NewClip(c.Text, speakerID, c.Speed, c.Pitch, c.Intonation)
 	}
