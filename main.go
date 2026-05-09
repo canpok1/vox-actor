@@ -13,7 +13,7 @@ import (
 )
 
 func main() {
-	player, err := infra.NewBeepPlayer(infra.NewRealSpeakerBackend())
+	player, err := infra.NewBeepPlayer(infra.NewOtoSpeakerBackend())
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed to create audio player: %v\n", err)
 		os.Exit(1)
