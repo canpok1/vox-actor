@@ -361,6 +361,36 @@ func TestSayE2E_Verbose_ShowsSpecificDebugLogs(t *testing.T) {
 	}
 }
 
+// TestSayE2E_Viewer_UnknownSpeaker_ShowsBodyError は viewer が 400 + body を返したとき、
+// CLI の標準エラーにそのボディ内容が表示されることを検証する。
+func TestSayE2E_Viewer_UnknownSpeaker_ShowsBodyError(t *testing.T) {
+	t.Parallel()
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/status", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	mux.HandleFunc("/api/play", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte("clips[0].speaker_id: unknown speaker id 9999"))
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	homeDir := t.TempDir()
+	writeViewerLockFile(t, homeDir, srv.Listener.Addr().String())
+
+	_, stderr, exitCode := runCLI(t, map[string]string{"HOME": homeDir},
+		"say", "--speaker", "9999", "テスト")
+
+	if exitCode == 0 {
+		t.Fatalf("expected non-zero exit for unknown speaker, got 0\nstderr:\n%s", stderr)
+	}
+	if !strings.Contains(stderr, "unknown speaker id 9999") {
+		t.Errorf("expected stderr to contain 'unknown speaker id 9999'\nstderr:\n%s", stderr)
+	}
+}
+
 // TestSayE2E_ViewerURL_ConnFailed_NoFallback は --viewer-url で到達不能な URL を指定した場合に
 // ローカル再生へのフォールバックなしでエラー終了することを検証する。
 func TestSayE2E_ViewerURL_ConnFailed_NoFallback(t *testing.T) {
