@@ -3022,7 +3022,6 @@ func TestHTTPStreamPlayer_APIPlay_BatchWithUnknownSpeakerIDRejected(t *testing.T
 		3: {SpeakerName: "ずんだもん", StyleName: "ノーマル"},
 	}
 	p := newStartedPlayerWithOpts(t, WithVoicevoxClient(stub), WithSpeakerLookup(lookup))
-	// 1件目は既知ID、2件目は未知ID
 	body := bytes.NewBufferString(`{"clips":[{"text":"first","speaker_id":3},{"text":"second","speaker_id":9999}]}`)
 	resp, err := http.Post("http://"+p.Addr()+"/api/play", "application/json", body)
 	if err != nil {
@@ -3041,7 +3040,6 @@ func TestHTTPStreamPlayer_APIPlay_BatchWithUnknownSpeakerIDRejected(t *testing.T
 func TestHTTPStreamPlayer_APIPlay_EmptyLookupSkipsValidation(t *testing.T) {
 	t.Parallel()
 	stub := &testVoicevoxClient{wav: []byte("RIFFx")}
-	// speakerLookup を設定しない（空）
 	p := newStartedPlayerWithOpts(t, WithVoicevoxClient(stub))
 	p.SetSilent("VOICEVOX接続失敗")
 	body := bytes.NewBufferString(`{"clips":[{"text":"hello","speaker_id":9999}]}`)
