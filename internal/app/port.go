@@ -60,6 +60,16 @@ type WavSaver interface {
 	Save(path string, wavData []byte) error
 }
 
+// WavMerger は複数の WAV バイト列を1つに結合するインターフェース。
+type WavMerger interface {
+	// Merge は複数の WAV バイト列を結合して1つの WAV を返す。
+	// gapMs > 0 の場合はクリップ間に無音 PCM を挿入する。
+	// 空クリップ（PCM データなし）はスキップする。
+	// フォーマットが異なるクリップが含まれる場合はエラーを返す。
+	// 有効なクリップが0件の場合はエラーを返す。
+	Merge(wavClips [][]byte, gapMs int) ([]byte, error)
+}
+
 // VoicevoxClient はVOICEVOXエンジンとの通信を抽象化するインターフェース。
 type VoicevoxClient interface {
 	// HealthCheck はエンジンの疎通確認を行う。

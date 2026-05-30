@@ -24,6 +24,8 @@ type ActDeps struct {
 	// AudioProbe はローカル再生前に音声デバイス可用性を検査する関数。
 	// nil の場合は検査をスキップする。--dry-run 時は呼ばれない。
 	AudioProbe func() error
+	WavSaver   app.WavSaver
+	WavMerger  app.WavMerger
 }
 
 func makeActCmd(deps *ActDeps) *cobra.Command {
@@ -52,6 +54,8 @@ func makeActCmd(deps *ActDeps) *cobra.Command {
 	}
 
 	registerCommonFlags(cmd)
+	registerSaveWavFlag(cmd)
+	registerGapMsFlag(cmd)
 	// --watch / --watch-delete は廃止済み。廃止フラグが渡された場合は PreRunE でエラーを返す。
 	cmd.Flags().Bool("watch", false, "")
 	cmd.Flags().Bool("watch-delete", false, "")
@@ -123,6 +127,8 @@ func runAct(cmd *cobra.Command, args []string, deps *ActDeps) error {
 	pitch, _ := cmd.Flags().GetFloat64("pitch")
 	intonation, _ := cmd.Flags().GetFloat64("intonation")
 	dryRun, _ := cmd.Flags().GetBool("dry-run")
+	saveWavPath, _ := cmd.Flags().GetString("save-wav")
+	gapMs, _ := cmd.Flags().GetInt("gap-ms")
 
 	speakerID, err := entity.NewSpeakerID(speakerIDInt)
 	if err != nil {
@@ -141,7 +147,8 @@ func runAct(cmd *cobra.Command, args []string, deps *ActDeps) error {
 		return fmt.Errorf("failed to create VoicevoxClient for %s", engineURL)
 	}
 
-	if !dryRun {
+	// --save-wav 指定時はローカル合成強制（viewer 経路をスキップ）
+	if !dryRun && saveWavPath == "" {
 		viewerURL, _ := cmd.Flags().GetString("viewer-url")
 
 		if viewerURL != "" {
@@ -175,14 +182,29 @@ func runAct(cmd *cobra.Command, args []string, deps *ActDeps) error {
 		return err
 	}
 
-	uc := app.NewActUsecase(deps.Reader, client, deps.Player, app.WithLogger(logger))
+	ucOpts := []app.ActOption{app.WithLogger(logger)}
+	if saveWavPath != "" {
+		wavSaver := deps.WavSaver
+		if wavSaver == nil {
+			wavSaver = infra.NewWavSaver()
+		}
+		wavMerger := deps.WavMerger
+		if wavMerger == nil {
+			wavMerger = infra.NewWavMerger()
+		}
+		ucOpts = append(ucOpts, app.WithActWavSaver(wavSaver), app.WithActWavMerger(wavMerger))
+	}
+
+	uc := app.NewActUsecase(deps.Reader, client, deps.Player, ucOpts...)
 	if err := uc.Run(ctx, app.ActParams{
-		Path:       args[0],
-		SpeakerID:  speakerID,
-		Speed:      &speed,
-		Pitch:      &pitch,
-		Intonation: &intonation,
-		DryRun:     dryRun,
+		Path:        args[0],
+		SpeakerID:   speakerID,
+		Speed:       &speed,
+		Pitch:       &pitch,
+		Intonation:  &intonation,
+		DryRun:      dryRun,
+		SaveWavPath: saveWavPath,
+		GapMs:       gapMs,
 	}); err != nil {
 		return err
 	}

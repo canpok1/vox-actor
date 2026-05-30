@@ -231,7 +231,7 @@ func TestActE2E_Help_ExitZeroWithAllFlags(t *testing.T) {
 	if exitCode != 0 {
 		t.Fatalf("expected exit 0 for act --help, got %d", exitCode)
 	}
-	for _, flag := range []string{"--engine-url", "--speaker", "--speed", "--pitch", "--intonation", "--verbose", "--dry-run"} {
+	for _, flag := range []string{"--engine-url", "--speaker", "--speed", "--pitch", "--intonation", "--verbose", "--dry-run", "--save-wav", "--gap-ms"} {
 		if !strings.Contains(stdout, flag) {
 			t.Errorf("expected act --help to contain %q\nstdout:\n%s", flag, stdout)
 		}
