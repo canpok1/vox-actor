@@ -95,3 +95,8 @@ func saveWavDirDefaultFromEnv() string {
 func registerSaveWavDirFlag(cmd *cobra.Command) {
 	cmd.Flags().String("save-wav-dir", saveWavDirDefaultFromEnv(), "合成した WAV を保存するディレクトリ（ローカル合成時のみ。未作成なら自動作成）")
 }
+
+// registerGapMsFlag は --gap-ms フラグを登録する。act コマンドなど複数 WAV 結合時のセリフ間無音指定に使う。
+func registerGapMsFlag(cmd *cobra.Command) {
+	cmd.Flags().Int("gap-ms", 300, "セリフ間に挿入する無音のミリ秒数（--save-wav 指定時のみ有効）")
+}

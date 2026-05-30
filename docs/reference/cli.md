@@ -185,6 +185,26 @@ vox-actor act <path>
 | `--intonation` | — | `1.0` | 抑揚 |
 | `--verbose` | — | `false` | 詳細ログを出力 |
 | `--dry-run` | — | `false` | VOICEVOX・音声再生を行わず、読み上げ対象をログ出力（[詳細](#dry-runモード)） |
+| `--save-wav` | `VOX_SAVE_WAV` | (未指定) | 全セリフを合成・結合した WAV を保存するパス（ローカル合成時のみ。親ディレクトリは自動作成。指定時は音声を再生せず保存のみ行う） |
+| `--gap-ms` | — | `300` | `--save-wav` 指定時にセリフ間へ挿入する無音のミリ秒数（`0` で無音なし） |
+
+**使用例**
+
+```
+# JSONL 台本の全セリフを結合して1つの WAV に保存
+vox-actor act script.jsonl --save-wav out.wav
+
+# セリフ間の無音を500msにして保存
+vox-actor act script.jsonl --save-wav out.wav --gap-ms 500
+
+# 無音なしで結合
+vox-actor act script.jsonl --save-wav out.wav --gap-ms 0
+
+# ディレクトリ内の全台本を結合
+vox-actor act scripts/ --save-wav combined.wav
+```
+
+> **注意**: `--save-wav` はローカル合成時のみ有効です。指定時は viewer 経路（`--viewer-url` や lockfile auto-detect）をスキップしてローカル合成を強制します。
 
 > **注意**: `act --watch` および `act --watch-delete` は削除されました。ディレクトリ監視は [`watch` サブコマンド](#watch-サブコマンド)を使用してください。
 >

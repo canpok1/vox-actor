@@ -98,12 +98,36 @@ Feature: vox-actor act コマンド
     Then 終了コード 2 で完了する
     # test: test/e2e/act_test.go::TestActE2E_WatchDeleteFlag_ExitCode2
 
+  # ===== --save-wav / --gap-ms =====
+
+  Scenario: --save-wav を指定すると VOICEVOX 合成・結合した WAV が出力される
+    Given VOICEVOX スタブサーバーが起動している
+    And テンポラリディレクトリに2行の .jsonl ファイルを作成する
+    When "vox-actor act <path> --save-wav <out.wav>" を実行する
+    Then 終了コード 0 で完了する
+    And <out.wav> が正しい RIFF WAV ファイルとして存在する
+    # test: manual（VOICEVOX 接続が必要なためCI自動検証不可、PR test plan に手動確認要）
+
+  Scenario: --save-wav 指定時は音声を再生しない（--dry-run との組み合わせ不可、保存経路のみ）
+    Given VOICEVOX スタブサーバーが起動している
+    And テンポラリディレクトリに .jsonl ファイルを作成する
+    When "vox-actor act <path> --save-wav <out.wav>" を実行する
+    Then 音声デバイスへの再生が行われず WAV ファイルのみ出力される
+    # test: manual（VOICEVOX 接続が必要なためCI自動検証不可、PR test plan に手動確認要）
+
+  Scenario: --gap-ms 0 を指定すると無音なしで結合される
+    Given VOICEVOX スタブサーバーが起動している
+    And テンポラリディレクトリに2行の .jsonl ファイルを作成する
+    When "vox-actor act <path> --save-wav <out.wav> --gap-ms 0" を実行する
+    Then 終了コード 0 で完了する
+    # test: manual（VOICEVOX 接続が必要なためCI自動検証不可、PR test plan に手動確認要）
+
   # ===== ヘルプ =====
 
   Scenario: --help フラグで終了コード 0 かつ全フラグが表示される
     When "vox-actor act --help" を実行する
     Then 終了コード 0 で完了する
-    And stdout に "--engine-url", "--speaker", "--speed", "--pitch", "--intonation", "--verbose", "--dry-run" が含まれる
+    And stdout に "--engine-url", "--speaker", "--speed", "--pitch", "--intonation", "--verbose", "--dry-run", "--save-wav", "--gap-ms" が含まれる
     # test: test/e2e/act_test.go::TestActE2E_Help_ExitZeroWithAllFlags
 
   # ===== 空ファイル・特殊ケース =====

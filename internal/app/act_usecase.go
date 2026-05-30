@@ -18,6 +18,11 @@ type ActParams struct {
 	Intonation *float64
 	// DryRun が true の場合、VOICEVOXエンジン/音声再生を一切呼ばずログ出力のみ行う。
 	DryRun bool
+	// SaveWavPath が空でない場合、全セリフを結合した WAV をこのパスに保存する。
+	// DryRun 時・viewer 送信経路では保存しない。
+	SaveWavPath string
+	// GapMs はセリフ間に挿入する無音のミリ秒数。SaveWavPath が空でない場合のみ有効。
+	GapMs int
 }
 
 // ActOption はActUsecaseの生成時に指定するオプション。
@@ -40,10 +45,30 @@ func discardLogger() *slog.Logger {
 
 // ActUsecase はactサブコマンドのユースケース。
 type ActUsecase struct {
-	reader ScriptReader
-	client VoicevoxClient
-	player AudioPlayer
-	logger *slog.Logger
+	reader    ScriptReader
+	client    VoicevoxClient
+	player    AudioPlayer
+	logger    *slog.Logger
+	wavSaver  WavSaver
+	wavMerger WavMerger
+}
+
+// WithActWavSaver は WAV 保存先を設定するオプション。
+func WithActWavSaver(saver WavSaver) ActOption {
+	return func(u *ActUsecase) {
+		if saver != nil {
+			u.wavSaver = saver
+		}
+	}
+}
+
+// WithActWavMerger は WAV 結合器を設定するオプション。
+func WithActWavMerger(merger WavMerger) ActOption {
+	return func(u *ActUsecase) {
+		if merger != nil {
+			u.wavMerger = merger
+		}
+	}
 }
 
 // NewActUsecase は新しいActUsecaseを生成する。
@@ -102,15 +127,14 @@ func (u *ActUsecase) Run(ctx context.Context, params ActParams) error {
 	}
 	ch := startSynthPipeline(ctx, u.client, u.logger, scripts, cfg)
 
-	for result := range ch {
-		switch result.stage {
-		case synthStageQueryFailed:
-			return fmt.Errorf("create query for %s: %w", result.script.Path, result.err)
-		case synthStageSynthesizeFailed:
-			return fmt.Errorf("synthesize %s: %w", result.script.Path, result.err)
-		}
+	if params.SaveWavPath != "" && u.wavSaver != nil && u.wavMerger != nil {
+		return u.runSaveWav(ctx, ch, total, params)
+	}
 
-		u.logger.Info(fmt.Sprintf("[%d/%d] processing script", result.index, total), "path", result.script.Path)
+	for result := range ch {
+		if err := u.checkSynthResult(result, total); err != nil {
+			return err
+		}
 
 		speakerID := result.script.ResolveSpeakerID(params.SpeakerID)
 		if err := u.player.Play(ctx, result.wav, PlayMeta{Text: result.script.Text, SpeakerID: speakerID}); err != nil {
@@ -128,6 +152,47 @@ func (u *ActUsecase) Run(ctx context.Context, params ActParams) error {
 		}
 	}
 
+	u.logger.Info("all scripts processed")
+	return nil
+}
+
+// checkSynthResult は synthResult のエラーステージを検査して進捗ログを出力する。
+// エラーステージの場合はラップしたエラーを返す。
+func (u *ActUsecase) checkSynthResult(result synthResult, total int) error {
+	switch result.stage {
+	case synthStageQueryFailed:
+		return fmt.Errorf("create query for %s: %w", result.script.Path, result.err)
+	case synthStageSynthesizeFailed:
+		return fmt.Errorf("synthesize %s: %w", result.script.Path, result.err)
+	}
+	u.logger.Info(fmt.Sprintf("[%d/%d] processing script", result.index, total), "path", result.script.Path)
+	return nil
+}
+
+// runSaveWav は --save-wav 指定時の WAV 結合・保存処理。再生は行わない。
+func (u *ActUsecase) runSaveWav(ctx context.Context, ch <-chan synthResult, total int, params ActParams) error {
+	var wavClips [][]byte
+	for result := range ch {
+		if err := u.checkSynthResult(result, total); err != nil {
+			return err
+		}
+
+		wavClips = append(wavClips, result.wav)
+
+		if ctx.Err() != nil {
+			return nil
+		}
+	}
+
+	merged, err := u.wavMerger.Merge(wavClips, params.GapMs)
+	if err != nil {
+		return fmt.Errorf("merge wav: %w", err)
+	}
+
+	if err := u.wavSaver.Save(params.SaveWavPath, merged); err != nil {
+		return fmt.Errorf("save wav: %w", err)
+	}
+	u.logger.Info("wav saved", "path", params.SaveWavPath)
 	u.logger.Info("all scripts processed")
 	return nil
 }

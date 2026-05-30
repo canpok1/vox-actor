@@ -1062,3 +1062,139 @@ func TestActUsecase_Run_MultipleScriptsWithDifferentParams(t *testing.T) {
 		t.Errorf("expected third SpeedScale 1.5, got %f", client.synthesizeArgs[2].query.SpeedScale)
 	}
 }
+
+// act --save-wav テストリスト
+// DONE: 正常系: SaveWavPath 指定時に WavMerger.Merge が呼ばれ WavSaver.Save で保存される
+// DONE: 正常系: SaveWavPath 指定時は音声を再生しない
+// DONE: 正常系: SaveWavPath が空の場合は通常の再生挙動（WavSaver.Save 未呼び出し）
+
+type mockWavMerger struct {
+	result      []byte
+	err         error
+	mergeCalls  int
+	mergedClips [][]byte
+	mergedGapMs int
+}
+
+func (m *mockWavMerger) Merge(wavClips [][]byte, gapMs int) ([]byte, error) {
+	m.mergeCalls++
+	m.mergedClips = wavClips
+	m.mergedGapMs = gapMs
+	return m.result, m.err
+}
+
+func TestActUsecase_Run_SaveWav_MergesAndSavesWithoutPlay(t *testing.T) {
+	reader := &mockScriptReader{
+		scripts: []entity.Script{
+			{Path: "a.txt", Text: "セリフ1", IsEmpty: false},
+			{Path: "b.txt", Text: "セリフ2", IsEmpty: false},
+		},
+	}
+	client := &mockVoicevoxClient{
+		query:   &entity.AudioQuery{},
+		wavData: []byte("fake-wav"),
+	}
+	player := &mockAudioPlayer{}
+	merger := &mockWavMerger{result: []byte("merged-wav")}
+	saver := &mockWavSaver{}
+
+	uc := app.NewActUsecase(reader, client, player,
+		app.WithActWavMerger(merger),
+		app.WithActWavSaver(saver),
+	)
+	params := app.ActParams{
+		Path:        "scripts/",
+		SpeakerID:   entity.MustNewSpeakerID(3),
+		SaveWavPath: "out.wav",
+	}
+
+	if err := uc.Run(context.Background(), params); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if player.playCalls != 0 {
+		t.Errorf("expected no Play calls when SaveWavPath is set, got %d", player.playCalls)
+	}
+	if merger.mergeCalls != 1 {
+		t.Errorf("expected 1 Merge call, got %d", merger.mergeCalls)
+	}
+	if len(merger.mergedClips) != 2 {
+		t.Errorf("expected 2 clips merged, got %d", len(merger.mergedClips))
+	}
+	if saver.saveCalls != 1 {
+		t.Errorf("expected 1 Save call, got %d", saver.saveCalls)
+	}
+	if saver.savedPath != "out.wav" {
+		t.Errorf("expected saved path 'out.wav', got %q", saver.savedPath)
+	}
+}
+
+func TestActUsecase_Run_SaveWav_GapMsPassed(t *testing.T) {
+	reader := &mockScriptReader{
+		scripts: []entity.Script{
+			{Path: "a.txt", Text: "セリフ", IsEmpty: false},
+		},
+	}
+	client := &mockVoicevoxClient{
+		query:   &entity.AudioQuery{},
+		wavData: []byte("fake-wav"),
+	}
+	player := &mockAudioPlayer{}
+	merger := &mockWavMerger{result: []byte("merged-wav")}
+	saver := &mockWavSaver{}
+
+	uc := app.NewActUsecase(reader, client, player,
+		app.WithActWavMerger(merger),
+		app.WithActWavSaver(saver),
+	)
+	params := app.ActParams{
+		Path:        "scripts/",
+		SpeakerID:   entity.MustNewSpeakerID(3),
+		SaveWavPath: "out.wav",
+		GapMs:       300,
+	}
+
+	if err := uc.Run(context.Background(), params); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if merger.mergedGapMs != 300 {
+		t.Errorf("expected gapMs=300 passed to Merge, got %d", merger.mergedGapMs)
+	}
+}
+
+func TestActUsecase_Run_SaveWav_NotSet_PlaybackUnchanged(t *testing.T) {
+	reader := &mockScriptReader{
+		scripts: []entity.Script{
+			{Path: "a.txt", Text: "セリフ", IsEmpty: false},
+		},
+	}
+	client := &mockVoicevoxClient{
+		query:   &entity.AudioQuery{},
+		wavData: []byte("fake-wav"),
+	}
+	player := &mockAudioPlayer{}
+	merger := &mockWavMerger{}
+	saver := &mockWavSaver{}
+
+	uc := app.NewActUsecase(reader, client, player,
+		app.WithActWavMerger(merger),
+		app.WithActWavSaver(saver),
+	)
+	params := app.ActParams{
+		Path:      "scripts/",
+		SpeakerID: entity.MustNewSpeakerID(3),
+		// SaveWavPath 未指定 → 通常再生
+	}
+
+	if err := uc.Run(context.Background(), params); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if player.playCalls != 1 {
+		t.Errorf("expected 1 Play call when SaveWavPath is empty, got %d", player.playCalls)
+	}
+	if saver.saveCalls != 0 {
+		t.Errorf("expected no Save calls when SaveWavPath is empty, got %d", saver.saveCalls)
+	}
+}
