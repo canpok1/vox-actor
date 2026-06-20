@@ -28,9 +28,7 @@
    curl -fsSL https://github.com/canpok1/vox-actor/releases/latest/download/install.sh | bash
    ```
 
-   最新版のバイナリを取得して `$HOME/.local/bin` に配置します（macOS / Linux 対応）。`INSTALL_DIR` 環境変数で設置先を変更できます。
-
-   Homebrew など他のインストール方法は[インストール方法](#-インストール方法)を参照してください。
+   スクリプトの詳細や Homebrew など他のインストール方法は[インストール方法](#-インストール方法)を参照してください。
 
 2. **CLIの実行で疎通確認**
 
