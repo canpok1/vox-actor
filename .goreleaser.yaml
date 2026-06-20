@@ -3,6 +3,13 @@
 
 version: 2
 
+before:
+  hooks:
+    # GoReleaser の before hook はシェルを介さず実行されるためリダイレクトが効かない。
+    # また dist 配下は hook 後の空チェックに引っかかるため、dist の外へ出力する。
+    - mkdir -p .extra-files
+    - sh -c "sed 's/__VERSION__/{{ .Tag }}/g' scripts/install.sh > .extra-files/install.sh"
+
 builds:
   - id: linux
     env:
@@ -63,6 +70,8 @@ changelog:
       - "^test:"
 
 release:
+  extra_files:
+    - glob: .extra-files/install.sh
   footer: >-
 
     ---
