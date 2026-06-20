@@ -34,6 +34,8 @@ go.work.sum
 
 # GoReleaser
 /dist/
+# before hook で生成するリリース添付ファイル（install.sh 等）
+/.extra-files/
 
 # 一時ファイル（作業メモ・通知・ロック等）
 .tmp/

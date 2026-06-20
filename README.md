@@ -22,14 +22,15 @@
 
 手元で順に試して動作確認しながら、CLI単体〜claude code プラグインまで一通り体験できる手順です。
 
-1. **CLIのセットアップ（Homebrew）**
+1. **CLIのセットアップ（インストールスクリプト）**
 
    ```bash
-   brew tap canpok1/tap
-   brew install --cask vox-actor
+   curl -fsSL https://github.com/canpok1/vox-actor/releases/latest/download/install.sh | bash
    ```
 
-   Homebrew以外のインストール方法は[インストール方法](#-インストール方法)を参照してください。
+   最新版のバイナリを取得して `$HOME/.local/bin` に配置します（macOS / Linux 対応）。`INSTALL_DIR` 環境変数で設置先を変更できます。
+
+   Homebrew など他のインストール方法は[インストール方法](#-インストール方法)を参照してください。
 
 2. **CLIの実行で疎通確認**
 
@@ -121,6 +122,20 @@ export VOX_ACTOR_WORKSPACE=/path/to/shared/directory
 ## 📦 インストール方法
 
 お好みの方法でインストールできます。
+
+- **インストールスクリプト（macOS/Linux）**
+   ```bash
+   curl -fsSL https://github.com/canpok1/vox-actor/releases/latest/download/install.sh | bash
+   ```
+
+   最新リリースのバイナリを取得し、`$HOME/.local/bin`（`INSTALL_DIR` 環境変数で変更可）に配置します。チェックサム検証・既存バージョンとの比較も自動で行います。
+
+   ```bash
+   # 設置先を変更する場合
+   curl -fsSL https://github.com/canpok1/vox-actor/releases/latest/download/install.sh | INSTALL_DIR=/usr/local/bin bash
+   ```
+
+   > **Linux ユーザーへ**: バイナリは ALSA ランタイムに動的リンクされています。`libasound2`（Ubuntu 24.04 以降は `libasound2t64`）または `alsa-lib`（RHEL/Fedora 系）を事前にインストールしてください。詳細は[前提条件](#-前提条件)を参照してください。
 
 - **Homebrew（macOS/Linux）**
    ```bash
