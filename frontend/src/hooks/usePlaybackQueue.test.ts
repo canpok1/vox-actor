@@ -1,4 +1,5 @@
 import { act, renderHook } from "@testing-library/react";
+import type { Mock } from "vitest";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ClipEvent } from "../types/api";
 import type { PreviewBody } from "./usePlaybackQueue";
@@ -60,7 +61,7 @@ describe("usePlaybackQueue", () => {
   let audioRef: { current: HTMLAudioElement };
   let mockPlay: ReturnType<typeof vi.spyOn>;
   let mockPause: ReturnType<typeof vi.spyOn>;
-  let mockCreateObjectURL: ReturnType<typeof vi.fn>;
+  let mockCreateObjectURL: Mock<(obj: Blob | MediaSource) => string>;
   let urlCounter: number;
 
   beforeEach(() => {
@@ -75,7 +76,9 @@ describe("usePlaybackQueue", () => {
     vi.spyOn(HTMLMediaElement.prototype, "load").mockImplementation(() => {});
     urlCounter = 0;
     // jsdom では URL.createObjectURL / revokeObjectURL が未実装のため直接定義する
-    mockCreateObjectURL = vi.fn(() => `blob:mock-${++urlCounter}`);
+    mockCreateObjectURL = vi.fn<(obj: Blob | MediaSource) => string>(
+      () => `blob:mock-${++urlCounter}`,
+    );
     URL.createObjectURL = mockCreateObjectURL;
     URL.revokeObjectURL = vi.fn();
     vi.stubGlobal("fetch", makeFetchMock());
